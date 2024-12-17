@@ -6,10 +6,18 @@ our [Inspect Community](https://inspectcommunity.slack.com) Slack workspace.
 
 This project uses [Poetry](https://python-poetry.org/) for dependency management. 
 
-Install the project dependencies:
+Make sure you have Poetry installed. If not, follow the [official installation
+guide](https://python-poetry.org/docs/#installation). Then, install the project
+dependencies:
 
 ```bash
 poetry install
+```
+
+To activate the virtual environment:
+
+```bash
+poetry shell
 ```
 
 If you don't have access to a K8s cluster, consider using the devcontainer
