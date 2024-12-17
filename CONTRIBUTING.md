@@ -6,7 +6,7 @@ in our [Inspect Community](https://inspectcommunity.slack.com) Slack workspace.
 
 ## Development
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management. 
+This project uses [Poetry](https://python-poetry.org/) for dependency management.
 
 Make sure you have Poetry installed. If not, follow the [official installation
 guide](https://python-poetry.org/docs/#installation). Then, install the project
