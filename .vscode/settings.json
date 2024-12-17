@@ -1,0 +1,12 @@
+{
+    "editor.rulers": [
+        88
+    ],
+    "python.testing.pytestEnabled": true,
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "rewrap.wrappingColumn": 88
+}

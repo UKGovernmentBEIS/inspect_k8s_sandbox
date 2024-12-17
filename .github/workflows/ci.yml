@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+  format:
+    uses: ./.github/workflows/format.yml
+  type-check:
+    uses: ./.github/workflows/type-check.yml
+  test:
+    uses: ./.github/workflows/test.yml
+  pre-commit:
+    uses: ./.github/workflows/pre-commit.yml

@@ -1,0 +1,13 @@
+name: Test using Pytest
+
+on:
+  workflow_call:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g @devcontainers/cli@v0.30.0
+      - run: devcontainer up --workspace-folder=.
+      - run: devcontainer exec --workspace-folder=. poetry run pytest -rA -x --color=yes
