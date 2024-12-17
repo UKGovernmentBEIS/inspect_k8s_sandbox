@@ -1,6 +1,5 @@
-// This is the devcontainer which CI/CD will use.
 {
-  "name": "Default Devcontainer",
+  "name": "Devcontainer",
   "build": {
     "dockerfile": "Dockerfile",
     "args": {
