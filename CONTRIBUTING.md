@@ -1,6 +1,8 @@
-If you have any feature requests or suggestions, we'd love to hear about them and
-discuss them with you before you raise a PR. Please come discuss your ideas with us in
-our [Inspect Community](https://inspectcommunity.slack.com) Slack workspace.
+# Contributing Guide
+
+**NOTE:** If you have any feature requests or suggestions, we'd love to hear about them
+and discuss them with you before you raise a PR. Please come discuss your ideas with us
+in our [Inspect Community](https://inspectcommunity.slack.com) Slack workspace.
 
 ## Development
 
