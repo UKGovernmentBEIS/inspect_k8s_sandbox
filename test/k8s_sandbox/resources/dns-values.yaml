@@ -1,0 +1,46 @@
+services:
+  default:
+    # Contains networking tools.
+    image: "nicolaka/netshoot:v0.13"
+    command: ["tail", "-f", "/dev/null"]
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  victim:
+    image: "nginx:1.27.0"
+    dnsRecord: true
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  victim-google:
+    image: "nginx:1.27.0"
+    additionalDnsRecords:
+      - "google.com"
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  victim-ports:
+    image: "nginx:1.27.0"
+    ports:
+      - port: 80
+        targetPort: 80
+        protocol: TCP
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"

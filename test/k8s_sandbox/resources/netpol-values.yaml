@@ -1,0 +1,16 @@
+services:
+  default:
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+allowDomains:
+  - "pypi.org"
+  - "files.pythonhosted.org"
+  - "google.com"
+allowCIDR:
+  # Allow access to 1.1.1.1 (32 indicates all bits must match).
+  - "1.1.1.1/32"

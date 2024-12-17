@@ -1,0 +1,8 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 81
