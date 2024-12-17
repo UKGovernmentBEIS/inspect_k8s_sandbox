@@ -22,8 +22,9 @@ To activate the virtual environment:
 poetry shell
 ```
 
-If you don't have access to a K8s cluster, consider using the devcontainer
-(`.devcontainer`) which will spin up a local minikube cluster.
+If you don't have access to a K8s cluster, you can develop using
+[minikube](https://minikube.sigs.k8s.io/). If you're using VS Code, the devcontainer
+(`.devcontainer`) will spin this up for you.
 
 ## Testing
 
