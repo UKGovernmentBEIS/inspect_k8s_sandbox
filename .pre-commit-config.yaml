@@ -30,4 +30,4 @@ repos:
       - id: helm-docs-built
         args:
           # Make the tool search for charts only under the `charts` directory
-          - --chart-search-root=src/aisitools/k8s_sandbox/resources/helm/agent-env
+          - --chart-search-root=src/k8s_sandbox/resources/helm/agent-env
