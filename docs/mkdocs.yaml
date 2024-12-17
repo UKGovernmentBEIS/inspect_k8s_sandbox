@@ -1,0 +1,57 @@
+site_name: Inspect K8s Sandbox Documentation
+repo_url: https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox
+edit_uri: edit/main/docs/docs/
+theme:
+  name: material
+  logo: assets/icon-white.png
+  favicon: assets/favicon.png
+  palette:
+    primary: blue grey
+  font:
+    text: Funnel Sans
+  features:
+    - content.action.edit
+  icon:
+    edit: material/pencil
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.details
+  - attr_list
+  - toc:
+      permalink: true
+  - footnotes
+  - pymdownx.tabbed:
+      alternate_style: true
+plugins:
+  - search
+nav:
+  - "Introduction": index.md
+  - "Getting Started":
+    - "What is K8s?": getting-started/what-is-k8s.md
+    - "Prerequisites": getting-started/prerequisites.md
+    - "Installation": getting-started/installation.md
+    - "Local Cluster": getting-started/local-cluster.md
+    - "Remote Cluster": getting-started/remote-cluster.md
+  - "Helm Charts":
+    - "What is Helm?": helm/helm.md
+    - "Built-in Helm Chart": helm/built-in-chart.md
+    - "Custom Helm Chart": helm/custom-chart.md
+  - "Security":
+    - "Container Runtime": security/container-runtime.md
+    - "Network Access": security/network-access.md
+  - "Examples": examples.md
+  - "Tips":
+    - "Debugging K8s Sandboxes": tips/debugging-k8s-sandboxes.md
+    - "Docker Images": tips/images.md
+    - "Hubble (Cilium UI)": tips/hubble.md
+    - "Concurrency": tips/concurrency.md
+    - "Advanced Configuration": tips/configuration.md
+  - "Design Notes":
+    - "Limitations": design/limitations.md
+    - "Complexities": design/complexities.md
+    - "Future Work": design/future.md
+extra_css:
+  - assets/extra.css
+extra:
+  generator: false
