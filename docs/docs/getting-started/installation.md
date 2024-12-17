@@ -7,19 +7,19 @@ Python package in your environment.
 === "pip"
 
     ```sh
-    pip install git+https://github.com/AI-Safety-Institute/aisi-inspect-tools.git
+    pip install git+https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox.git
     ```
 
 === "poetry"
 
     ```sh
-    poetry add git+https://github.com/AI-Safety-Institute/aisi-inspect-tools.git
+    poetry add git+https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox.git
     ```
 
 === "uv"
 
     ```sh
-    uv pip install git+https://github.com/AI-Safety-Institute/aisi-inspect-tools.git
+    uv pip install git+https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox.git
     ```
 
 Then, pass `"k8s"` as the `sandbox` argument to the Inspect `Task` or `Sample`
