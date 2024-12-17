@@ -2,7 +2,7 @@ A docs site which uses [mkdocs-material](https://squidfunk.github.io/mkdocs-mate
 
 ## Installation
 
-From the `docs/k8s_sandbox` directory:
+From the `docs` directory:
 
 ```bash
 poetry install
