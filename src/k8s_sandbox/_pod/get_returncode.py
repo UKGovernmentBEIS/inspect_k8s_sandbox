@@ -1,7 +1,7 @@
 import yaml
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient  # type: ignore
 
-from aisitools.k8s_sandbox._pod.error import GetReturncodeError
+from k8s_sandbox._pod.error import GetReturncodeError
 
 
 def get_returncode(ws_client: WSClient) -> int:

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from aisitools.k8s_sandbox import K8sSandboxEnvironment, K8sSandboxEnvironmentConfig
+from k8s_sandbox import K8sSandboxEnvironment, K8sSandboxEnvironmentConfig
 
 VALID_VALUES = str(Path(__file__).parent / "resources" / "values.yaml")
 

@@ -7,8 +7,8 @@ from rich import box, print
 from rich.panel import Panel
 from rich.table import Table
 
-from aisitools.k8s_sandbox._helm import Release
-from aisitools.k8s_sandbox._helm import uninstall as helm_uninstall
+from k8s_sandbox._helm import Release
+from k8s_sandbox._helm import uninstall as helm_uninstall
 
 
 class HelmReleaseManager:

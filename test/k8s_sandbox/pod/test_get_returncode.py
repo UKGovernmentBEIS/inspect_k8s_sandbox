@@ -4,7 +4,7 @@ import pytest
 import yaml
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
-from aisitools.k8s_sandbox._pod.get_returncode import (
+from k8s_sandbox._pod.get_returncode import (
     GetReturncodeError,
     get_returncode,
 )

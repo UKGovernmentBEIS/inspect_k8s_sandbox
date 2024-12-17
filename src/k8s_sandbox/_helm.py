@@ -9,12 +9,12 @@ from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
 from shortuuid import uuid
 
-from aisitools.k8s_sandbox._kubernetes_api import (
+from k8s_sandbox._kubernetes_api import (
     get_current_context_namespace,
     k8s_client,
 )
-from aisitools.k8s_sandbox._logger import format_log_message, sandbox_log
-from aisitools.k8s_sandbox._pod import Pod
+from k8s_sandbox._logger import format_log_message, sandbox_log
+from k8s_sandbox._pod import Pod
 
 DEFAULT_CHART = Path(__file__).parent / "resources" / "helm" / "agent-env"
 DEFAULT_TIMEOUT = 300

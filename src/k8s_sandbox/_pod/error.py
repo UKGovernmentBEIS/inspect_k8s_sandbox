@@ -1,6 +1,6 @@
 from typing import Any
 
-from aisitools.k8s_sandbox._logger import format_log_message
+from k8s_sandbox._logger import format_log_message
 
 
 class PodError(Exception):

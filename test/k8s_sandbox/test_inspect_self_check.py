@@ -4,8 +4,8 @@ import pytest_asyncio
 from inspect_ai.util import SandboxEnvironment
 from inspect_ai.util._sandbox.self_check import self_check
 
-from aisitools.k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
-from test.aisitools.k8s_sandbox.utils import install_sandbox_environments
+from k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
+from test.k8s_sandbox.utils import install_sandbox_environments
 
 
 @pytest_asyncio.fixture(scope="module")

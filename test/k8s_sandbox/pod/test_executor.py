@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from pytest import MonkeyPatch
 
-from aisitools.k8s_sandbox._pod.executor import PodOpExecutor
+from k8s_sandbox._pod.executor import PodOpExecutor
 
 
 @pytest.fixture(autouse=True)

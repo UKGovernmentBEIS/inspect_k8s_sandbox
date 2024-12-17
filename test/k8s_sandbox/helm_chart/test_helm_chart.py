@@ -5,12 +5,12 @@ from typing import Any
 import pytest
 import yaml
 
-import aisitools.k8s_sandbox
+import k8s_sandbox
 
 
 @pytest.fixture
 def chart_dir() -> Path:
-    k8s_src = Path(aisitools.k8s_sandbox.__file__).parent.resolve()
+    k8s_src = Path(k8s_sandbox.__file__).parent.resolve()
     return k8s_src / "resources" / "helm" / "agent-env"
 
 

@@ -1,7 +1,7 @@
 import pytest
 from pytest import MonkeyPatch
 
-from aisitools.k8s_sandbox._logger import format_log_message
+from k8s_sandbox._logger import format_log_message
 
 
 @pytest.fixture

@@ -6,9 +6,9 @@ from typing import IO, Generator
 
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
-from aisitools.k8s_sandbox._pod.error import PodError
-from aisitools.k8s_sandbox._pod.get_returncode import get_returncode
-from aisitools.k8s_sandbox._pod.op import (
+from k8s_sandbox._pod.error import PodError
+from k8s_sandbox._pod.get_returncode import get_returncode
+from k8s_sandbox._pod.op import (
     PodOperation,
     raise_for_known_read_write_errors,
 )

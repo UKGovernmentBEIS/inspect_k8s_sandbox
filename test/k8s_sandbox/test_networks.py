@@ -3,8 +3,8 @@ from typing import AsyncGenerator
 import pytest
 import pytest_asyncio
 
-from aisitools.k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
-from test.aisitools.k8s_sandbox.utils import install_sandbox_environments
+from k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
+from test.k8s_sandbox.utils import install_sandbox_environments
 
 # Mark all tests in this module as requiring a Kubernetes cluster.
 pytestmark = pytest.mark.req_k8s

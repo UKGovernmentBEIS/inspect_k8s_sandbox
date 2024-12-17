@@ -5,11 +5,11 @@ from typing import IO, Callable, TypeVar
 
 from inspect_ai.util import ExecResult
 
-from aisitools.k8s_sandbox._pod.execute import ExecuteOperation
-from aisitools.k8s_sandbox._pod.executor import PodOpExecutor
-from aisitools.k8s_sandbox._pod.op import PodInfo
-from aisitools.k8s_sandbox._pod.read import ReadFileOperation
-from aisitools.k8s_sandbox._pod.write import WriteFileOperation
+from k8s_sandbox._pod.execute import ExecuteOperation
+from k8s_sandbox._pod.executor import PodOpExecutor
+from k8s_sandbox._pod.op import PodInfo
+from k8s_sandbox._pod.read import ReadFileOperation
+from k8s_sandbox._pod.write import WriteFileOperation
 
 T = TypeVar("T")
 

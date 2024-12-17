@@ -4,11 +4,11 @@ import pytest
 from inspect_ai.model import Model
 from inspect_ai.util import SandboxEnvironmentSpec
 
-from aisitools.k8s_sandbox import K8sSandboxEnvironmentConfig
-from test.aisitools.k8s_sandbox.inspect_integration.testing_utils.mock_model import (
+from k8s_sandbox import K8sSandboxEnvironmentConfig
+from test.k8s_sandbox.inspect_integration.testing_utils.mock_model import (
     MockToolCallModel,
 )
-from test.aisitools.k8s_sandbox.inspect_integration.testing_utils.utils import (
+from test.k8s_sandbox.inspect_integration.testing_utils.utils import (
     create_task,
     run_and_verify_inspect_eval,
     tool_call,

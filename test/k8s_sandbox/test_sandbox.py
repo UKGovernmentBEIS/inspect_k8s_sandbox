@@ -10,8 +10,8 @@ from inspect_ai.util import OutputLimitExceededError, SandboxEnvironmentLimits
 from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
-from aisitools.k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
-from test.aisitools.k8s_sandbox.utils import install_sandbox_environments
+from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
+from test.k8s_sandbox.utils import install_sandbox_environments
 
 # Mark all tests in this module as requiring a Kubernetes cluster.
 pytestmark = pytest.mark.req_k8s
@@ -448,7 +448,7 @@ async def test_exec_timeout_which_ignores_sigterm(
 async def test_api_timeout_is_not_triggered_by_long_running_commands(
     sandbox: K8sSandboxEnvironment,
 ) -> None:
-    with patch("aisitools.k8s_sandbox._pod.op.API_TIMEOUT", 1):
+    with patch("k8s_sandbox._pod.op.API_TIMEOUT", 1):
         result = await sandbox.exec(["sleep", "3"])
 
     assert result.success

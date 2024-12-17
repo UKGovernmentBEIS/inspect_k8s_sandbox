@@ -7,7 +7,7 @@ from typing import Callable, TypeVar
 
 from inspect_ai.util import concurrency
 
-from aisitools.k8s_sandbox._logger import sandbox_log
+from k8s_sandbox._logger import sandbox_log
 
 T = TypeVar("T")
 

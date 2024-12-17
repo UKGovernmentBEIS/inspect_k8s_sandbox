@@ -6,7 +6,7 @@ from typing import Generator
 from kubernetes.stream import stream  # type: ignore
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
-from aisitools.k8s_sandbox._kubernetes_api import k8s_client
+from k8s_sandbox._kubernetes_api import k8s_client
 
 # The duration to wait for an initial response from the k8s API server.
 # The initial response is received before the command is necessarily complete, so

@@ -10,7 +10,7 @@ from inspect_ai.model import (
 )
 from inspect_ai.tool import ToolCall, ToolChoice, ToolInfo
 
-from test.aisitools.k8s_sandbox.inspect_integration.testing_utils.utils import (
+from test.k8s_sandbox.inspect_integration.testing_utils.utils import (
     output_from_tool_call,
 )
 

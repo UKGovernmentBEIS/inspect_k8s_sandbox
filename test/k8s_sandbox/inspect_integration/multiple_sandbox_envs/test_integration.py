@@ -2,10 +2,10 @@ import pytest
 from inspect_ai.tool import Tool, ToolError, tool
 from inspect_ai.util import sandbox
 
-from test.aisitools.k8s_sandbox.inspect_integration.testing_utils.mock_model import (
+from test.k8s_sandbox.inspect_integration.testing_utils.mock_model import (
     MockToolCallModel,
 )
-from test.aisitools.k8s_sandbox.inspect_integration.testing_utils.utils import (
+from test.k8s_sandbox.inspect_integration.testing_utils.utils import (
     create_task,
     run_and_verify_inspect_eval,
     tool_call,

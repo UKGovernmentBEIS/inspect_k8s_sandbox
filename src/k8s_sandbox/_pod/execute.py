@@ -8,9 +8,9 @@ from inspect_ai.util import ExecResult, OutputLimitExceededError
 from inspect_ai.util import SandboxEnvironmentLimits as limits
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
-from aisitools.k8s_sandbox._pod.buffer import LimitedBuffer
-from aisitools.k8s_sandbox._pod.get_returncode import get_returncode
-from aisitools.k8s_sandbox._pod.op import PodOperation
+from k8s_sandbox._pod.buffer import LimitedBuffer
+from k8s_sandbox._pod.get_returncode import get_returncode
+from k8s_sandbox._pod.op import PodOperation
 
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")

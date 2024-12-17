@@ -2,8 +2,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
-from aisitools.k8s_sandbox._helm import Release
-from aisitools.k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
+from k8s_sandbox._helm import Release
+from k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
 
 
 @asynccontextmanager

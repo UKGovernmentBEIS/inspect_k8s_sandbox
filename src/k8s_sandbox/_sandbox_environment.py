@@ -13,14 +13,14 @@ from inspect_ai.util import (
 )
 from pydantic import BaseModel
 
-from aisitools.k8s_sandbox._helm import Release
-from aisitools.k8s_sandbox._logger import format_log_message, sandbox_log
-from aisitools.k8s_sandbox._manager import (
+from k8s_sandbox._helm import Release
+from k8s_sandbox._logger import format_log_message, sandbox_log
+from k8s_sandbox._manager import (
     HelmReleaseManager,
     uninstall_unmanaged_release,
 )
-from aisitools.k8s_sandbox._pod import Pod
-from aisitools.k8s_sandbox._prereqs import validate_prereqs
+from k8s_sandbox._pod import Pod
+from k8s_sandbox._prereqs import validate_prereqs
 
 
 @sandboxenv(name="k8s")

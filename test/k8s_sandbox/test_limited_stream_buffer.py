@@ -1,6 +1,6 @@
 import pytest
 
-from aisitools.k8s_sandbox._pod.buffer import LimitedBuffer
+from k8s_sandbox._pod.buffer import LimitedBuffer
 
 
 @pytest.fixture

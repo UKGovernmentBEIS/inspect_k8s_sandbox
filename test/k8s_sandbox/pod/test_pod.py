@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from aisitools.k8s_sandbox._pod.execute import ExecuteOperation
+from k8s_sandbox._pod.execute import ExecuteOperation
 
 
 def test_filter_sentinel_and_returncode():

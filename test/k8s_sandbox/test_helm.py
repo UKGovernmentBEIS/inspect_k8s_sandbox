@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 from inspect_ai.util import ExecResult
 
-from aisitools.k8s_sandbox._helm import Release, _run_subprocess
+from k8s_sandbox._helm import Release, _run_subprocess
 
 
 @pytest.fixture
@@ -13,9 +13,7 @@ def uninstallable_release() -> Release:
 
 
 async def test_helm_install_error(uninstallable_release: Release) -> None:
-    with patch(
-        "aisitools.k8s_sandbox._helm._run_subprocess", wraps=_run_subprocess
-    ) as spy:
+    with patch("k8s_sandbox._helm._run_subprocess", wraps=_run_subprocess) as spy:
         with pytest.raises(RuntimeError) as excinfo:
             await uninstallable_release.install()
 
@@ -33,9 +31,9 @@ async def test_helm_resourcequota_retries(uninstallable_release: Release) -> Non
         "modified; please apply your changes to the latest version and try again\n",
     )
 
-    with patch("aisitools.k8s_sandbox._helm.INSTALL_RETRY_DELAY_SECONDS", 0):
+    with patch("k8s_sandbox._helm.INSTALL_RETRY_DELAY_SECONDS", 0):
         with patch(
-            "aisitools.k8s_sandbox._helm._run_subprocess", return_value=fail_result
+            "k8s_sandbox._helm._run_subprocess", return_value=fail_result
         ) as mock:
             with pytest.raises(Exception) as excinfo:
                 await uninstallable_release.install()
