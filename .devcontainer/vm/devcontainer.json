@@ -1,0 +1,66 @@
+// This is the devcontainer which users will use on their VMs e.g. EC2 instances.
+{
+  "name": "VM Devcontainer",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "..",
+    "args": {
+      "VARIANT": "3.11",
+      "INSTALL_NODE": "true",
+      "NODE_VERSION": "18.7"
+    }
+  },
+  "runArgs": [
+    "--network=host" // Allows accessing K8s API from within container using docker outside of docker
+  ],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "python.pythonPath": "/usr/local/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.mypy-type-checker",
+        "charliermarsh.ruff",
+        "ukaisi.inspect-ai"
+      ]
+    }
+  },
+  "features": {
+    "ghcr.io/meaningful-ooo/devcontainer-features/homebrew:2": {
+      "shallowClone": "true"
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {
+    },
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "version": "1.31.0",
+      "helm": "3.16.1",
+      "minikube": "1.34.0"
+    },
+    "ghcr.io/rio/features/k9s:1": {},
+    "ghcr.io/devcontainers/features/aws-cli": {
+      "version": "2.6.3"
+    },
+    "ghcr.io/casl0/devcontainer-features/eksctl:1": {}
+  },
+  "mounts": [
+    {
+      "source": "${localEnv:HOME}${localEnv:USERPROFILE}/.ssh",
+      "target": "/home/vscode/.ssh",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}${localEnv:USERPROFILE}/.kube",
+      "target": "/home/vscode/.kube",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}${localEnv:USERPROFILE}/.gitconfig",
+      "target": "/home/vscode/.gitconfig",
+      "type": "bind"
+    }
+  ],
+  "remoteUser": "vscode"
+}
