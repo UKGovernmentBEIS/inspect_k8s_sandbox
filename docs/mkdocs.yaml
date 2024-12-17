@@ -1,6 +1,6 @@
 site_name: Inspect K8s Sandbox Documentation
-repo_url: https://github.com/AI-Safety-Institute/aisi-inspect-tools
-edit_uri: edit/docs/k8s_sandbox/docs/
+repo_url: https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox
+edit_uri: edit/main/docs/docs/
 theme:
   name: material
   logo: assets/icon-white.png
