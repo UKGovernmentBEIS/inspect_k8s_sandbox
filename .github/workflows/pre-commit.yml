@@ -1,0 +1,17 @@
+name: Run pre-commit checks
+
+on:
+  workflow_call:
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5.1.0
+      with:
+        python-version: 3.11
+    - name: Set skips
+      # There are separate CI checks for Ruff; avoid checking twice.
+      run: echo "SKIP=ruff,ruff-format" >> $GITHUB_ENV
+    - uses: pre-commit/action@v3.0.1

@@ -1,0 +1,28 @@
+name: docs
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Git Credentials
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+      - name: Set up Python
+        uses: actions/setup-python@v5.1.0
+        with:
+          python-version: 3.11
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry install
+        working-directory: ./docs/k8s_sandbox
+      - run: poetry run mkdocs gh-deploy --force
+        working-directory: ./docs/k8s_sandbox
