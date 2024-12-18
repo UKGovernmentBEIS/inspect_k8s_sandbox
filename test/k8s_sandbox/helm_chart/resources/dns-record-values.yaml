@@ -1,0 +1,16 @@
+services:
+  a:
+    image: "nginx"
+  b:
+    image: "nginx"
+    dnsRecord: true
+  c:
+    image: "nginx"
+    additionalDnsRecords:
+      - "nginx.com"
+      - "my-fake-domain.org"
+  d:
+    image: "nginx"
+    ports:
+      - protocol: TCP
+        port: 80

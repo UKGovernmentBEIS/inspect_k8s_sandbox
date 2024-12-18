@@ -1,0 +1,35 @@
+services:
+  default:
+    workingDir: "/root"
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  # ubuntu:24.04 has a `ubuntu` user with UID 1000.
+  nonroot:
+    image: "ubuntu:24.04"
+    command: ["tail", "-f", "/dev/null"]
+    workingDir: "/home/ubuntu"
+    securityContext:
+      runAsUser: 1000
+      runAsNonRoot: true
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  busybox:
+    image: "busybox:1.37.0"
+    command: ["tail", "-f", "/dev/null"]
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"

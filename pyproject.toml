@@ -1,0 +1,51 @@
+[tool.poetry]
+name = "inspect-k8s-sandbox"
+version = "0.1.0"
+description = "A Kubernetes Sandbox Environment for Inspect"
+authors = ["UK AI Safety Institute"]
+readme = "README.md"
+packages = [
+  {include = "k8s_sandbox", from = "src"},
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+inspect-ai = ">=0.3.50"
+kubernetes = "^31.0.0"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.9.0"
+pre-commit = "^3.6.2"
+pytest = "^8.1.1"
+pytest-asyncio = "^0.23.7"
+pytest-repeat = "^0.9.3"
+ruff = "^0.6.0"
+types-pyyaml = "^6.0.12"
+
+[tool.poetry.plugins.inspect_ai]
+k8s-sandbox = "k8s_sandbox._sandbox_environment"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.ruff.lint]
+select = ["E",   # pycodestyle errors
+          "W",   # pycodestyle warnings
+          "F",   # flake8
+          "D",   # pydocstyle
+          "I",   # isort
+        ]
+ignore = ["E203", "D10", "D203", "D212"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "req_k8s: marks tests as requiring a test Kubernetes cluster (deselect with '-m \"not req_k8s\"')"
+]

@@ -1,0 +1,11 @@
+services:
+  default:
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+allowEntities:
+  - world

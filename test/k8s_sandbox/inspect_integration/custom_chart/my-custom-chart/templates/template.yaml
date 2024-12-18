@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-custom-chart-pod
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    inspect/service: default
+  annotations:
+    {{- toYaml $.Values.annotations | nindent 4 }}
+spec:
+  containers:
+  - name: default-container
+    image: python:3.12-bookworm
+    command: ["sleep", "infinity"]
+    env:
+    - name: POD_ENV_VAR
+      value: {{ default "chart-default" .Values.podEnvVar }}
+  terminationGracePeriodSeconds: 0

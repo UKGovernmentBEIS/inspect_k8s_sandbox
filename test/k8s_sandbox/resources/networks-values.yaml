@@ -1,0 +1,54 @@
+networks:
+  default-victim:
+    driver: k8s
+  victim-1-3:
+    driver: k8s
+services:
+  default:
+    # Contains networking tools.
+    image: "nicolaka/netshoot:v0.13"
+    command: ["tail", "-f", "/dev/null"]
+    networks:
+    - default-victim
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  victim1:
+    image: "nginx:1.27.0"
+    dnsRecord: true
+    networks:
+    - default-victim
+    - victim-1-3
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  victim2:
+    image: "nginx:1.27.0"
+    dnsRecord: true
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  victim3:
+    image: "nginx:1.27.0"
+    dnsRecord: true
+    networks:
+    - victim-1-3
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"

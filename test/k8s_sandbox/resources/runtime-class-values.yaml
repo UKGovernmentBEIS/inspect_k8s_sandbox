@@ -1,0 +1,41 @@
+services:
+  default:
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  gvisor-specified:
+    image: "ubuntu:24.04"
+    command: ["tail", "-f", "/dev/null"]
+    runtimeClassName: gvisor
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  runc-specified:
+    image: "ubuntu:24.04"
+    command: ["tail", "-f", "/dev/null"]
+    runtimeClassName: runc
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  unspecified:
+    image: "ubuntu:24.04"
+    command: ["tail", "-f", "/dev/null"]
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"

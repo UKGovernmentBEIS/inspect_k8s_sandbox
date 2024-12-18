@@ -1,0 +1,27 @@
+services:
+  default:
+    image: ubuntu:24.04
+    command: ["tail", "-f", "/dev/null"]
+    volumes:
+      - "shared:/mount"
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  writer:
+    image: ubuntu:24.04
+    command: ["bash", "-c", "echo test > /mount/test.txt && tail -f /dev/null"]
+    volumes:
+      - "shared:/mount"
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+volumes:
+  shared:

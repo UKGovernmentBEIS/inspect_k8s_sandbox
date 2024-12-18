@@ -1,0 +1,16 @@
+services:
+  # Pods are typically returned in alphabetical order from k8s API; name this service
+  # such that it will likely be returned first from the k8s API to verify that we do
+  # re-order the key/value pairs in the dict before passing to inspect.
+  another:
+    image: "python:3.12-bookworm"
+    command: ["tail", "-f", "/dev/null"]
+    env:
+      - name: "SERVICE_NAME"
+        value: "another"
+  default:
+    image: "python:3.12-bookworm"
+    command: ["tail", "-f", "/dev/null"]
+    env:
+      - name: "SERVICE_NAME"
+        value: "default"

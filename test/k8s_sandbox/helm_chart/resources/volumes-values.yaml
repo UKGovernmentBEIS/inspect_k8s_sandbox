@@ -1,0 +1,30 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+    volumeMounts:
+      - mountPath: /manual-volume-mount-path
+        name: manual-volume
+    volumes:
+      - name: manual-volume
+        emptyDir: {}
+      - "simple-volume-1:/simple-volume-mount-path"
+  other:
+    image: "python:3.12-bookworm"
+    volumeMounts:
+      - mountPath: /manual-volume-mount-path
+        name: manual-volume
+    volumes:
+      - name: manual-volume
+        emptyDir: {}
+      - "simple-volume-1:/simple-volume-mount-path"
+volumes:
+  simple-volume-1:
+  simple-volume-2:
+  custom-volume:
+    spec:
+      storageClassName: nfs-client
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 42Mi

@@ -1,0 +1,15 @@
+additionalResources:
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: my-first-secret
+  type: Opaque
+  data:
+    password: mypassword
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: my-second-secret
+  type: Opaque
+  data:
+    password: mypassword

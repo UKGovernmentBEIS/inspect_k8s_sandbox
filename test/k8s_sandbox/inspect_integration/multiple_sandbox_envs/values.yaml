@@ -1,0 +1,7 @@
+services:
+  other:
+    image: "python:3.12-bookworm"
+    command: ["tail", "-f", "/dev/null"]
+    env:
+      - name: "TEST_ENV_VAR"
+        value: "other"

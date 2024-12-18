@@ -1,0 +1,5 @@
+services:
+  default:
+    env:
+      - name: "VALUES_SOURCE"
+        value: "values.yaml"
