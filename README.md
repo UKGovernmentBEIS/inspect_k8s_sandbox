@@ -11,7 +11,7 @@ infrastructure, we do expect it to be useful to other organisations if they adop
 of our conventions. If you have an existing Kubernetes cluster this provider may work
 for you, or may require further tailoring and adaptation. To ask questions or discuss
 adopting this plugin, come join us in the [Inspect
-Slack](https://inspectcommunity.slack.com)!
+Slack](https://join.slack.com/t/inspectcommunity/shared_invite/zt-2w9eaeusj-4Hu~IBHx2aORsKz~njuz4g)!
 
 You can find documentation at
 [https://k8s-sandbox.ai-safety-institute.org.uk/](https://k8s-sandbox.ai-safety-institute.org.uk/).
