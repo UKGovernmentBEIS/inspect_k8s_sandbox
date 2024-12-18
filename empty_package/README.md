@@ -1,3 +1,20 @@
-pip install twine wheel setuptools
+Setup ~/.pypirc
+
+```
+[distutils]
+  index-servers =
+    pypi
+
+[pypi]
+  username = __token__
+  password = ...
+```
+
+The do
+
+```
+pip install twine wheel setuptools build
 cd inspect-k8s-sandbox
-python setup.py sdist bdist_wheel
+python -m build
+twine upload dist/*
+```
