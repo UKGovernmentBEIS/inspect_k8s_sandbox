@@ -2,7 +2,9 @@
 
 **NOTE:** If you have any feature requests or suggestions, we'd love to hear about them
 and discuss them with you before you raise a PR. Please come discuss your ideas with us
-in our [Inspect Community](https://inspectcommunity.slack.com) Slack workspace.
+in our [Inspect
+Community](https://join.slack.com/t/inspectcommunity/shared_invite/zt-2w9eaeusj-4Hu~IBHx2aORsKz~njuz4g)
+Slack workspace.
 
 ## Development
 
