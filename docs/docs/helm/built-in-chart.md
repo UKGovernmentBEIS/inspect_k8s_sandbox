@@ -329,7 +329,7 @@ This may be useful for determining which task a Pod belongs to.
 helm template ./resources/helm/agent-env > scratch/rendered.yaml
 ```
 
-## Install chart manually
+## Install chart manually { #manual-chart-install }
 
 Normally, the Helm chart is installed by the `k8s_sandbox` package. However, you can
 install it manually which might be useful for debugging.
@@ -341,8 +341,14 @@ helm install my-release ./resources/helm/agent-env -f path/to/helm-values.yaml
 `my-release` is the release name. Consider using your name or initials.
 
 `./resources/helm/agent-env` is the path to the Helm chart. If you are outside the
-`k8s_sandbox` repository, pass the full path, or the path to the chart within your
-virtual environment's `k8s_package/` directory.
+`k8s_sandbox` repository, pass the path to the chart in the `k8s_sandbox` repository, or
+the path to the chart within your virtual environment's `k8s_package/` directory.
+
+```sh
+helm install my-release ~/repos/k8s_sandbox/resources/helm/agent-env -f ...
+helm install my-release \
+  .venv/lib/python3.12/site-packages/k8s_sandbox/resources/helm/agent-env -f ...
+```
 
 Remember to uninstall the release when you are done.
 

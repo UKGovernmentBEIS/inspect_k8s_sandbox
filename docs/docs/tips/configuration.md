@@ -1,6 +1,6 @@
 # Advanced Configuration
 
-## Helm install timeout
+## Helm install timeout { #helm-install-timeout }
 
 The built-in Helm install timeout is 5 minutes. If you're running large eval sets and
 expect to run into cluster capacity issues, you can increase the timeout by setting the

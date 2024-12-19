@@ -4,12 +4,17 @@ This section explains features of [Inspect](https://inspect.ai-safety-institute.
 and [k9s](https://k9scli.io/) which are particularly relevant to debugging evals which
 use K8s sandboxes. Please see the dedicated docs pages of each for more information.
 
-## Inspect Log Levels
+## Capture Inspect `SANDBOX`-level logs { #sandbox-log-level }
 
-Using `--log-level sandbox` (or setting the `INSPECT_LOG_LEVEL` env var, or passing the
-`log_level` argument to `eval()`) when running an Inspect eval will give you good
-visibility into the Helm charts being installed, the commands being run within the
-containers, and the output of those commands.
+Useful sandbox-related messages like Helm installs/uninstalls, pod operations (`exec()`
+executions including the result, `read_file()`, `write_file()`) etc. are logged at the
+`SANDBOX` log level.
+
+Set Inspect's log level to `SANDBOX` or lower via one of these methods:
+
+ * passing `--log-level sandbox` on the command line
+ * setting `INSPECT_LOG_LEVEL=sandbox` environment variable
+ * passing the `log_level` argument to `eval()` or `eval_set()`
 
 Example:
 
@@ -34,6 +39,19 @@ SANDBOX - K8S: Completed: Execute command in pod. {
   "timeout": "300"
 }
 ```
+
+Additionally, ensure the content of the `logging` module is written to a file on disk:
+
+```sh
+mkdir -p logs
+export INSPECT_PY_LOGGER_FILE="logs/inspect_py_log.log"
+```
+
+These will include timestamps and are invaluable when piecing together an ordered
+sequence of events.
+
+Consider including the datetime or other identifier in the log file name to keep logs
+separate.
 
 ## Disabling Inspect Cleanup
 
