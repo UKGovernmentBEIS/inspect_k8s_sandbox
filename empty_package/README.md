@@ -10,7 +10,7 @@ Setup ~/.pypirc
   password = ...
 ```
 
-The do
+Then do
 
 ```
 pip install twine wheel setuptools build
