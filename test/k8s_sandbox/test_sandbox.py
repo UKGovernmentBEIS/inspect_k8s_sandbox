@@ -602,6 +602,17 @@ async def test_read_file_from_relative_path(sandbox: K8sSandboxEnvironment) -> N
     assert result == "Hello, World!"
 
 
+async def test_read_file_maintains_line_endings(sandbox: K8sSandboxEnvironment) -> None:
+    # The SandboxEnvironment interface documents that read_file() should maintain line
+    # endings.
+    expected = "Hello,\r\nWorld!\n"
+    await sandbox.write_file("/line-endings.txt", expected)
+
+    result = await sandbox.read_file("/line-endings.txt")
+
+    assert result == expected
+
+
 async def test_read_file_not_found(
     sandbox: K8sSandboxEnvironment, log_err: LogCaptureFixture
 ) -> None:
