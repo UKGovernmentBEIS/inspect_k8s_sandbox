@@ -93,6 +93,8 @@ These get translated to `toEntities` entries in the Cilium Network Policy:
 The built-in Helm chart is designed to allow services to communicate with each other
 using their service names e.g. `curl nginx`, much like you would in Docker Compose.
 
+To make services discoverable by their service name, set the `dnsRecord` key to `true`.
+
 Additionally, you can specify a list of domains that resolve to a given service e.g.
 `curl example.com` could resolve to your `nginx` service.
 
