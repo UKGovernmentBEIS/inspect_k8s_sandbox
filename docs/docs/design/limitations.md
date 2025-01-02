@@ -96,6 +96,21 @@ Evals which require the use of port 53 (e.g. a Cyber eval with a vulnerable DNS 
 will not work with the built-in Helm chart as each Pod has a CoreDNS sidecar which uses
 port 53.
 
+## Changes to `/etc/hosts` are ignored
+
+The kubelet manages the `/etc/hosts` file. Any changes manually made to this file e.g.
+in the Dockerfile:
+
+```Dockerfile
+echo "127.0.0.1 my-domain.com" >> /etc/hosts
+```
+
+may be lost. If your aim is to make certain hostnames resolve to one of your services,
+use the `additionalDnsRecords` field in the [built-in Helm
+chart](../helm/built-in-chart.md#dns). Or, if using a custom Helm chart, consider using
+the `hostAliases` field in the Pod spec
+([docs](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/)).
+
 ## The `user` parameter to `exec()` is not supported
 
 In Kubernetes, a container runs as a single user. If you need to run commands as
