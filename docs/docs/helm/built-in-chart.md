@@ -117,6 +117,14 @@ Pod.
     correspond to the FQDN allowlist, CoreDNS service must be co-located on the same
     node which the container making the DNS request are on.
 
+??? question "Why not use `hostAliases` to edit `/etc/hosts`?"
+
+    Instead of using DNS, the `/etc/hosts` file could be modified using
+    [HostAliases](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods).
+    However, some tools which an agent might try to use (e.g. `nslookup`) do not respect
+    `/etc/hosts` and will use DNS instead. Therefore, we chose to use a DNS-based
+    approach.
+
 For the containers within your release to use this, rather than the default Kubernetes
 DNS service, the `/etc/resolv.conf` of your containers is modified to use `127.0.0.1` as
 the nameserver.
