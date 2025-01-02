@@ -1,4 +1,3 @@
-import logging
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -14,7 +13,7 @@ from inspect_ai.util import (
 from pydantic import BaseModel
 
 from k8s_sandbox._helm import Release
-from k8s_sandbox._logger import format_log_message, sandbox_log
+from k8s_sandbox._logger import format_log_message, sandbox_log, sandbox_log_error
 from k8s_sandbox._manager import (
     HelmReleaseManager,
     uninstall_unmanaged_release,
@@ -204,9 +203,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             sandbox_log(f"Error during: {op}", cause=e, **log_kwargs)
             raise
         except Exception as e:
-            sandbox_log(
-                f"Error during: {op}", level=logging.ERROR, cause=e, **log_kwargs
-            )
+            sandbox_log_error(f"Error during: {op}", cause=e, **log_kwargs)
             # Enrich the unexpected exception with additional context.
             raise K8sError(f"Error during: {op}", **log_kwargs) from e
         sandbox_log(f"Completed: {op}", **{**result_dict, **log_kwargs})

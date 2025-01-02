@@ -3,8 +3,8 @@ import logging
 import os
 from typing import Any
 
-# TODO: We're accessing an internal constant. Can this be made public by inspect?
-from inspect_ai._util.constants import SANDBOX
+# TODO: Accessing private functions. To be made public by Inspect.
+from inspect_ai._util.trace import trace_message
 
 logger = logging.getLogger(__name__)
 
@@ -14,18 +14,30 @@ TRUNCATED_SUFFIX = "...<truncated-for-logging>"
 DEFAULT_ARG_TRUNCATION_THRESHOLD = 1000
 
 
-def sandbox_log(message: str, level: int = SANDBOX, **kwargs: Any) -> None:
-    """Format and log a message with "K8S: " prefix.
+def sandbox_log(message: str, **kwargs: Any) -> None:
+    """Format and log a message at TRACE level with K8s category.
 
     Args:
         message: The log message.
-        level: The log level. Defaults to SANDBOX.
         **kwargs: Key-value pairs to include in the log message. Values are truncated if
           they exceed DEFAULT_ARG_TRUNCATION_THRESHOLD (which can be overridden with env
           var INSPECT_K8S_LOG_TRUNCATION_THRESHOLD).
     """
     formatted = format_log_message(message, **kwargs)
-    logger.log(level, f"K8S: {formatted}")
+    trace_message(logger, "K8s", formatted)
+
+
+def sandbox_log_error(message: str, **kwargs: Any) -> None:
+    """Format and log a message at ERROR level with K8s prefix.
+
+    Args:
+        message: The log message.
+        **kwargs: Key-value pairs to include in the log message. Values are truncated if
+          they exceed DEFAULT_ARG_TRUNCATION_THRESHOLD (which can be overridden with env
+          var INSPECT_K8S_LOG_TRUNCATION_THRESHOLD).
+    """
+    formatted = format_log_message(message, **kwargs)
+    logger.error(f"K8s: {formatted}")
 
 
 def format_log_message(message: str, **kwargs: Any) -> str:
