@@ -64,6 +64,7 @@ from a variety of sources:
     ```
 
     !!! bug
+
         We're investigating occasional issues with the `allowDomains` feature where
         some network requests which ought to be allowed are blocked. It is yet unclear
         whether this is as a result of our service-based DNS resolution setup or whether
