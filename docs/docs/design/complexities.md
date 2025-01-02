@@ -33,6 +33,6 @@ See the source code for documentation on how this is achieved.
 !!! question "Why not use `tty=True` (`-t`)?"
 
     Whilst this would give us the behaviour we want around commands containing a
-    backgrounded task (`&`), it means that stderr is redirected to stdout. It also changes
-    the line endings of the output from `\n` to `\r\n`, which means that the output is not
-    consistent with output from other sandbox environments like Docker.
+    backgrounded task (`&`), it means that stderr is redirected to stdout. It also
+    changes the line endings of the output from `\n` to `\r\n`, which means that the
+    output is not consistent with output from other sandbox environments like Docker.

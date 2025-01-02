@@ -64,6 +64,7 @@ from a variety of sources:
     ```
 
     !!! bug
+
         We're investigating occasional issues with the `allowDomains` feature where
         some network requests which ought to be allowed are blocked. It is yet unclear
         whether this is as a result of our service-based DNS resolution setup or whether
@@ -92,6 +93,8 @@ These get translated to `toEntities` entries in the Cilium Network Policy:
 The built-in Helm chart is designed to allow services to communicate with each other
 using their service names e.g. `curl nginx`, much like you would in Docker Compose.
 
+To make services discoverable by their service name, set the `dnsRecord` key to `true`.
+
 Additionally, you can specify a list of domains that resolve to a given service e.g.
 `curl example.com` could resolve to your `nginx` service.
 
@@ -116,6 +119,14 @@ Pod.
     Because of the way that Cilium caches DNS responses to determine which IP addresses
     correspond to the FQDN allowlist, CoreDNS service must be co-located on the same
     node which the container making the DNS request are on.
+
+??? question "Why not use `hostAliases` to edit `/etc/hosts`?"
+
+    Instead of using DNS, the `/etc/hosts` file could be modified using
+    [HostAliases](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods).
+    However, some tools which an agent might try to use (e.g. `nslookup`) do not respect
+    `/etc/hosts` and will use DNS instead. Therefore, we chose to use a DNS-based
+    approach.
 
 For the containers within your release to use this, rather than the default Kubernetes
 DNS service, the `/etc/resolv.conf` of your containers is modified to use `127.0.0.1` as
