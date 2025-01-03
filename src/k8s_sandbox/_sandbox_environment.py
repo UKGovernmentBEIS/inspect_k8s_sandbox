@@ -1,8 +1,7 @@
-import logging
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Generator, Literal, cast, overload
+from typing import Any, Generator, Literal, cast, overload
 
 from inspect_ai.util import (
     ExecResult,
@@ -14,7 +13,12 @@ from inspect_ai.util import (
 from pydantic import BaseModel
 
 from k8s_sandbox._helm import Release
-from k8s_sandbox._logger import format_log_message, sandbox_log
+from k8s_sandbox._logger import (
+    format_log_message,
+    inspect_trace_action,
+    log_error,
+    log_trace,
+)
 from k8s_sandbox._manager import (
     HelmReleaseManager,
     uninstall_unmanaged_release,
@@ -74,7 +78,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             sandbox_envs: dict[str, SandboxEnvironment] = {}
             for key, pod in pods.items():
                 sandbox_envs[key] = cls(release, pod)
-            sandbox_log(f"Available sandboxes: {list(sandbox_envs.keys())}")
+            log_trace(f"Available sandboxes: {list(sandbox_envs.keys())}")
             return sandbox_envs
 
         def reorder_default_first(
@@ -128,11 +132,10 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             PermissionError,
             OutputLimitExceededError,
         )
-        with self._log_op(
-            "Execute command in pod.", expected_exceptions, **log_kwargs
-        ) as set_result:
+        op = "K8s execute command in Pod"
+        with self._log_op(op, expected_exceptions, **log_kwargs):
             result = await self._pod.exec(cmd, input, cwd, env, timeout)
-            set_result(result)
+            log_trace(f"Completed: {op}.", **(log_kwargs | {"result": result}))
             return result
 
     async def write_file(self, file: str, contents: str | bytes) -> None:
@@ -146,7 +149,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             temp_file.seek(0)
             # Do not log these at error level or re-raise as enriched K8sError.
             expected_exceptions = (PermissionError, IsADirectoryError)
-            with self._log_op("Write file to pod.", expected_exceptions, file=file):
+            with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
                 await self._pod.write_file(temp_file.file, Path(file))
 
     @overload
@@ -167,7 +170,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 IsADirectoryError,
                 OutputLimitExceededError,
             )
-            with self._log_op("Read file from pod.", expected_exceptions, file=file):
+            with self._log_op("K8s read file from Pod", expected_exceptions, file=file):
                 await self._pod.read_file(Path(file), temp_file)
                 temp_file.seek(0)
                 return (
@@ -177,39 +180,33 @@ class K8sSandboxEnvironment(SandboxEnvironment):
     @contextmanager
     def _log_op(
         self, op: str, expected_exceptions: tuple, **log_kwargs
-    ) -> Generator[Callable[[ExecResult], None], None, None]:
+    ) -> Generator[None, None, None]:
         """Logs the lifecycle of an operation and enriches unexpected exceptions.
 
         The pod name and task name are included all log messages in addition to
         log_kwargs.
 
-        For "expected" exceptions (e.g. TimeoutError), the exception is logged at
-        "SANDBOX" level and re-raised.
+        Inspect's trace_action() context manager will log any exceptions at TRACE level.
+        No additional handling of "expected" exceptions (e.g. TimeoutError) is
+        performed.
         For "unexpected" exceptions (e.g. ApiException), the exception is logged at
         "ERROR" level and re-raised as a K8sError which includes additional context for
         debugging.
-
-        Optionally, a result can be set by the caller for inclusion in the "completed"
-        log message.
         """
         log_kwargs = dict(
             pod=self._pod.info.name, task_name=self.release.task_name, **log_kwargs
         )
-        sandbox_log(f"Starting: {op}", **log_kwargs)
-        result_dict = dict()
-        try:
-            # Allow the caller to set the result of the operation for logging.
-            yield lambda x: result_dict.update({"result": x})
-        except expected_exceptions as e:
-            sandbox_log(f"Error during: {op}", cause=e, **log_kwargs)
-            raise
-        except Exception as e:
-            sandbox_log(
-                f"Error during: {op}", level=logging.ERROR, cause=e, **log_kwargs
-            )
-            # Enrich the unexpected exception with additional context.
-            raise K8sError(f"Error during: {op}", **log_kwargs) from e
-        sandbox_log(f"Completed: {op}", **{**result_dict, **log_kwargs})
+        with inspect_trace_action(op, **log_kwargs):
+            try:
+                yield
+            except expected_exceptions:
+                raise
+            except Exception as e:
+                # Whilst Inspect's trace_action will have logged the exception, log it
+                # at ERROR level here for user visibility.
+                log_error(f"Error during: {op}.", cause=e, **log_kwargs)
+                # Enrich the unexpected exception with additional context.
+                raise K8sError(f"Error during: {op}.", **log_kwargs) from e
 
 
 class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):

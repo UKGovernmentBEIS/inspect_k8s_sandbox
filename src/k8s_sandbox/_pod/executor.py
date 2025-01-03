@@ -7,7 +7,7 @@ from typing import Callable, TypeVar
 
 from inspect_ai.util import concurrency
 
-from k8s_sandbox._logger import sandbox_log
+from k8s_sandbox._logger import log_trace
 
 T = TypeVar("T")
 
@@ -32,7 +32,7 @@ class PodOpExecutor:
             cpu_count = os.cpu_count() or 1
             # Pod operations are typically I/O-bound (from the client's perspective).
             self._max_workers = cpu_count * 4
-        sandbox_log("Creating PodOpExecutor.", max_workers=self._max_workers)
+        log_trace("Creating PodOpExecutor.", max_workers=self._max_workers)
         self._executor = ThreadPoolExecutor(
             max_workers=self._max_workers, thread_name_prefix="pod-op-executor"
         )

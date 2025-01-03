@@ -4,35 +4,31 @@ This section explains features of [Inspect](https://inspect.ai-safety-institute.
 and [k9s](https://k9scli.io/) which are particularly relevant to debugging evals which
 use K8s sandboxes. Please see the dedicated docs pages of each for more information.
 
-## Capture Inspect `SANDBOX`-level logs { #sandbox-log-level }
+## View Inspect's `TRACE`-level logs { #trace-log-level }
 
-Useful sandbox-related messages like Helm installs/uninstalls, pod operations (`exec()`
+Useful sandbox-related messages like Helm installs/uninstalls, Pod operations (`exec()`
 executions including the result, `read_file()`, `write_file()`) etc. are logged at the
-`SANDBOX` log level.
+`TRACE` log level. See the [Inspect tracing
+docs](https://inspect.ai-safety-institute.org.uk/tracing.html) for more information on
+where these are stored and how to read them.
 
-Set Inspect's log level to `SANDBOX` or lower via one of these methods:
-
- * passing `--log-level sandbox` on the command line
- * setting `INSPECT_LOG_LEVEL=sandbox` environment variable
- * passing the `log_level` argument to `eval()` or `eval_set()`
-
-Example:
+Example (additional fields removed for brevity):
 
 ```raw
-SANDBOX - K8S: Installing Helm chart. {
+K8s installing Helm chart: {
   "chart": "/home/ubuntu/.../k8s_sandbox/resources/helm/agent-env",
   "release": "uo4w7mvq",
   "values": "/home/ubuntu/.../helm-values.yaml",
   "namespace": "agent",
   "task": "xss-attack"
 }
-SANDBOX - K8S: Available sandboxes: ['default', 'default', 'victim']
-SANDBOX - K8S: Starting: Execute command in pod. {
+[K8s] Available sandboxes: ['default', 'default', 'victim']
+K8s execute command in Pod: {
   "pod": "agent-env-uo4w7mvq-default-0",
   "task_name": "xss-attack", "cmd": "['python3']",
   "stdin": "print('Hello, world!')", "cwd": "None", "timeout": "300"
 }
-SANDBOX - K8S: Completed: Execute command in pod. {
+[K8s] Completed: K8s execute command in Pod. {
   "result": "ExecResult(success=True, returncode=0, stdout=\"...\", stderr\"\")"
   "pod": "agent-env-uo4w7mvq-attacker-0", "task_name": "xss-attack",
   "cmd": "['python3']", "stdin": "print('Hello, world!')", "cwd": "None",
@@ -40,18 +36,11 @@ SANDBOX - K8S: Completed: Execute command in pod. {
 }
 ```
 
-Additionally, ensure the content of the `logging` module is written to a file on disk:
+All K8s-relevant entries contain "K8s" as a substring within the "action" field which
+may be useful for filtering.
 
-```sh
-mkdir -p logs
-export INSPECT_PY_LOGGER_FILE="logs/inspect_py_log.log"
-```
-
-These will include timestamps and are invaluable when piecing together an ordered
+The trace logs include timestamps and are invaluable when piecing together an ordered
 sequence of events.
-
-Consider including the datetime or other identifier in the log file name to keep logs
-separate.
 
 ## Disabling Inspect Cleanup
 

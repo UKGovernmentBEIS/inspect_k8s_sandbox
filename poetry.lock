@@ -22,17 +22,6 @@ awscli = ["awscli (>=1.34.16,<1.35.3)"]
 boto3 = ["boto3 (>=1.35.16,<1.35.37)"]
 
 [[package]]
-name = "aiofiles"
-version = "24.1.0"
-description = "File support for asyncio."
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "aiofiles-24.1.0-py3-none-any.whl", hash = "sha256:b4ec55f4195e3eb5d7abd1bf7e061763e864dd4954231fb8539a0ef8bb8260e5"},
-    {file = "aiofiles-24.1.0.tar.gz", hash = "sha256:22a075c9e5a3810f0c2e48f3008c94d68c65d763b9b03857924c99e57355166c"},
-]
-
-[[package]]
 name = "aiohappyeyeballs"
 version = "2.4.4"
 description = "Happy Eyeballs for asyncio"
@@ -907,17 +896,16 @@ files = [
 
 [[package]]
 name = "inspect-ai"
-version = "0.3.52"
+version = "0.3.55"
 description = "Framework for large language model evaluations"
 optional = false
 python-versions = ">=3.10"
 files = [
-    {file = "inspect_ai-0.3.52-py3-none-any.whl", hash = "sha256:44d8c93490ca0b111a6140283eb28545de133f3d6b6f4e39ff424c472de59378"},
-    {file = "inspect_ai-0.3.52.tar.gz", hash = "sha256:e4811da1d36f5f34dcd2159e9416052d5eb301cf02c9cc5909e2c90320d8bca1"},
+    {file = "inspect_ai-0.3.55-py3-none-any.whl", hash = "sha256:7ba965fda44fdd064d032486f9a0c2bf2f15f47b597ea9478363ce07c476edc2"},
+    {file = "inspect_ai-0.3.55.tar.gz", hash = "sha256:9efe23c392b22909d9b8c0f9a37fdd46a7895fe43731e02530434c262e79b00c"},
 ]
 
 [package.dependencies]
-aiofiles = "*"
 aiohttp = ">=3.9.0"
 anyio = ">=4.4.0"
 beautifulsoup4 = "*"
@@ -948,7 +936,7 @@ typing_extensions = ">=4.9.0"
 zipp = ">=3.19.1"
 
 [package.extras]
-dev = ["aioboto3", "anthropic", "azure-ai-inference", "google-cloud-aiplatform", "google-generativeai", "groq", "ipython", "mistralai", "moto[server]", "mypy", "nbformat", "openai", "pre-commit", "pytest", "pytest-asyncio", "pytest-cov", "pytest-dotenv", "pytest-xdist", "ruff (==0.8.3)", "textual-dev (>=0.86.2)", "types-PyYAML", "types-aioboto3", "types-aiofiles", "types-beautifulsoup4", "types-boto3", "types-botocore", "types-jsonpatch", "types-jsonschema", "types-protobuf", "types-psutil", "types-python-dateutil"]
+dev = ["aioboto3", "anthropic", "azure-ai-inference", "google-cloud-aiplatform", "google-generativeai", "groq", "ipython", "mistralai", "moto[server]", "mypy", "nbformat", "openai", "pre-commit", "pytest", "pytest-asyncio", "pytest-cov", "pytest-dotenv", "pytest-xdist", "ruff (==0.8.4)", "textual-dev (>=0.86.2)", "types-PyYAML", "types-aioboto3", "types-beautifulsoup4", "types-boto3", "types-botocore", "types-jsonpatch", "types-jsonschema", "types-protobuf", "types-psutil", "types-python-dateutil"]
 dist = ["build", "twine"]
 doc = ["jupyter", "quarto-cli"]
 

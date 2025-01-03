@@ -51,14 +51,7 @@ def run_and_verify_inspect_eval(
     assert task.dataset.location
     log_dir = os.path.join(os.getcwd(), "logs")
     with _ChangeDir(task.dataset.location):
-        # log_level="SANDBOX" to facilitate test debugging.
-        logs = eval(
-            task,
-            model=model,
-            log_dir=log_dir,
-            log_level="SANDBOX",
-            sandbox_cleanup=sandbox_cleanup,
-        )
+        logs = eval(task, model=model, log_dir=log_dir, sandbox_cleanup=sandbox_cleanup)
     log = logs[0]
     assert log.status == "success"
     assert log.samples
