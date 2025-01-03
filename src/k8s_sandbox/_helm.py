@@ -51,7 +51,7 @@ class Release:
     async def install(self) -> None:
         async with _install_semaphore():
             with inspect_trace_action(
-                "Install Helm chart",
+                "K8s install Helm chart",
                 chart=self._chart_path,
                 release=self.release_name,
                 values=self._values_path,
@@ -152,7 +152,7 @@ async def uninstall(release_name: str, quiet: bool) -> None:
     namespace = get_current_context_namespace()
     async with _uninstall_semaphore():
         with inspect_trace_action(
-            "Uninstall Helm chart", release=release_name, namespace=namespace
+            "K8s uninstall Helm chart", release=release_name, namespace=namespace
         ):
             result = await _run_subprocess(
                 "helm",

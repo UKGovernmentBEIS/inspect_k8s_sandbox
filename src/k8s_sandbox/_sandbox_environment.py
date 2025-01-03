@@ -132,7 +132,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             PermissionError,
             OutputLimitExceededError,
         )
-        op = "Execute command in pod"
+        op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
             result = await self._pod.exec(cmd, input, cwd, env, timeout)
             sandbox_log(f"Completed: {op}.", **(log_kwargs | {"result": result}))
@@ -149,7 +149,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             temp_file.seek(0)
             # Do not log these at error level or re-raise as enriched K8sError.
             expected_exceptions = (PermissionError, IsADirectoryError)
-            with self._log_op("Write file to pod", expected_exceptions, file=file):
+            with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
                 await self._pod.write_file(temp_file.file, Path(file))
 
     @overload
@@ -170,7 +170,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 IsADirectoryError,
                 OutputLimitExceededError,
             )
-            with self._log_op("Read file from pod", expected_exceptions, file=file):
+            with self._log_op("K8s read file from Pod", expected_exceptions, file=file):
                 await self._pod.read_file(Path(file), temp_file)
                 temp_file.seek(0)
                 return (
