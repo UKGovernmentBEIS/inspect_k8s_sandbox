@@ -3,11 +3,11 @@
 For general K8s and Inspect sandbox debugging, see the [Debugging K8s
 Sandboxes](debugging-k8s-sandboxes.md) guide.
 
-## Capture Inspect `SANDBOX`-level logs
+## View Inspect's `TRACE`-level logs
 
-A good starting point to most issues is to capture the output of the Python `logging`
-module at `SANDBOX` level. See the [`SANDBOX` log level
-section](debugging-k8s-sandboxes.md#sandbox-log-level).
+A good starting point to many issues is to view the `TRACE`-level logs written by
+Inspect. See the [`TRACE` log level
+section](debugging-k8s-sandboxes.md#trace-log-level).
 
 ## I'm seeing "Helm install: context deadline exceeded" errors
 
@@ -23,8 +23,8 @@ Therefore, this error can be an indication of:
 
 Try installing the chart again (this can also be [done
 manually](../helm/built-in-chart.md#manual-chart-install)) and check the Pod statuses
-and logs using a tool like K9s. Use the helm release name (will be in error message and
-`SANDBOX` -level logs) to filter the Pods.
+and logs using a tool like K9s. Use the helm release name (will be in error message) to
+filter the Pods.
 
 ## I'm seeing "Helm uninstall failed" errors
 
@@ -80,7 +80,7 @@ kubectl get events --sort-by='.metadata.creationTimestamp' \
   --field-selector involvedObject.name=agent-env-xxxxxxxx-default-0
 ```
 
-Find the Pod name (including the random 8-character identifier) in the `SANDBOX`-level
+Find the Pod name (including the random 8-character identifier) in the `TRACE`-level
 logs or the stack trace.
 
 To specify a namespace other than the default, use the `-n` flag.
