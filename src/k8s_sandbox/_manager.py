@@ -9,6 +9,7 @@ from rich.table import Table
 
 from k8s_sandbox._helm import Release
 from k8s_sandbox._helm import uninstall as helm_uninstall
+from k8s_sandbox._kubernetes_api import get_current_context_namespace
 
 
 class HelmReleaseManager:
@@ -93,11 +94,10 @@ class HelmReleaseManager:
             )
         print("")
         print(table)
-        # TODO: Once supported, tell user how to cleanup all environments.
-        # print(
-        #     "\nCleanup all environments with: "
-        #     "[blue]inspect sandbox cleanup k8s[/blue]\n"
-        # )
+        print(
+            "\nCleanup all sandbox releases with: "
+            "[blue]inspect sandbox cleanup k8s[/blue]\n"
+        )
 
 
 async def uninstall_unmanaged_release(release_name: str) -> None:
@@ -108,7 +108,8 @@ async def uninstall_unmanaged_release(release_name: str) -> None:
       release_name (str): The name of the release to uninstall (e.g. "lsphdyup").
     """
     _print_do_not_interrupt()
-    await helm_uninstall(release_name, quiet=False)
+    namespace = get_current_context_namespace()
+    await helm_uninstall(release_name, namespace, quiet=False)
 
 
 def _print_do_not_interrupt() -> None:

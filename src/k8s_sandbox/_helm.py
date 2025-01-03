@@ -70,7 +70,7 @@ class Release:
                     await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
 
     async def uninstall(self, quiet: bool) -> None:
-        await uninstall(self.release_name, quiet)
+        await uninstall(self.release_name, self._namespace, quiet)
 
     async def get_sandbox_pods(self) -> dict[str, Pod]:
         client = k8s_client()
@@ -121,6 +121,9 @@ class Release:
                 # Annotation do not have strict length reqs. Quoting/escaping
                 # handled by asyncio.create_subprocess_exec.
                 f"annotations.inspectTaskName={self.task_name}",
+                # Include a label to identify releases created by Inspect.
+                "--labels",
+                "inspectSandbox=true",
             ]
             + values,
             capture_output=True,
@@ -148,8 +151,7 @@ class Release:
         )
 
 
-async def uninstall(release_name: str, quiet: bool) -> None:
-    namespace = get_current_context_namespace()
+async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
     async with _uninstall_semaphore():
         sandbox_log(
             "Uninstalling helm release.", release=release_name, namespace=namespace
@@ -172,6 +174,24 @@ async def uninstall(release_name: str, quiet: bool) -> None:
         _raise_runtime_error(
             "Helm uninstall failed.", release=release_name, result=captured_output
         )
+
+
+async def get_all_release_names(namespace: str) -> list[str]:
+    result = await _run_subprocess(
+        "helm",
+        [
+            "list",
+            "--namespace",
+            namespace,
+            "-q",
+            "--selector",
+            "inspectSandbox=true",
+            "--max",
+            "0",
+        ],
+        capture_output=True,
+    )
+    return result.stdout.splitlines()
 
 
 def _raise_runtime_error(
