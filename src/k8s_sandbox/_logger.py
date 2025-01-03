@@ -15,7 +15,7 @@ TRUNCATED_SUFFIX = "...<truncated-for-logging>"
 DEFAULT_ARG_TRUNCATION_THRESHOLD = 1000
 
 
-def sandbox_log(message: str, **kwargs: Any) -> None:
+def log_trace(message: str, **kwargs: Any) -> None:
     """Format and log a message at TRACE level with K8s category.
 
     Args:
@@ -25,10 +25,10 @@ def sandbox_log(message: str, **kwargs: Any) -> None:
           var INSPECT_K8S_LOG_TRUNCATION_THRESHOLD).
     """
     formatted = format_log_message(message, **kwargs)
-    trace_message(logger, "K8s", formatted)
+    trace_message(logger, category="K8s", message=formatted)
 
 
-def sandbox_log_error(message: str, **kwargs: Any) -> None:
+def log_error(message: str, **kwargs: Any) -> None:
     """Format and log a message at ERROR level with K8s prefix.
 
     Args:

@@ -16,8 +16,8 @@ from k8s_sandbox._helm import Release
 from k8s_sandbox._logger import (
     format_log_message,
     inspect_trace_action,
-    sandbox_log,
-    sandbox_log_error,
+    log_error,
+    log_trace,
 )
 from k8s_sandbox._manager import (
     HelmReleaseManager,
@@ -78,7 +78,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             sandbox_envs: dict[str, SandboxEnvironment] = {}
             for key, pod in pods.items():
                 sandbox_envs[key] = cls(release, pod)
-            sandbox_log(f"Available sandboxes: {list(sandbox_envs.keys())}")
+            log_trace(f"Available sandboxes: {list(sandbox_envs.keys())}")
             return sandbox_envs
 
         def reorder_default_first(
@@ -135,7 +135,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
             result = await self._pod.exec(cmd, input, cwd, env, timeout)
-            sandbox_log(f"Completed: {op}.", **(log_kwargs | {"result": result}))
+            log_trace(f"Completed: {op}.", **(log_kwargs | {"result": result}))
             return result
 
     async def write_file(self, file: str, contents: str | bytes) -> None:
@@ -204,7 +204,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             except Exception as e:
                 # Whilst Inspect's trace_action will have logged the exception, log it
                 # at ERROR level here for user visibility.
-                sandbox_log_error(f"Error during: {op}.", cause=e, **log_kwargs)
+                log_error(f"Error during: {op}.", cause=e, **log_kwargs)
                 # Enrich the unexpected exception with additional context.
                 raise K8sError(f"Error during: {op}.", **log_kwargs) from e
 

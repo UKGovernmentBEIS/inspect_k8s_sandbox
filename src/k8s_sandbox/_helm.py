@@ -13,7 +13,7 @@ from k8s_sandbox._kubernetes_api import (
     get_current_context_namespace,
     k8s_client,
 )
-from k8s_sandbox._logger import format_log_message, inspect_trace_action, sandbox_log
+from k8s_sandbox._logger import format_log_message, inspect_trace_action, log_trace
 from k8s_sandbox._pod import Pod
 
 DEFAULT_CHART = Path(__file__).parent / "resources" / "helm" / "agent-env"
@@ -137,7 +137,7 @@ class Release:
             r"again",
             result.stderr,
         ):
-            sandbox_log(
+            log_trace(
                 "resourcequota modified error whilst installing helm chart.",
                 release=self.release_name,
                 error=result.stderr,
