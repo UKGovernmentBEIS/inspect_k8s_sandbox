@@ -1,10 +1,11 @@
 import json
 import logging
 import os
-from typing import Any
+from contextlib import contextmanager
+from typing import Any, Generator
 
 # TODO: Accessing private functions. To be made public by Inspect.
-from inspect_ai._util.trace import trace_message
+from inspect_ai._util.trace import trace_action, trace_message
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,25 @@ def format_log_message(message: str, **kwargs: Any) -> str:
     """
     if not kwargs:
         return message
-    truncated_kwargs = {k: _truncate_arg(v) for k, v in kwargs.items()}
-    json_args = json.dumps(truncated_kwargs, ensure_ascii=False)
-    return f"{message} {json_args}"
+    json_kwargs = _format_kwargs_as_json(**kwargs)
+    return f"{message} {json_kwargs}"
+
+
+@contextmanager
+def inspect_trace_action(action: str, **kwargs: Any) -> Generator[None, None, None]:
+    """Context manager that traces an action with structured logging.
+
+    Uses Inspect's trace_action.
+
+    Args:
+        action: The action being performed (e.g. "K8s execute command in Pod").
+        **kwargs: Key-value pairs to include in as details parameter to trace_action.
+          Values are truncated if they exceed DEFAULT_ARG_TRUNCATION_THRESHOLD (which
+          can be overridden with env var INSPECT_K8S_LOG_TRUNCATION_THRESHOLD).
+    """
+    json_kwargs = _format_kwargs_as_json(**kwargs)
+    with trace_action(logger, action, json_kwargs):
+        yield
 
 
 def _truncate_arg(arg: Any) -> str:
@@ -69,3 +86,8 @@ def _get_arg_truncation_threshold() -> int:
         return int(os.environ["INSPECT_K8S_LOG_TRUNCATION_THRESHOLD"])
     except (KeyError, ValueError):
         return DEFAULT_ARG_TRUNCATION_THRESHOLD
+
+
+def _format_kwargs_as_json(**kwargs: Any) -> str:
+    truncated_kwargs = {k: _truncate_arg(v) for k, v in kwargs.items()}
+    return json.dumps(truncated_kwargs, ensure_ascii=False)
