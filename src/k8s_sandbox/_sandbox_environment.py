@@ -98,8 +98,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         environments: dict[str, SandboxEnvironment],
         interrupted: bool,
     ) -> None:
-        # If we were interrupted, wait unil the end of the task to cleanup (this enables
-        # us to show output for the cleanup operation).
+        # If we were interrupted, wait until the end of the task to cleanup (this
+        # enables us to show output for the cleanup operation).
         if interrupted:
             return
         sandbox: K8sSandboxEnvironment = cast(
