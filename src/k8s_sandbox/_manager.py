@@ -80,7 +80,7 @@ class HelmReleaseManager:
 
     def _print_cleanup_instructions(self) -> None:
         table = Table(
-            title="K8s Sandbox Environments (not yet cleaned up):",
+            title="K8s Sandbox Releases (not yet cleaned up):",
             box=box.SQUARE_DOUBLE_HEAD,
             show_lines=True,
             title_style="bold",
