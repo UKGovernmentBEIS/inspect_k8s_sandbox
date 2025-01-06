@@ -1,4 +1,3 @@
-import asyncio
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -12,10 +11,8 @@ from inspect_ai.util import (
     sandboxenv,
 )
 from pydantic import BaseModel
-from rich.prompt import Confirm
 
-from k8s_sandbox._helm import Release, get_all_release_names, uninstall
-from k8s_sandbox._kubernetes_api import get_current_context_namespace
+from k8s_sandbox._helm import Release
 from k8s_sandbox._logger import (
     format_log_message,
     inspect_trace_action,
@@ -24,6 +21,7 @@ from k8s_sandbox._logger import (
 )
 from k8s_sandbox._manager import (
     HelmReleaseManager,
+    uninstall_all_unmanaged_releases,
     uninstall_unmanaged_release,
 )
 from k8s_sandbox._pod import Pod
@@ -64,7 +62,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         if id is not None:
             await uninstall_unmanaged_release(id)
         else:
-            await _uninstall_all_unmanaged_releases()
+            await uninstall_all_unmanaged_releases()
 
     @classmethod
     async def sample_init(
@@ -254,21 +252,3 @@ def _create_release(
         validate_values_file(values)
         return Release(task_name, values_path=values)
     raise TypeError(f"Invalid config type: {type(config)}.")
-
-
-async def _uninstall_all_unmanaged_releases():
-    namespace = get_current_context_namespace()
-    releases = await get_all_release_names(namespace)
-    if len(releases) == 0:
-        print(f"No Inspect sandbox releases found in '{namespace}' namespace.")
-        return
-    if not Confirm.ask(
-        f"Are you sure you want to uninstall ALL {len(releases)} Inspect sandbox "
-        f"release(s) in '{namespace}' namespace? If this is a shared namespace, "
-        "this may affect other users.",
-    ):
-        print("Cancelled.")
-        return
-    tasks = [uninstall(release, namespace, quiet=False) for release in releases]
-    await asyncio.gather(*tasks, return_exceptions=True)
-    print("Complete.")

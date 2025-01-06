@@ -5,9 +5,10 @@ from contextvars import ContextVar
 
 from rich import box, print
 from rich.panel import Panel
+from rich.prompt import Confirm
 from rich.table import Table
 
-from k8s_sandbox._helm import Release
+from k8s_sandbox._helm import Release, get_all_release_names
 from k8s_sandbox._helm import uninstall as helm_uninstall
 from k8s_sandbox._kubernetes_api import get_current_context_namespace
 
@@ -110,6 +111,24 @@ async def uninstall_unmanaged_release(release_name: str) -> None:
     _print_do_not_interrupt()
     namespace = get_current_context_namespace()
     await helm_uninstall(release_name, namespace, quiet=False)
+
+
+async def uninstall_all_unmanaged_releases():
+    namespace = get_current_context_namespace()
+    releases = await get_all_release_names(namespace)
+    if len(releases) == 0:
+        print(f"No Inspect sandbox releases found in '{namespace}' namespace.")
+        return
+    if not Confirm.ask(
+        f"Are you sure you want to uninstall ALL {len(releases)} Inspect sandbox "
+        f"release(s) in '{namespace}' namespace? If this is a shared namespace, "
+        "this may affect other users.",
+    ):
+        print("Cancelled.")
+        return
+    tasks = [helm_uninstall(release, namespace, quiet=False) for release in releases]
+    await asyncio.gather(*tasks, return_exceptions=True)
+    print("Complete.")
 
 
 def _print_do_not_interrupt() -> None:
