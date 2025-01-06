@@ -22,13 +22,14 @@ potential mitigations and solutions.
 ## Usage
 
 ```bash
-python main.py
+python run.py
 ```
 
-The scores will start to be computed after ~5 minutes (see the `asyncio.sleep`).
+The scores will start to be computed after ~5 minutes (see `post_curl_sleep`).
 
-The mean score will be reported. A score of 1.0 indicates all `curl` commands succeeded,
-indicating that both DNS and the HTTP requests were successful.
+The mean score will be reported when the eval finishes. A score of 1.0 indicates that
+all `curl` commands succeeded, implying that both DNS and the HTTP requests were
+successful.
 
 Try adjusting values such as epochs, resources in `helm-values.yaml` (to control the
 number of Pods per Node), uncommenting the readinessProbe, switching from allowDomains
