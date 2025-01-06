@@ -13,7 +13,7 @@ from k8s_sandbox._kubernetes_api import (
     get_current_context_namespace,
     k8s_client,
 )
-from k8s_sandbox._logger import format_log_message, sandbox_log
+from k8s_sandbox._logger import format_log_message, inspect_trace_action, log_trace
 from k8s_sandbox._pod import Pod
 
 DEFAULT_CHART = Path(__file__).parent / "resources" / "helm" / "agent-env"
@@ -50,24 +50,24 @@ class Release:
 
     async def install(self) -> None:
         async with _install_semaphore():
-            sandbox_log(
-                "Installing helm chart.",
+            with inspect_trace_action(
+                "K8s install Helm chart",
                 chart=self._chart_path,
                 release=self.release_name,
                 values=self._values_path,
                 namespace=self._namespace,
                 task=self.task_name,
-            )
-            attempt = 1
-            while True:
-                try:
-                    await self._install(upgrade=attempt > 1)
-                    break
-                except _ResourceQuotaModifiedError:
-                    if attempt >= MAX_INSTALL_ATTEMPTS:
-                        raise
-                    attempt += 1
-                    await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
+            ):
+                attempt = 1
+                while True:
+                    try:
+                        await self._install(upgrade=attempt > 1)
+                        break
+                    except _ResourceQuotaModifiedError:
+                        if attempt >= MAX_INSTALL_ATTEMPTS:
+                            raise
+                        attempt += 1
+                        await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
 
     async def uninstall(self, quiet: bool) -> None:
         await uninstall(self.release_name, self._namespace, quiet)
@@ -140,7 +140,7 @@ class Release:
             r"again",
             result.stderr,
         ):
-            sandbox_log(
+            log_trace(
                 "resourcequota modified error whilst installing helm chart.",
                 release=self.release_name,
                 error=result.stderr,
@@ -153,27 +153,30 @@ class Release:
 
 async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
     async with _uninstall_semaphore():
-        sandbox_log(
-            "Uninstalling helm release.", release=release_name, namespace=namespace
-        )
-        result = await _run_subprocess(
-            "helm",
-            [
-                "uninstall",
-                release_name,
-                "--namespace",
-                namespace,
-                "--wait",
-                "--timeout",
-                f"{_get_timeout()}s",
-            ],
-            capture_output=quiet,
-        )
-    if not result.success:
-        captured_output = result.stdout if not quiet else "not captured"
-        _raise_runtime_error(
-            "Helm uninstall failed.", release=release_name, result=captured_output
-        )
+        with inspect_trace_action(
+            "K8s uninstall Helm chart", release=release_name, namespace=namespace
+        ):
+            result = await _run_subprocess(
+                "helm",
+                [
+                    "uninstall",
+                    release_name,
+                    "--namespace",
+                    namespace,
+                    "--wait",
+                    "--timeout",
+                    f"{_get_timeout()}s",
+                ],
+                capture_output=quiet,
+            )
+            if not result.success:
+                captured_output = result.stdout if not quiet else "not captured"
+                _raise_runtime_error(
+                    "Helm uninstall failed.",
+                    release=release_name,
+                    namespace=namespace,
+                    result=captured_output,
+                )
 
 
 async def get_all_release_names(namespace: str) -> list[str]:
