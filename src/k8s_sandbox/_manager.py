@@ -86,7 +86,7 @@ class HelmReleaseManager:
             title_style="bold",
             title_justify="left",
         )
-        table.add_column("Container(s)", no_wrap=True)
+        table.add_column("Release(s)", no_wrap=True)
         table.add_column("Cleanup")
         for release in self._installed_releases:
             table.add_row(
