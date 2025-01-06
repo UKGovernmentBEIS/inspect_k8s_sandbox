@@ -114,11 +114,25 @@ async def uninstall_unmanaged_release(release_name: str) -> None:
 
 
 async def uninstall_all_unmanaged_releases():
+    def _print_table(releases: list[str]) -> None:
+        print("Releases to be uninstalled:")
+        table = Table(
+            box=box.SQUARE,
+            show_lines=False,
+            title_style="bold",
+            title_justify="left",
+        )
+        table.add_column("Release")
+        for release in releases:
+            table.add_row(f"[red]{release}[/red]")
+        print(table)
+
     namespace = get_current_context_namespace()
     releases = await get_all_release_names(namespace)
     if len(releases) == 0:
         print(f"No Inspect sandbox releases found in '{namespace}' namespace.")
         return
+    _print_table(releases)
     if not Confirm.ask(
         f"Are you sure you want to uninstall ALL {len(releases)} Inspect sandbox "
         f"release(s) in '{namespace}' namespace? If this is a shared namespace, "
