@@ -8,7 +8,7 @@ spec:
   description: |
     Allow egress to:
     - cluster-wide DNS (kube-dns),
-    - everything in the sandbox,
+    - all Pods in the same agent sandbox,
     - any configured allowDomains, allowEntities, or allowCIDR.
   endpointSelector:
     matchLabels:
@@ -70,7 +70,8 @@ metadata:
     {{- toYaml $.Values.annotations | nindent 4 }}
 spec:
   description: |
-    Allow ingress from other pods in the "{{ $networkName }}" agent sandbox "network".
+    Allow ingress from all Pods in the same agent sandbox which are also on the
+    "{{ $networkName }}" "network".
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
@@ -93,7 +94,7 @@ metadata:
     {{- toYaml $.Values.annotations | nindent 4 }}
 spec:
   description: |
-    Allow ingress from other pods in the same agent sandbox.
+    Allow ingress from all Pods in the same agent sandbox.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: {{ .Release.Namespace }}
