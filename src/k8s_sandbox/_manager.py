@@ -5,10 +5,12 @@ from contextvars import ContextVar
 
 from rich import box, print
 from rich.panel import Panel
+from rich.prompt import Confirm
 from rich.table import Table
 
-from k8s_sandbox._helm import Release
+from k8s_sandbox._helm import Release, get_all_release_names
 from k8s_sandbox._helm import uninstall as helm_uninstall
+from k8s_sandbox._kubernetes_api import get_current_context_namespace
 
 
 class HelmReleaseManager:
@@ -78,13 +80,13 @@ class HelmReleaseManager:
 
     def _print_cleanup_instructions(self) -> None:
         table = Table(
-            title="K8s Sandbox Environments (not yet cleaned up):",
+            title="K8s Sandbox Releases (not yet cleaned up):",
             box=box.SQUARE_DOUBLE_HEAD,
             show_lines=True,
             title_style="bold",
             title_justify="left",
         )
-        table.add_column("Container(s)", no_wrap=True)
+        table.add_column("Release(s)", no_wrap=True)
         table.add_column("Cleanup")
         for release in self._installed_releases:
             table.add_row(
@@ -93,11 +95,10 @@ class HelmReleaseManager:
             )
         print("")
         print(table)
-        # TODO: Once supported, tell user how to cleanup all environments.
-        # print(
-        #     "\nCleanup all environments with: "
-        #     "[blue]inspect sandbox cleanup k8s[/blue]\n"
-        # )
+        print(
+            "\nCleanup all sandbox releases with: "
+            "[blue]inspect sandbox cleanup k8s[/blue]\n"
+        )
 
 
 async def uninstall_unmanaged_release(release_name: str) -> None:
@@ -108,7 +109,40 @@ async def uninstall_unmanaged_release(release_name: str) -> None:
       release_name (str): The name of the release to uninstall (e.g. "lsphdyup").
     """
     _print_do_not_interrupt()
-    await helm_uninstall(release_name, quiet=False)
+    namespace = get_current_context_namespace()
+    await helm_uninstall(release_name, namespace, quiet=False)
+
+
+async def uninstall_all_unmanaged_releases():
+    def _print_table(releases: list[str]) -> None:
+        print("Releases to be uninstalled:")
+        table = Table(
+            box=box.SQUARE,
+            show_lines=False,
+            title_style="bold",
+            title_justify="left",
+        )
+        table.add_column("Release")
+        for release in releases:
+            table.add_row(f"[red]{release}[/red]")
+        print(table)
+
+    namespace = get_current_context_namespace()
+    releases = await get_all_release_names(namespace)
+    if len(releases) == 0:
+        print(f"No Inspect sandbox releases found in '{namespace}' namespace.")
+        return
+    _print_table(releases)
+    if not Confirm.ask(
+        f"Are you sure you want to uninstall ALL {len(releases)} Inspect sandbox "
+        f"release(s) in '{namespace}' namespace? If this is a shared namespace, "
+        "this may affect other users.",
+    ):
+        print("Cancelled.")
+        return
+    tasks = [helm_uninstall(release, namespace, quiet=False) for release in releases]
+    await asyncio.gather(*tasks, return_exceptions=True)
+    print("Complete.")
 
 
 def _print_do_not_interrupt() -> None:

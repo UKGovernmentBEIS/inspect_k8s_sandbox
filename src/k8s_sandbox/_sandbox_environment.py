@@ -21,6 +21,7 @@ from k8s_sandbox._logger import (
 )
 from k8s_sandbox._manager import (
     HelmReleaseManager,
+    uninstall_all_unmanaged_releases,
     uninstall_unmanaged_release,
 )
 from k8s_sandbox._pod import Pod
@@ -58,13 +59,10 @@ class K8sSandboxEnvironment(SandboxEnvironment):
 
     @classmethod
     async def cli_cleanup(cls, id: str | None) -> None:
-        if id is None:
-            # TODO: How can we avoid uninstalling others' releases? Uninstall all
-            # releases in namespace regardless?
-            raise NotImplementedError(
-                "Cleanup all for k8s is not supported. Please specify a release name."
-            )
-        await uninstall_unmanaged_release(id)
+        if id is not None:
+            await uninstall_unmanaged_release(id)
+        else:
+            await uninstall_all_unmanaged_releases()
 
     @classmethod
     async def sample_init(
@@ -102,8 +100,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         environments: dict[str, SandboxEnvironment],
         interrupted: bool,
     ) -> None:
-        # If we were interrupted, wait unil the end of the task to cleanup (this enables
-        # us to show output for the cleanup operation).
+        # If we were interrupted, wait until the end of the task to cleanup (this
+        # enables us to show output for the cleanup operation).
         if interrupted:
             return
         sandbox: K8sSandboxEnvironment = cast(
