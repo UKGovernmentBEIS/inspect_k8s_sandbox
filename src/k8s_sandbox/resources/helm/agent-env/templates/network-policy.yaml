@@ -6,7 +6,10 @@ metadata:
     {{- toYaml $.Values.annotations | nindent 4 }}
 spec:
   description: |
-    Allow egress only to cluster-wide DNS, everything in the sandbox, and any allowDomains.
+    Allow egress to:
+    - cluster-wide DNS (kube-dns),
+    - everything in the sandbox,
+    - any configured allowDomains, allowEntities, or allowCIDR.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: {{ .Release.Namespace }}
