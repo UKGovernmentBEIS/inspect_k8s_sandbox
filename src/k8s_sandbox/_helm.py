@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -152,6 +153,17 @@ class Release:
 
 
 async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
+    """
+    Uninstall a Helm release by name.
+
+    The number of concurrent uninstall operations is limited by a semaphore.
+
+    Args:
+        release_name: The name of the Helm release to uninstall (e.g. abcdefgh).
+        namespace: The Kubernetes namespace in which the release is installed.
+        quiet: If False, allow the output of the `helm uninstall` command to be written
+          to this process's stdout/stderr. If True, suppress the output.
+    """
     async with _uninstall_semaphore():
         with inspect_trace_action(
             "K8s uninstall Helm chart", release=release_name, namespace=namespace
@@ -167,15 +179,18 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
                     "--timeout",
                     f"{_get_timeout()}s",
                 ],
-                capture_output=quiet,
+                capture_output=True,
             )
+            if not quiet:
+                sys.stdout.write(result.stdout)
+                sys.stderr.write(result.stderr)
             if not result.success:
-                captured_output = result.stdout if not quiet else "not captured"
                 _raise_runtime_error(
                     "Helm uninstall failed.",
                     release=release_name,
                     namespace=namespace,
-                    result=captured_output,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
                 )
 
 
