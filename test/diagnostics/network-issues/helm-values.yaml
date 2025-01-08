@@ -1,0 +1,34 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+    command: ["tail", "-f", "/dev/null"]
+    runtimeClassName: gvisor
+    # Resources can be adjusted to tune the number of Pods per Node.
+    resources:
+      requests:
+        cpu: 0.1
+        memory: 0.2G
+      limits:
+        cpu: 0.1
+        memory: 0.2G
+    # One attempted fix for the issue was to add a readinessProbe which would check if
+    # the service is ready to accept traffic.
+    # Note that this readinessProbe is executed inside the container.
+    # readinessProbe:
+    #   exec:
+    #     command:
+    #       - /bin/sh
+    #       - -c
+    #       - curl -f -s httpstat.us/200
+allowDomains:
+  - "*"
+  # Also evaluated, was explicitly allowing only the required domains.
+  # - "amazon.com"
+  # - "google.com"
+  # - "yahoo.com"
+  # - "bing.com"
+  # - "wikipedia.org"
+# Also evaluated, was using Cilium entity-based policies to "all" or "world"
+# https://docs.cilium.io/en/stable/security/policy/language/#entities-based
+# allowEntities:
+#   - "all"
