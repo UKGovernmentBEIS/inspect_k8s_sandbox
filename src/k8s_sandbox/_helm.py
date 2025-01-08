@@ -189,7 +189,8 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
                     "Helm uninstall failed.",
                     release=release_name,
                     namespace=namespace,
-                    result=result.stdout + result.stderr,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
                 )
 
 
