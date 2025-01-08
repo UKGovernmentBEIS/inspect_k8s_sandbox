@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -178,17 +179,17 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
                     "--timeout",
                     f"{_get_timeout()}s",
                 ],
-                capture_output=quiet,
+                capture_output=True,
             )
+            if not quiet:
+                sys.stdout.write(result.stdout)
+                sys.stderr.write(result.stderr)
             if not result.success:
-                captured_output = result.stdout
-                if not quiet:
-                    captured_output = "not captured; output written to stdout/stderr"
                 _raise_runtime_error(
                     "Helm uninstall failed.",
                     release=release_name,
                     namespace=namespace,
-                    result=captured_output,
+                    result=result.stdout + result.stderr,
                 )
 
 
