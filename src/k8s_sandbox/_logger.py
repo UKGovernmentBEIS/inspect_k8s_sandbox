@@ -4,8 +4,7 @@ import os
 from contextlib import contextmanager
 from typing import Any, Generator
 
-# TODO: Accessing private functions. To be made public by Inspect.
-from inspect_ai._util.trace import trace_action, trace_message
+from inspect_ai.util import trace_action, trace_message
 
 logger = logging.getLogger(__name__)
 
