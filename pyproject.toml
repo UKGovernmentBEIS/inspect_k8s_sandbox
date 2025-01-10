@@ -10,7 +10,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-inspect-ai = ">=0.3.54"
+inspect-ai = ">=0.3.57"
 kubernetes = "^31.0.0"
 
 [tool.poetry.group.dev.dependencies]
