@@ -39,3 +39,14 @@ services:
       requests:
         memory: "128Mi"
         cpu: "100m"
+  unset-magic-string:
+    image: "ubuntu:24.04"
+    command: ["tail", "-f", "/dev/null"]
+    runtimeClassName: unset
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"

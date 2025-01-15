@@ -28,7 +28,10 @@ spec:
       annotations:
         {{- toYaml $.Values.annotations | nindent 8 }}
     spec:
+      {{- /* "unset" is a magic string which prevents `runtimeClassName` being set. */}}
+      {{- if ne $service.runtimeClassName "unset" }}
       runtimeClassName: {{ $service.runtimeClassName | default "gvisor" }}
+      {{- end }}
       {{- /* Do not leak info on services via env vars */}}
       enableServiceLinks: false
       terminationGracePeriodSeconds: 0
