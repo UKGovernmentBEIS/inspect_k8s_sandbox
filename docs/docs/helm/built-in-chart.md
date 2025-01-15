@@ -14,10 +14,11 @@ familiar with them.
 In addition to the info below, see `agent-env/README.md` and `agent-env/values.yaml` for
 a full list of configurable options.
 
-## Container runtime (gVisor)
+## Container runtime class (gVisor)
 
 The default container runtime class name for every service is `gvisor` which, (depending
-on your cluster) should map to the `runsc` runtime. You can override this if required.
+on your cluster) should map to the `runsc` runtime handler. You can override this if
+required.
 
 ```yaml
 services:
@@ -27,11 +28,55 @@ services:
     runtimeClassName: runc
 ```
 
-The above example assumes you have a `RuntimeClass` named `runc` in your cluster which
-maps to the `runc` runtime.
+The above example assumes you have a `RuntimeClass` named `runc` deployed to your
+cluster which maps to the `runc` runtime handler.
 
 See the [gVisor page](../security/container-runtime.md) for considerations and
-limitations.
+limitations on using gVisor versus `runc`.
+
+??? tip "Unset the runtime class entirely"
+
+    You can unset the runtime class in the Pod spec by setting it to the `unset` magic
+    string.
+
+    ```yaml
+    services:
+      default:
+        image: ubuntu:24.04
+        command: ["tail", "-f", "/dev/null"]
+        runtimeClassName: unset
+    ```
+
+    This has the effect of using your cluster's default runtime class.
+
+    This approach is **not recommended** as it makes your evals cluster-dependent and
+    therefore less portable. It is preferable to explicitly state which runtime class
+    you require if it is not gVisor. See the [remote cluster
+    setup](../getting-started/remote-cluster.md) page for more information on installing
+    runtimes and deploying `RuntimeClass` objects which map a name to a runtime handler.
+
+??? tip "View your cluster's runtime classes"
+
+    You can view the runtime classes available in your cluster by running the following
+    command:
+
+    ```sh
+    kubectl get runtimeclass
+    ```
+
+    ```
+    NAME     HANDLER   AGE
+    gvisor   runsc     42d
+    runc     runc      42d
+    ```
+
+??? question "Aren't containerd or CRI-O the container runtimes?"
+
+    There are multiple "levels" of container runtime in Kubernetes. containerd or CRI-O
+    are the "high level" CRI implementations which Kubernetes uses to manage containers.
+    The discussion in this section concerning `runtimeClassName` field on Pod spec is
+    about the "lower level" OCI runtimes (like `runc` or `runsc`) which are used to
+    actually run the container processes.
 
 ## Internet access
 
