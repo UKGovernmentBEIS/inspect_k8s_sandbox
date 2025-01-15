@@ -17,8 +17,8 @@ a full list of configurable options.
 ## Container runtime class (gVisor)
 
 The default container runtime class name for every service is `gvisor` which, (depending
-on your cluster) should map to the `runsc` runtime handler. You can override this if
-required.
+on your cluster - see [remote cluster setup page](../getting-started/remote-cluster.md))
+should map to the `runsc` runtime handler. You can override this if required.
 
 ```yaml
 services:
