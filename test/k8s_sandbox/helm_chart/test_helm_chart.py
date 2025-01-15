@@ -173,9 +173,11 @@ def test_quotes_env_var_values(chart_dir: Path, test_resources_dir: Path) -> Non
     assert env[3] == {"name": "C", "value": "three"}
 
 
-def test_unset_magic_string(chart_dir: Path, test_resources_dir: Path) -> None:
+def test_cluster_default_magic_string(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
     documents = _run_helm_template(
-        chart_dir, test_resources_dir / "unset-runtime-class-values.yaml"
+        chart_dir, test_resources_dir / "cluster-default-runtime-values.yaml"
     )
 
     stateful_sets = _get_documents(documents, "StatefulSet")

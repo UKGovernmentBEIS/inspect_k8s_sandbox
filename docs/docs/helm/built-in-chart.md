@@ -34,17 +34,17 @@ cluster which maps to the `runc` runtime handler.
 See the [gVisor page](../security/container-runtime.md) for considerations and
 limitations on using gVisor versus `runc`.
 
-??? tip "Unset the runtime class entirely"
+??? tip "Use the cluster's default runtime class"
 
-    You can unset the runtime class in the Pod spec by setting it to the `unset` magic
-    string.
+    You can cause the runtime class in the Pod spec to not be set at all by setting
+    `runtimeClassName` to the `CLUSTER_DEFAULT` magic string in the relevant services.
 
     ```yaml
     services:
       default:
         image: ubuntu:24.04
         command: ["tail", "-f", "/dev/null"]
-        runtimeClassName: unset
+        runtimeClassName: CLUSTER_DEFAULT
     ```
 
     This has the effect of using your cluster's default runtime class.
