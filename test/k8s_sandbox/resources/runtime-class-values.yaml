@@ -39,3 +39,14 @@ services:
       requests:
         memory: "128Mi"
         cpu: "100m"
+  cluster-default-magic-string:
+    image: "ubuntu:24.04"
+    command: ["tail", "-f", "/dev/null"]
+    runtimeClassName: CLUSTER_DEFAULT
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"

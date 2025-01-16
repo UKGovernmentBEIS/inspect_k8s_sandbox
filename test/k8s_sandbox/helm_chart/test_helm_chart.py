@@ -173,6 +173,22 @@ def test_quotes_env_var_values(chart_dir: Path, test_resources_dir: Path) -> Non
     assert env[3] == {"name": "C", "value": "three"}
 
 
+def test_cluster_default_magic_string(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "cluster-default-runtime-values.yaml"
+    )
+
+    stateful_sets = _get_documents(documents, "StatefulSet")
+    assert "runtimeClassName" not in stateful_sets[0]["spec"]["template"]["spec"]
+    assert "runtimeClassName" not in stateful_sets[1]["spec"]["template"]["spec"]
+    assert (
+        stateful_sets[2]["spec"]["template"]["spec"]["runtimeClassName"]
+        == "my-runtime-class-name"
+    )
+
+
 def _run_helm_template(
     chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
 ) -> list[dict[str, Any]]:

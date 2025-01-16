@@ -1,0 +1,11 @@
+services:
+  default:
+    image: "ubuntu:24.04"
+    command: ["tail", "-f", "/dev/null"]
+    runtimeClassName: CLUSTER_DEFAULT
+  service-1:
+    image: "nginx"
+    runtimeClassName: CLUSTER_DEFAULT
+  service-2:
+    image: "nginx"
+    runtimeClassName: my-runtime-class-name
