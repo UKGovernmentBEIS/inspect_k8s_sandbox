@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import BaseModel
 
 # A prototype script to convert from a Docker compose.yaml file into a helm-values.yaml
 # file suitable for the built-in Helm chart.
@@ -19,6 +20,22 @@ logging.basicConfig(
 )
 
 
+class HelmService(BaseModel):
+    image: str | None = None
+    command: list[str] | str | None = None
+    workingDir: str | None = None
+    dnsRecord: bool
+    env: list[dict[str, str]] = []
+    volumes: list[str] | list[dict] | None = None
+    readinessProbe: dict[str, Any] = {}
+    resources: dict[str, Any] = {}
+
+
+class HelmValues(BaseModel):
+    services: dict[str, HelmService] = {}
+    volumes: dict[str, Any] = {}
+
+
 def main() -> None:
     samples = Path(__file__).parent / "samples"
     convert(samples / "compose.yaml", samples / "helm-values.yaml")
@@ -26,17 +43,20 @@ def main() -> None:
 
 def convert(compose_path: Path, helm_values_path: Path) -> None:
     compose = yaml.safe_load(compose_path.read_text())
-    helm: dict[str, Any] = dict(services={})
+    helm = HelmValues()
     for key, service in compose["services"].items():
-        helm["services"][key] = convert_service(key, service)
+        helm.services[key] = convert_service(key, service)
     # TODO: Consider adding support for x-allowDomains.
     if volumes := compose.get("volumes"):
-        helm["volumes"] = volumes
-    print(yaml.dump(helm, sort_keys=False))
-    helm_values_path.write_text(yaml.dump(helm, sort_keys=False))
+        helm.volumes = volumes
+    helm_values_yaml = yaml.dump(
+        helm.model_dump(exclude_defaults=True), sort_keys=False
+    )
+    print(helm_values_yaml)
+    helm_values_path.write_text(helm_values_yaml)
 
 
-def convert_service(name: str, compose_service: dict[str, Any]) -> dict[str, Any]:
+def convert_service(name: str, compose_service: dict[str, Any]) -> HelmService:
     result: dict[str, Any] = dict()
     result["image"] = compose_service.pop("image", None)
     if command := compose_service.pop("command", None):
@@ -58,7 +78,7 @@ def convert_service(name: str, compose_service: dict[str, Any]) -> dict[str, Any
         logger.warning(f"Ignoring 'init' key in service '{name}'.")
     if unsupported := get_keys(compose_service):
         raise ValueError(f"Unsupported keys {unsupported} in service '{name}'.")
-    return result
+    return HelmService(**result)
 
 
 def convert_env(compose_env: dict[str, Any]) -> list[dict[str, str]]:
