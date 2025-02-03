@@ -25,7 +25,12 @@ spec:
               protocol: ANY
           rules:
             dns:
-              - matchPattern: "*"
+              {{- /* Prevent DNS exfiltration attacks. Only allow DNS lookups for */}}
+              {{- /* services in this namespace or allowDomains. */}}
+              - matchPattern: "*.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- range .Values.allowDomains }}
+              - matchPattern: "{{ . }}"
+              {{- end }}
     - toEndpoints:
       - matchLabels:
           io.kubernetes.pod.namespace: {{ .Release.Namespace }}
