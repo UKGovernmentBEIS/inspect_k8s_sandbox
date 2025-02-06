@@ -30,9 +30,23 @@ async def test_allowed_fqdn(sandbox: K8sSandboxEnvironment) -> None:
     assert result.returncode == 0
 
 
+async def test_allowed_fqdn_dns_lookup(sandbox: K8sSandboxEnvironment) -> None:
+    result = await sandbox.exec(["getent", "hosts", "google.com"], timeout=10)
+
+    assert result.returncode == 0, result
+
+
 async def test_blocked_fqdn(sandbox: K8sSandboxEnvironment) -> None:
-    with pytest.raises(TimeoutError):
-        await sandbox.exec(["wget", "https://yahoo.com"], timeout=10)
+    result = await sandbox.exec(["wget", "https://yahoo.com"], timeout=10)
+
+    assert result.returncode == 4, result
+    assert "Temporary failure in name resolution" in result.stderr
+
+
+async def test_blocked_fqdn_dns_lookup(sandbox: K8sSandboxEnvironment) -> None:
+    result = await sandbox.exec(["getent", "hosts", "yahoo.com"], timeout=10)
+
+    assert result.returncode == 2, result
 
 
 async def test_allowed_cidr(sandbox: K8sSandboxEnvironment) -> None:
@@ -43,7 +57,8 @@ async def test_allowed_cidr(sandbox: K8sSandboxEnvironment) -> None:
 
 async def test_blocked_cidr(sandbox: K8sSandboxEnvironment) -> None:
     with pytest.raises(TimeoutError):
-        await sandbox.exec(["curl", "-I", "8.8.8.8"], timeout=10)
+        r = await sandbox.exec(["curl", "-I", "8.8.8.8"], timeout=10)
+        print(r)
 
 
 async def test_allowed_entity(sandbox_entities_world: K8sSandboxEnvironment) -> None:
