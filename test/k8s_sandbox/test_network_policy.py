@@ -68,6 +68,17 @@ async def test_allowed_entity(sandbox_entities_world: K8sSandboxEnvironment) -> 
     assert result.returncode == 0
 
 
+async def test_allowed_entity_dns_lookup(
+    sandbox_entities_world: K8sSandboxEnvironment,
+) -> None:
+    # allowEntities: ["world"]
+    result = await sandbox_entities_world.exec(
+        ["getent", "hosts", "yahoo.com"], timeout=10
+    )
+
+    assert result.returncode == 0
+
+
 async def test_pip_install(sandbox: K8sSandboxEnvironment) -> None:
     result = await sandbox.exec(
         [
