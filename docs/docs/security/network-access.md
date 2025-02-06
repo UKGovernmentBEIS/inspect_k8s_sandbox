@@ -4,8 +4,8 @@ It is good security practice to prevent your containers from communicating with 
 internet by default.
 
 However, some evals may require internet access (e.g. to install packages or research
-topics). The [built-in Helm chart](../helm/built-in-chart.md) allows you to specify a list
-of domains that your containers can access.
+topics). The [built-in Helm chart](../helm/built-in-chart.md) allows you to specify a
+list of domains that your containers can access.
 
 ## Cilium
 
@@ -19,3 +19,15 @@ using the built-in Helm chart due to how DNS resolution is handled.
 
 See the [limitations](../design/limitations.md) section for how Cilium may make certain
 Cyber misuse evals harder or impossible to solve.
+
+### DNS Exfiltration
+
+The built-in Helm chart also prevents DNS exfiltration attacks. This is where an
+attacker uses DNS lookups to an attacker-controlled domain or set of subdomains in order
+to exfiltrate data from a system. For example, a malicious agent could make DNS requests
+(which go via the kube-dns service if our Core DNS sidecar can't resolve them) to
+hostnames like `somedata.attacker.com` and `somedata2.attacker.com` to exfiltrate data.
+
+We restrict DNS lookups to only:
+* Services within the Kubernetes namespace
+* The domains specified in the `allowDomains` list in the `values.yaml` file.

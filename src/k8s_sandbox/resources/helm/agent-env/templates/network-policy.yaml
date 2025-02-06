@@ -27,9 +27,12 @@ spec:
             dns:
               {{- /* Prevent DNS exfiltration attacks. Only allow DNS lookups for */}}
               {{- /* services in this namespace or allowDomains. */}}
-              - matchPattern: "*.{{ .Release.Namespace }}.svc.cluster.local"
+              - matchPattern: "none"
               {{- range .Values.allowDomains }}
               - matchPattern: "{{ . }}"
+              {{- end }}
+              {{- if or (has "all" .Values.allowEntities) (has "world" .Values.allowEntities) }}
+              - matchPattern: "*"
               {{- end }}
     - toEndpoints:
       - matchLabels:
