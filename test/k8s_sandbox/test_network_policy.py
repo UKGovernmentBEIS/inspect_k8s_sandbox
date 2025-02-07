@@ -41,6 +41,8 @@ async def test_blocked_fqdn(sandbox: K8sSandboxEnvironment) -> None:
 
     assert result.returncode == 4, result
     assert "Temporary failure in name resolution" in result.stderr
+    # If this test is failing, it could be an issue with your cluster's Cilium
+    # configuration which is not respecting the DNS rules in the egress policy.
 
 
 async def test_blocked_fqdn_dns_lookup(sandbox: K8sSandboxEnvironment) -> None:
