@@ -57,8 +57,7 @@ async def test_allowed_cidr(sandbox: K8sSandboxEnvironment) -> None:
 
 async def test_blocked_cidr(sandbox: K8sSandboxEnvironment) -> None:
     with pytest.raises(TimeoutError):
-        r = await sandbox.exec(["curl", "-I", "8.8.8.8"], timeout=10)
-        print(r)
+        await sandbox.exec(["curl", "-I", "8.8.8.8"], timeout=10)
 
 
 async def test_allowed_entity(sandbox_entities_world: K8sSandboxEnvironment) -> None:
