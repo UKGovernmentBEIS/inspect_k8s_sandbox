@@ -32,13 +32,20 @@ build-backend = "poetry.core.masonry.api"
 
 
 [tool.ruff.lint]
-select = ["E",   # pycodestyle errors
-          "W",   # pycodestyle warnings
-          "F",   # flake8
-          "D",   # pydocstyle
-          "I",   # isort
-        ]
-ignore = ["E203", "D10", "D203", "D212"]
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # flake8
+  "D",   # pydocstyle
+  "I",   # isort
+]
+ignore = [
+  "D203",  # incorrect-blank-line-before-class
+  "D212",  # multi-line-summary-first-line
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test/*" = ["D10"]  # undocumented-(public|magic)-*
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
