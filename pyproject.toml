@@ -40,7 +40,6 @@ select = [
   "I",   # isort
 ]
 ignore = [
-  "D203",  # incorrect-blank-line-before-class
   "D212",  # multi-line-summary-first-line
 ]
 
