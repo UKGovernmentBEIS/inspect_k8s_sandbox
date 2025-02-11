@@ -142,12 +142,6 @@ to run commands as different users.
 The process of building, tagging and pushing images is left to the user or other tooling
 as it is highly dependent on your environment and practices.
 
-## `inspect sandbox cleanup k8s` without specifying an ID is not supported
-
-To avoid potentially removing resources that belong to other users, the `k8s_sandbox`
-package will not uninstall every Helm chart in the current namespace. Note that `inspect
-sandbox cleanup k8s xxxxxxxx` is supported.
-
 ## `TimeoutError` won't be raised on busybox images
 
 The `timeout` binary on busybox images behaves differently, causing a 128 + 15 (SIGTERM)
