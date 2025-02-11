@@ -19,7 +19,7 @@ pre-commit = "^3.6.2"
 pytest = "^8.1.1"
 pytest-asyncio = "^0.23.7"
 pytest-repeat = "^0.9.3"
-ruff = "^0.6.0"
+ruff = "^0.9.6"
 types-pyyaml = "^6.0.12"
 
 [tool.poetry.plugins.inspect_ai]
@@ -32,13 +32,19 @@ build-backend = "poetry.core.masonry.api"
 
 
 [tool.ruff.lint]
-select = ["E",   # pycodestyle errors
-          "W",   # pycodestyle warnings
-          "F",   # flake8
-          "D",   # pydocstyle
-          "I",   # isort
-        ]
-ignore = ["E203", "D10", "D203", "D212"]
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # flake8
+  "D",   # pydocstyle
+  "I",   # isort
+]
+ignore = [
+  "D212",  # multi-line-summary-first-line
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test/*" = ["D10"]  # undocumented-(public|magic)-*
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
