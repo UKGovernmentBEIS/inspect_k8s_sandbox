@@ -19,5 +19,6 @@ Inspect-managed based on the labels) in the current namespace and offer to unins
 them all for you.
 
 !!! warning
-    If you are using a shared Kubernetes namespace, please be mindful of other
-    users' work.
+    This command will find and uninstall all Inspect-managed Helm releases **for any
+    user of the Kubernetes namespace**. If you are using a shared Kubernetes namespace,
+    please be careful when choosing which Helm releases to uninstall.
