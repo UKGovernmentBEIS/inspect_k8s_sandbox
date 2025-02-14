@@ -1,4 +1,4 @@
-[<img width="295" src="https://inspect.ai-safety-institute.org.uk/images/aisi-logo.png"
+[<img width="295" src="docs/docs/assets/aisi-logo.svg"
 />](https://aisi.gov.uk/)
 
 Welcome to the `k8s_sandbox` plugin for
@@ -19,4 +19,4 @@ You can find documentation at
 If you’d like to contribute to the development of the plugin, please review our
 [contributing guidelines](CONTRIBUTING.md) before raising a pull request.
 
-Created by the [UK AI Safety Institute](https://aisi.gov.uk/).
+Created by the [UK AI Security Institute](https://aisi.gov.uk/).

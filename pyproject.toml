@@ -2,7 +2,7 @@
 name = "inspect-k8s-sandbox"
 version = "0.1.0"
 description = "A Kubernetes Sandbox Environment for Inspect"
-authors = ["UK AI Safety Institute"]
+authors = ["UK AI Security Institute"]
 readme = "README.md"
 packages = [
   {include = "k8s_sandbox", from = "src"},
