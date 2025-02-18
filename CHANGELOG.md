@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Prevent DNS exfiltration attacks by limiting which domains can be looked up (when using the built-in Helm chart).
 - Add `CLUSTER_DEFAULT` magic string for `runtimeClassName` which will remove the field from the pod spec.
 - Add ignored `timeout_retry` parameter to `exec()` method.
 - Always capture the output of `helm uninstall` so that errors can contain meaningful information.
