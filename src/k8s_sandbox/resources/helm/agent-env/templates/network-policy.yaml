@@ -7,9 +7,13 @@ metadata:
 spec:
   description: |
     Allow egress to:
-    - cluster-wide DNS (kube-dns),
+    - cluster-wide DNS (kube-dns) for certain domains,
     - all Pods in the same agent sandbox,
     - any configured allowDomains, allowEntities, or allowCIDR.
+    To prevent DNS exfiltration, only allow DNS lookups for:
+    - services in this namespace,
+    - allowDomains, or
+    - allowEntities.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: {{ .Release.Namespace }}
@@ -25,7 +29,13 @@ spec:
               protocol: ANY
           rules:
             dns:
+              - matchPattern: "*.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- range .Values.allowDomains }}
+              - matchPattern: "{{ . }}"
+              {{- end }}
+              {{- if or (has "all" .Values.allowEntities) (has "world" .Values.allowEntities) }}
               - matchPattern: "*"
+              {{- end }}
     - toEndpoints:
       - matchLabels:
           io.kubernetes.pod.namespace: {{ .Release.Namespace }}
