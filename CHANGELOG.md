@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- If a namespace is not includes in the kubeconfig context, default to a namespace named "default".
 - Add `CLUSTER_DEFAULT` magic string for `runtimeClassName` which will remove the field from the pod spec.
 - Add ignored `timeout_retry` parameter to `exec()` method.
 - Always capture the output of `helm uninstall` so that errors can contain meaningful information.

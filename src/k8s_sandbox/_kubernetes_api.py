@@ -31,7 +31,7 @@ def get_current_context_namespace() -> str:
     """Get the current context's namespace from the Kubernetes configuration."""
     _ensure_config_loaded()
     _, current_ctx = config.list_kube_config_contexts()
-    namespace = current_ctx["context"]["namespace"]
+    namespace = current_ctx["context"].get("namespace", "default")
     assert isinstance(namespace, str)
     return namespace
 
