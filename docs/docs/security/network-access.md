@@ -29,6 +29,7 @@ exfiltrate data from a system. For example, a malicious agent could make DNS req
 hostnames like `somedata.attacker.com` and `somedata2.attacker.com` to exfiltrate data.
 
 DNS lookups are restricted to only:
+
 * Services within the Kubernetes namespace
 * The domains specified in the `allowDomains` list in the `values.yaml` file.
 
