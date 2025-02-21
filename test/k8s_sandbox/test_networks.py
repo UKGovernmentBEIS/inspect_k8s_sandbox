@@ -17,7 +17,7 @@ async def sandbox() -> AsyncGenerator[K8sSandboxEnvironment, None]:
 
 
 async def can_ping_service(service: str, sandbox: K8sSandboxEnvironment) -> bool:
-    result = await sandbox.exec(["ping", "-c", "1", service], timeout=3)
+    result = await sandbox.exec(["ping", "-c", "1", "-n", service], timeout=3)
     return "1 packets transmitted, 1 received" in result.stdout
 
 

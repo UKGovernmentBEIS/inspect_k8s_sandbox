@@ -76,12 +76,48 @@ You can reduce the impact of a container restarting by using persistent volumes.
     indefinitely.
 
 
-## Denied network requests hang
+## Denied network requests behaviour
 
-Because Cilium simply drops packets for denied network requests, the client will hang
-waiting for a response until its timeout is reached. The timeout is dependent on which
-tool/client you're using. We recommend any tool calls also pass the `timeout` parameter
-in case the model runs a command that doesn't have a built-in timeout.
+When Cilium denies a network request, it simply drops the packet.
+
+If you're using the built-in Helm chart, [DNS lookups are
+restricted](../security/network-access.md#dns-exfiltration) in addition to direct
+network requests.
+
+Therefore, when an agent tries to access a blocked resource via a client like `wget` or
+`curl`, one of two things will happen:
+
+1. The DNS lookup (if relevant) will time out. In this case, the client may error with
+  "temporary failure in DNS resolution" or similar. If the client is not configured with
+  a timeout (e.g. `host -r`), it may hang indefinitely until the tool call times out
+  (see below).
+2. If there is no DNS lookup required, the client will hang waiting for a response until
+  its timeout (if it has one) is reached.
+
+We recommend that any tools you define or use pass the `timeout` parameter (e.g.
+`timeout=60`) in case the model runs a command that doesn't have a built-in timeout.
+
+
+## Reverse DNS lookups aren't supported
+
+When using the built-in Helm chart, reverse DNS lookups (i.e. looking up the hostname
+from an IP) are not supported. This is because DNS lookups are restricted to prevent
+[DNS exfiltration](../security/network-access.md#dns-exfiltration).
+
+??? question "Why is ping slow?"
+
+    Executing commands like
+
+    ```sh
+    ping victim
+    ```
+
+    where `victim` is another service's name will result in a reverse DNS lookup in
+    addition to the forward DNS lookup. The reverse lookup will fail (which may add ~5s
+    to the execution time of the command) but the forward lookup and subsequent command
+    will succeed. `ping -n` disables reverse DNS lookups. Commands such as `curl` and
+    `wget` do not perform reverse DNS lookups.
+
 
 ## Cilium's security measures prevent some exploits
 

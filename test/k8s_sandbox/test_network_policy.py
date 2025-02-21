@@ -30,9 +30,26 @@ async def test_allowed_fqdn(sandbox: K8sSandboxEnvironment) -> None:
     assert result.returncode == 0
 
 
+async def test_allowed_fqdn_dns_lookup(sandbox: K8sSandboxEnvironment) -> None:
+    result = await sandbox.exec(["getent", "hosts", "google.com"], timeout=10)
+
+    assert result.returncode == 0, result
+
+
 async def test_blocked_fqdn(sandbox: K8sSandboxEnvironment) -> None:
-    with pytest.raises(TimeoutError):
-        await sandbox.exec(["wget", "https://yahoo.com"], timeout=10)
+    result = await sandbox.exec(["wget", "https://yahoo.com"], timeout=10)
+
+    assert result.returncode == 4, result
+    assert "Temporary failure in name resolution" in result.stderr
+    # If this test is failing, it could be an issue with your cluster's Cilium
+    # configuration which is not respecting the DNS rules in the egress policy.
+    # E.g. you have an overly permissive egress policy that allows all DNS traffic.
+
+
+async def test_blocked_fqdn_dns_lookup(sandbox: K8sSandboxEnvironment) -> None:
+    result = await sandbox.exec(["getent", "hosts", "yahoo.com"], timeout=10)
+
+    assert result.returncode == 2, result
 
 
 async def test_allowed_cidr(sandbox: K8sSandboxEnvironment) -> None:
@@ -49,6 +66,17 @@ async def test_blocked_cidr(sandbox: K8sSandboxEnvironment) -> None:
 async def test_allowed_entity(sandbox_entities_world: K8sSandboxEnvironment) -> None:
     # allowEntities: ["world"]
     result = await sandbox_entities_world.exec(["curl", "-I", "yahoo.com"], timeout=10)
+
+    assert result.returncode == 0
+
+
+async def test_allowed_entity_dns_lookup(
+    sandbox_entities_world: K8sSandboxEnvironment,
+) -> None:
+    # allowEntities: ["world"]
+    result = await sandbox_entities_world.exec(
+        ["getent", "hosts", "yahoo.com"], timeout=10
+    )
 
     assert result.returncode == 0
 
