@@ -37,8 +37,13 @@ evals.
 
 ??? danger "I don't want to restrict DNS lookups"
 
-    Please consider the security implications; DNS exfiltration will be possible **and**
-    your containers will have unrestricted internet access.
+    The list of DNS names that can be queried is controlled by the same allow-list as
+    general traffic egress to a domain. In order to allow all DNS lookups without
+    restriction (including reverse DNS), you will need to allow all traffic to the
+    internet.
+
+    Please consider the security implications: your containers will have unrestricted
+    internet access (including the ability to use DNS to exfiltrate data).
 
     To allow **all** DNS queries and **all** internet access, set
     `allowDomains: ["*"]` or `allowEntities: "all"` in the `values.yaml` file.
