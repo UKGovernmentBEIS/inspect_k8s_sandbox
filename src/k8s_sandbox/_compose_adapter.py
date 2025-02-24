@@ -1,7 +1,7 @@
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
@@ -36,32 +36,50 @@ def _convert_services(compose_services: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _convert_service(name: str, compose_service: dict[str, Any]) -> dict[str, Any]:
+def _transform(
+    src: dict[str, Any],
+    src_key: str,
+    dst: dict[str, Any],
+    dst_key: str,
+    # Default is identity function.
+    fn: Callable = lambda x: x,
+) -> None:
+    """
+    Transfers a key from src to dst, applying a function to the value.
+
+    The key is removed from src if it exists.
+    """
+    value = src.pop(src_key, None)
+    if value is not None:
+        dst[dst_key] = fn(value)
+
+
+def _convert_service(name: str, src: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = dict()
-    result["image"] = compose_service.pop("image", None)
-    if command := compose_service.pop("command", None):
-        result["command"] = command
-    if workdir := compose_service.pop("working_dir", None):
-        result["workingDir"] = workdir
-    # Create a DNS record for every service (default in Docker Compose).
+    # Ordered as per Helm chart values.yaml documentation.
+    _transform(src, "image", result, "image")
+    _transform(src, "entrypoint", result, "command", _str_to_list)
+    _transform(src, "command", result, "args", _str_to_list)
+    _transform(src, "working_dir", result, "workingDir")
+    # Create a DNS record for every service (same behaviour as Docker Compose).
     result["dnsRecord"] = True
-    if env := compose_service.pop("environment", None):
-        result["env"] = _convert_env(env)
-    if volumes := compose_service.pop("volumes", None):
-        result["volumes"] = volumes
-    if healthcheck := compose_service.pop("healthcheck", None):
-        result["readinessProbe"] = _convert_healthcheck_to_readiness_probe(healthcheck)
-    mem_limit = compose_service.pop("mem_limit", None)
-    result.update(_convert_deploy(compose_service.pop("deploy", {}), mem_limit))
-    if user := compose_service.pop("user", None):
-        result["securityContext"] = _convert_user_to_security_context(user)
-    if compose_service.pop("expose", None):
+    _transform(src, "environment", result, "env", _convert_env)
+    _transform(src, "volumes", result, "volumes")
+    _transform(
+        src, "healthcheck", result, "readinessProbe", _healthcheck_to_readiness_probe
+    )
+    mem_limit = src.pop("mem_limit", None)
+    result.update(_convert_deploy(src.pop("deploy", {}), mem_limit))
+    _transform(src, "user", result, "securityContext", _user_to_security_context)
+    # Remove "known" unsupported keys which do not materially affect the service.
+    if src.pop("expose", None) is not None:
         logger.info(
             f"Ignoring 'expose' key in service '{name}': all ports are open in K8s."
         )
-    if compose_service.pop("init", None):
+    if src.pop("init", None) is not None:
         logger.info(f"Ignoring 'init' key in service '{name}': not supported in K8s.")
-    if unsupported := _get_keys(compose_service):
+    # Raise an error for unsupported keys.
+    if unsupported := _get_keys(src):
         raise ValueError(f"Unsupported keys {unsupported} in service '{name}'.")
     return result
 
@@ -148,23 +166,23 @@ def _convert_memory(memory: str) -> str:
     return f"{m.group(1)}{convert_unit(m.group(2))}"
 
 
-def _convert_healthcheck_to_readiness_probe(
-    compose_healthcheck: dict[str, Any],
+def _healthcheck_to_readiness_probe(
+    src: dict[str, Any],
 ) -> dict[str, Any]:
     """Assume that healthchecks are to be mapped to readiness probes."""
     result: dict[str, Any] = {}
-    result["exec"] = _convert_healthcheck_test_to_exec(compose_healthcheck.pop("test"))
-    if interval := compose_healthcheck.pop("interval", None):
-        result["periodSeconds"] = _convert_duration_to_seconds(interval)
-    if timeout := compose_healthcheck.pop("timeout", None):
-        result["timeoutSeconds"] = _convert_duration_to_seconds(timeout)
-    if retries := compose_healthcheck.pop("retries", None):
-        result["failureThreshold"] = retries
-    if start_period := compose_healthcheck.pop("start_period", None):
-        result["initialDelaySeconds"] = _convert_duration_to_seconds(start_period)
-    if start_interval := compose_healthcheck.pop("start_interval", None):
-        result["failureThreshold"] = _convert_duration_to_seconds(start_interval)
-    if unsupported := _get_keys(compose_healthcheck):
+    # Allow KeyError to be raised if test is not present.
+    result["exec"] = _convert_healthcheck_test_to_exec(src.pop("test"))
+    _transform(
+        src, "start_period", result, "initialDelaySeconds", _duration_str_to_seconds
+    )
+    _transform(src, "interval", result, "periodSeconds", _duration_str_to_seconds)
+    _transform(src, "timeout", result, "timeoutSeconds", _duration_str_to_seconds)
+    # N retries is equivalent to a failureThreshold of N+1.
+    _transform(src, "retries", result, "failureThreshold", lambda x: x + 1)
+    if src.pop("start_interval", None):
+        logger.info("Ignoring 'start_interval' in healthcheck: not supported in K8s.")
+    if unsupported := _get_keys(src):
         raise ValueError(f"Unsupported keys in healthcheck: {unsupported}")
     return result
 
@@ -177,15 +195,16 @@ def _convert_healthcheck_test_to_exec(test: list[str]) -> dict[str, Any]:
     raise ValueError(f"Unsupported healthcheck test: {test}")
 
 
-def _convert_user_to_security_context(user: str) -> dict[str, Any]:
+def _user_to_security_context(user: str) -> dict[str, Any]:
     if isinstance(user, str) and ":" in user:
         uid, gid = user.split(":", maxsplit=1)
         return {"runAsUser": int(uid), "runAsGroup": int(gid)}
     return {"runAsUser": int(user)}
 
 
-def _convert_duration_to_seconds(duration: str) -> int:
+def _duration_str_to_seconds(duration: str) -> int:
     """Convert Docker duration format (e.g., '30s', '1m') to seconds."""
+    # TODO: Support 1m30s format, add test.
     if duration.endswith("s"):
         return int(duration[:-1])
     elif duration.endswith("m"):
@@ -198,3 +217,10 @@ def _convert_duration_to_seconds(duration: str) -> int:
 
 def _get_keys(dict: dict[str, Any], ignore: set[str] = set()) -> set[str]:
     return set(dict) - ignore
+
+
+def _str_to_list(value: str | list[str]) -> list[str]:
+    if isinstance(value, str):
+        # Split on whitespace.
+        return value.split()
+    return value

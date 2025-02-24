@@ -76,3 +76,126 @@ services:
     result = convert(compose_path)
 
     assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "2Gi"
+
+
+def test_converts_entrypoint(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    entrypoint: /bin/sh
+""",
+        tmp_path,
+    )
+
+    result = convert(compose_path)
+
+    assert result["services"]["my-service"]["command"] == ["/bin/sh"]
+
+
+def test_converts_entrypoint_with_spaces(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    entrypoint: /bin/sh -c
+""",
+        tmp_path,
+    )
+
+    result = convert(compose_path)
+
+    assert result["services"]["my-service"]["command"] == ["/bin/sh", "-c"]
+
+
+def test_converts_entrypoint_list(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    entrypoint:
+      - /bin/sh
+      - -c
+      - env
+""",
+        tmp_path,
+    )
+
+    result = convert(compose_path)
+
+    assert result["services"]["my-service"]["command"] == ["/bin/sh", "-c", "env"]
+
+
+def test_converts_command(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    command: foo
+""",
+        tmp_path,
+    )
+
+    result = convert(compose_path)
+
+    assert result["services"]["my-service"]["args"] == ["foo"]
+
+
+def test_converts_command_with_spaces(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    command: foo bar
+""",
+        tmp_path,
+    )
+
+    result = convert(compose_path)
+
+    assert result["services"]["my-service"]["args"] == ["foo", "bar"]
+
+
+def test_converts_command_list(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    command:
+      - foo
+      - bar
+      - baz
+""",
+        tmp_path,
+    )
+
+    result = convert(compose_path)
+
+    assert result["services"]["my-service"]["args"] == ["foo", "bar", "baz"]
+
+
+def test_converts_healthcheck_to_readiness_probe(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      start_interval: 5s
+      retries: 3
+""",
+        tmp_path,
+    )
+
+    result = convert(compose_path)
+
+    assert result["services"]["my-service"]["readinessProbe"] == {
+        "exec": {"command": ["curl", "-f", "http://localhost"]},
+        "initialDelaySeconds": 40,
+        "periodSeconds": 30,
+        "timeoutSeconds": 10,
+        "failureThreshold": 4,
+    }
