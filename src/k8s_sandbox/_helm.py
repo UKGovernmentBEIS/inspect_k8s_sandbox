@@ -4,7 +4,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, NoReturn, Protocol
 
 from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
@@ -30,7 +30,20 @@ class _ResourceQuotaModifiedError(Exception):
     pass
 
 
-class Release:
+class ReleaseProtocol(Protocol):
+    """The interface for a Helm release."""
+
+    async def install(self) -> None:
+        pass
+
+    async def uninstall(self, quiet: bool) -> None:
+        pass
+
+    async def get_sandbox_pods(self) -> dict[str, Pod]:
+        pass
+
+
+class Release(ReleaseProtocol):
     """A release of a Helm chart."""
 
     def __init__(

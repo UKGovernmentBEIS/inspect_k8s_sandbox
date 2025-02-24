@@ -12,7 +12,7 @@ class ComposeAdapterError(Exception):
     pass
 
 
-def convert(compose_path: Path) -> dict[str, Any]:
+def convert_compose_to_helm_values(compose_path: Path) -> dict[str, Any]:
     compose = yaml.safe_load(compose_path.read_text())
     helm: dict[str, Any] = dict()
     if services := compose.get("services"):

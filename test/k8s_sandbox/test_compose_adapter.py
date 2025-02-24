@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from k8s_sandbox._compose_adapter import convert
+from k8s_sandbox._compose_adapter import convert_compose_to_helm_values
 
 
 @pytest.fixture
@@ -14,7 +14,7 @@ def resources() -> Path:
 def test_converter(resources: Path) -> None:
     expected = (resources / "helm-values.yaml").read_text()
 
-    result = convert(resources / "compose.yaml")
+    result = convert_compose_to_helm_values(resources / "compose.yaml")
     actual = yaml.dump(result, sort_keys=False)
 
     assert actual == expected
@@ -36,7 +36,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
 
@@ -54,7 +54,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
 
@@ -73,7 +73,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "2Gi"
 
@@ -88,7 +88,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["command"] == ["/bin/sh"]
 
@@ -103,7 +103,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["command"] == ["/bin/sh", "-c"]
 
@@ -121,7 +121,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["command"] == ["/bin/sh", "-c", "env"]
 
@@ -136,7 +136,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["args"] == ["foo"]
 
@@ -151,7 +151,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["args"] == ["foo", "bar"]
 
@@ -169,7 +169,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["args"] == ["foo", "bar", "baz"]
 
@@ -190,7 +190,7 @@ services:
         tmp_path,
     )
 
-    result = convert(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["readinessProbe"] == {
         "exec": {"command": ["curl", "-f", "http://localhost"]},

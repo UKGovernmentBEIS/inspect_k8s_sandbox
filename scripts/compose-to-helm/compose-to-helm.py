@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from k8s_sandbox._compose_adapter import convert
+from k8s_sandbox._compose_adapter import convert_compose_to_helm_values
 
 # A prototype script to convert from a Docker compose.yaml file into a helm-values.yaml
 # file suitable for the built-in Helm chart.
@@ -30,7 +30,7 @@ def verify_sample(compose_path: Path) -> None:
     samples = Path(__file__).parent / "samples"
     target = samples / "helm-values.yaml"
     try:
-        helm = convert(compose_path)
+        helm = convert_compose_to_helm_values(compose_path)
     except Exception as e:
         raise ValueError(f"Error converting {compose_path}.") from e
     yaml_str = yaml.dump(helm, sort_keys=False)

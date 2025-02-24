@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator, Literal, cast, overload
 
+import yaml
 from inspect_ai.util import (
     ExecResult,
     OutputLimitExceededError,
@@ -12,7 +13,8 @@ from inspect_ai.util import (
 )
 from pydantic import BaseModel
 
-from k8s_sandbox._helm import Release
+from k8s_sandbox._compose_adapter import convert_compose_to_helm_values
+from k8s_sandbox._helm import Release, ReleaseProtocol
 from k8s_sandbox._logger import (
     format_log_message,
     inspect_trace_action,
@@ -227,7 +229,32 @@ class K8sError(Exception):
 
 def _create_release(
     task_name: str, config: SandboxEnvironmentConfigType | None
-) -> Release:
+) -> ReleaseProtocol:
+    release_config = _resolve_release_config(task_name, config)
+    if release_config.values and _is_docker_compose_file(release_config.values):
+        if release_config.chart is not None:
+            raise ValueError(
+                "Automatic conversion from compose.yaml to helm-values.yaml is only "
+                "supported for the built-in Helm chart."
+            )
+        return _ComposeRelease(task_name, release_config.values)
+    return Release(task_name, release_config.chart, release_config.values)
+
+
+def _is_docker_compose_file(file: Path) -> bool:
+    # Can also be `docker-compose.yaml`.
+    return file.name.endswith("compose.yaml") or file.name.endswith("compose.yml")
+
+
+class _ReleaseConfig(BaseModel, frozen=True):
+    task_name: str
+    chart: Path | None
+    values: Path | None
+
+
+def _resolve_release_config(
+    task_name: str, config: SandboxEnvironmentConfigType | None
+) -> _ReleaseConfig:
     def validate_values_file(values: Path | None) -> None:
         if values is not None and not values.is_file():
             raise FileNotFoundError(f"Helm values file not found: '{values}'.")
@@ -240,15 +267,48 @@ def _create_release(
             )
 
     if config is None:
-        return Release(task_name)
+        return _ReleaseConfig(task_name=task_name, chart=None, values=None)
     if isinstance(config, K8sSandboxEnvironmentConfig):
         chart = Path(config.chart).resolve() if config.chart else None
         validate_chart_dir(chart)
         values = config.values.resolve() if config.values else None
         validate_values_file(values)
-        return Release(task_name, chart_path=chart, values_path=values)
+        return _ReleaseConfig(task_name=task_name, chart=chart, values=values)
     if isinstance(config, str):
         values = Path(config).resolve()
         validate_values_file(values)
-        return Release(task_name, values_path=values)
+        return _ReleaseConfig(task_name=task_name, chart=None, values=values)
     raise TypeError(f"Invalid config type: {type(config)}.")
+
+
+class _ComposeRelease(ReleaseProtocol):
+    """A release of a Helm chart automatically converted from a Docker Compose file.
+
+    Only supports the built-in Helm chart.
+
+    A temporary helm-values.yaml file is created from the compose.yaml file and deleted
+    once the release is installed (or if an error occurs).
+    """
+
+    def __init__(self, task_name: str, compose_path: Path) -> None:
+        self.task_name = task_name
+        self._values_path = self._create_tmp_values(compose_path)
+        self._inner = Release(task_name, chart_path=None, values_path=self._values_path)
+
+    async def install(self) -> None:
+        try:
+            await self._inner.install()
+        finally:
+            self._values_path.unlink()
+
+    async def uninstall(self, quiet: bool) -> None:
+        await self._inner.uninstall(quiet)
+
+    async def get_sandbox_pods(self) -> dict[str, Pod]:
+        return await self._inner.get_sandbox_pods()
+
+    def _create_tmp_values(self, compose_file: Path) -> Path:
+        converted = convert_compose_to_helm_values(compose_file)
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            f.write(yaml.dump(converted, sort_keys=False))
+        return Path(f.name)
