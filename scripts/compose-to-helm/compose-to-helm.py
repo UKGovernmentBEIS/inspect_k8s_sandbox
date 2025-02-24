@@ -21,19 +21,30 @@ logging.basicConfig(
 
 def main() -> None:
     samples = Path(__file__).parent / "samples"
-    convert(samples / "compose.yaml", samples / "helm-values.yaml")
+    target = Path(__file__).parent / "helm-values.yaml"
+    cybench = samples / "cybench"
+    for cybench_dir in cybench.iterdir():
+        try:
+            helm = convert(cybench_dir / "compose.yaml")
+        except Exception as e:
+            raise ValueError(f"Error converting {cybench_dir}.") from e
+        yaml_str = yaml.dump(helm, sort_keys=False)
+        print(yaml_str)
+        target.write_text(yaml_str)
 
 
-def convert(compose_path: Path, helm_values_path: Path) -> None:
+def convert(compose_path: Path) -> dict[str, Any]:
     compose = yaml.safe_load(compose_path.read_text())
     helm: dict[str, Any] = dict(services={})
     for key, service in compose["services"].items():
-        helm["services"][key] = convert_service(key, service)
+        try:
+            helm["services"][key] = convert_service(key, service)
+        except ValueError as e:
+            raise ValueError(f"Error converting service '{key}'.") from e
     # TODO: Consider adding support for x-allowDomains.
     if volumes := compose.get("volumes"):
         helm["volumes"] = volumes
-    print(yaml.dump(helm, sort_keys=False))
-    helm_values_path.write_text(yaml.dump(helm, sort_keys=False))
+    return helm
 
 
 def convert_service(name: str, compose_service: dict[str, Any]) -> dict[str, Any]:
@@ -51,27 +62,53 @@ def convert_service(name: str, compose_service: dict[str, Any]) -> dict[str, Any
         result["volumes"] = volumes
     if healthcheck := compose_service.pop("healthcheck", None):
         result["readinessProbe"] = convert_healthcheck_to_readiness_probe(healthcheck)
-    result.update(convert_deploy(compose_service.pop("deploy", {})))
+    mem_limit = compose_service.pop("mem_limit", None)
+    result.update(convert_deploy(compose_service.pop("deploy", {}), mem_limit))
+    if user := compose_service.pop("user", None):
+        result["securityContext"] = convert_user_to_security_context(user)
     if compose_service.pop("expose", None):
-        logger.warning(f"Ignoring 'expose' key in service '{name}'.")
+        logger.info(
+            f"Ignoring 'expose' key in service '{name}': all ports are open in K8s."
+        )
     if compose_service.pop("init", None):
-        logger.warning(f"Ignoring 'init' key in service '{name}'.")
+        logger.info(f"Ignoring 'init' key in service '{name}': not supported in K8s.")
     if unsupported := get_keys(compose_service):
         raise ValueError(f"Unsupported keys {unsupported} in service '{name}'.")
     return result
 
 
-def convert_env(compose_env: dict[str, Any]) -> list[dict[str, str]]:
+def convert_env(compose_env: dict[str, Any] | list[str]) -> list[dict[str, str]]:
     result = []
-    for key, value in compose_env.items():
-        result.append({"name": key, "value": value})
+    if isinstance(compose_env, dict):
+        for key, value in compose_env.items():
+            result.append({"name": key, "value": value})
+    elif isinstance(compose_env, list):
+        for item in compose_env:
+            if "=" not in item:
+                raise ValueError(f"Invalid environment variable: {item}")
+            key, value = item.split("=", maxsplit=1)
+            result.append({"name": key, "value": value})
+    else:
+        raise ValueError(
+            f"Invalid environment format. Expected dict or list but got "
+            f"{type(compose_env)}."
+        )
     return result
 
 
-def convert_deploy(compose_deploy: dict[str, Any]) -> dict[str, Any]:
+def convert_deploy(
+    compose_deploy: dict[str, Any], mem_limit: str | None
+) -> dict[str, Any]:
     result = {}
     if resources := compose_deploy.pop("resources", None):
         result["resources"] = convert_resources(resources)
+        if mem_limit:
+            logger.warning(
+                f"Ignoring 'mem_limit: {mem_limit}' because deploy.resources is set "
+                "which takes precedence."
+            )
+    elif mem_limit:
+        result["resources"] = {"limits": {"memory": convert_memory(mem_limit)}}
     if unsupported := get_keys(compose_deploy):
         raise ValueError(f"Unsupported keys in deploy: {unsupported}")
     return result
@@ -149,6 +186,13 @@ def convert_healthcheck_test_to_exec(test: list[str]) -> dict[str, Any]:
     if test[0] == "CMD-SHELL":
         return {"command": ["/bin/sh", "-c", test[1]]}
     raise ValueError(f"Unsupported healthcheck test: {test}")
+
+
+def convert_user_to_security_context(user: str) -> dict[str, Any]:
+    if ":" in user:
+        uid, gid = user.split(":", maxsplit=1)
+        return {"runAsUser": int(uid), "runAsGroup": int(gid)}
+    return {"runAsUser": int(user)}
 
 
 def convert_duration_to_seconds(duration: str) -> int:
