@@ -34,7 +34,7 @@ from k8s_sandbox._prereqs import validate_prereqs
 class K8sSandboxEnvironment(SandboxEnvironment):
     """An Inspect sandbox environment for a Kubernetes (k8s) cluster."""
 
-    def __init__(self, release: Release, pod: Pod):
+    def __init__(self, release: ReleaseProtocol, pod: Pod):
         self.release = release
         self._pod = pod
 
@@ -73,7 +73,9 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         config: SandboxEnvironmentConfigType | None,
         metadata: dict[str, str],
     ) -> dict[str, SandboxEnvironment]:
-        async def get_sandboxes(release: Release) -> dict[str, SandboxEnvironment]:
+        async def get_sandboxes(
+            release: ReleaseProtocol,
+        ) -> dict[str, SandboxEnvironment]:
             pods = await release.get_sandbox_pods()
             sandbox_envs: dict[str, SandboxEnvironment] = {}
             for key, pod in pods.items():
