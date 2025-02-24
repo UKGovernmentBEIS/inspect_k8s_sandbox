@@ -44,6 +44,7 @@ nav:
   - "Tips":
     - "Debugging K8s Sandboxes": tips/debugging-k8s-sandboxes.md
     - "Troubleshooting": tips/troubleshooting.md
+    - "Cleanup": tips/cleanup.md
     - "Docker Images": tips/images.md
     - "Hubble (Cilium UI)": tips/hubble.md
     - "Concurrency": tips/concurrency.md

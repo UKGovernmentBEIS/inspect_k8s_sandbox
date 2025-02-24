@@ -42,6 +42,16 @@ async def test_unspecified(sandboxes: dict[str, K8sSandboxEnvironment]) -> None:
     assert actual == "gvisor"
 
 
+async def test_cluster_default_magic_string(
+    sandboxes: dict[str, K8sSandboxEnvironment],
+) -> None:
+    actual = await _infer_runtime_class(sandboxes["cluster-default-magic-string"])
+
+    # The "CLUSTER_DEFAULT" magic string means that runtimeClassName won't be set. runc
+    # is the default runtime on the minikube test cluster.
+    assert actual == "runc"
+
+
 async def _infer_runtime_class(sandbox: K8sSandboxEnvironment) -> str:
     result = await sandbox.exec(
         ["sh", "-c", "dmesg | grep -i 'starting gvisor'"], timeout=5

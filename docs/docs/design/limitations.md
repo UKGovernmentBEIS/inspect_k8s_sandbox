@@ -76,12 +76,48 @@ You can reduce the impact of a container restarting by using persistent volumes.
     indefinitely.
 
 
-## Denied network requests hang
+## Denied network requests behaviour
 
-Because Cilium simply drops packets for denied network requests, the client will hang
-waiting for a response until its timeout is reached. The timeout is dependent on which
-tool/client you're using. We recommend any tool calls also pass the `timeout` parameter
-in case the model runs a command that doesn't have a built-in timeout.
+When Cilium denies a network request, it simply drops the packet.
+
+If you're using the built-in Helm chart, [DNS lookups are
+restricted](../security/network-access.md#dns-exfiltration) in addition to direct
+network requests.
+
+Therefore, when an agent tries to access a blocked resource via a client like `wget` or
+`curl`, one of two things will happen:
+
+1. The DNS lookup (if relevant) will time out. In this case, the client may error with
+  "temporary failure in DNS resolution" or similar. If the client is not configured with
+  a timeout (e.g. `host -r`), it may hang indefinitely until the tool call times out
+  (see below).
+2. If there is no DNS lookup required, the client will hang waiting for a response until
+  its timeout (if it has one) is reached.
+
+We recommend that any tools you define or use pass the `timeout` parameter (e.g.
+`timeout=60`) in case the model runs a command that doesn't have a built-in timeout.
+
+
+## Reverse DNS lookups aren't supported
+
+When using the built-in Helm chart, reverse DNS lookups (i.e. looking up the hostname
+from an IP) are not supported. This is because DNS lookups are restricted to prevent
+[DNS exfiltration](../security/network-access.md#dns-exfiltration).
+
+??? question "Why is ping slow?"
+
+    Executing commands like
+
+    ```sh
+    ping victim
+    ```
+
+    where `victim` is another service's name will result in a reverse DNS lookup in
+    addition to the forward DNS lookup. The reverse lookup will fail (which may add ~5s
+    to the execution time of the command) but the forward lookup and subsequent command
+    will succeed. `ping -n` disables reverse DNS lookups. Commands such as `curl` and
+    `wget` do not perform reverse DNS lookups.
+
 
 ## Cilium's security measures prevent some exploits
 
@@ -111,6 +147,26 @@ chart](../helm/built-in-chart.md#dns). Or, if using a custom Helm chart, conside
 the `hostAliases` field in the Pod spec
 ([docs](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/)).
 
+## Transient network or infrastructure issues during `exec()` won't be retried
+
+The following exceptions have occasionally been observed during calls to `exec()`,
+`read_file()` or `write_file()`:
+
+* `WebSocketBadStatusException: pod does not exist` (re-raised as `ApiException`)
+* `WebSocketBadStatusException: container not found` (re-raised as `ApiException`)
+* `WebSocketBadStatusException: Handshake status 500 Internal Server Error` (re-raised
+  as `ApiException`)
+* `WebSocketConnectionClosedException: Connection to remote host was lost`
+* `SSLEOFError: EOF occurred in violation of protocol`
+
+These are likely due to transient network or infrastructure issues. For example, when a
+node becomes unhealthy and the Pod is rescheduled.
+
+The `k8s_sandbox` package will not retry the remote command execution when any of these
+(or other) exceptions are raised because it cannot assume that the command is idempotent
+and that the command did not at least start executing. This will result in that sample
+of the eval failing.
+
 ## The `user` parameter to `exec()` is not supported
 
 In Kubernetes, a container runs as a single user. If you need to run commands as
@@ -121,12 +177,6 @@ to run commands as different users.
 
 The process of building, tagging and pushing images is left to the user or other tooling
 as it is highly dependent on your environment and practices.
-
-## `inspect sandbox cleanup k8s` without specifying an ID is not supported
-
-To avoid potentially removing resources that belong to other users, the `k8s_sandbox`
-package will not uninstall every Helm chart in the current namespace. Note that `inspect
-sandbox cleanup k8s xxxxxxxx` is supported.
 
 ## `TimeoutError` won't be raised on busybox images
 

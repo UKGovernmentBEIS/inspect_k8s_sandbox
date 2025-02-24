@@ -46,9 +46,10 @@ return Task(
 Assuming you're using the built-in Helm chart, a suitable `values.yaml` file is:
 
 ```yaml
-default:
-  image: ubuntu:24.04
-  command: ["tail", "-f", "/dev/null"]
+services:
+  default:
+    image: ubuntu:24.04
+    command: ["tail", "-f", "/dev/null"]
 ```
 
 ## Additional infrastructure
@@ -65,15 +66,16 @@ Sample(
 ```
 
 ```yaml
-default:
-  image: ubuntu:24.04
-  command: ["tail", "-f", "/dev/null"]
-server:
-  image: nginx:1.27.0
-  dnsRecord: true
-  additionalDnsRecords:
-    - "my-web-server.com"
-  readinessProbe:
-    tcpSocket:
-      port: 80
+services:
+  default:
+    image: ubuntu:24.04
+    command: ["tail", "-f", "/dev/null"]
+  server:
+    image: nginx:1.27.0
+    dnsRecord: true
+    additionalDnsRecords:
+      - "my-web-server.com"
+    readinessProbe:
+      tcpSocket:
+        port: 80
 ```

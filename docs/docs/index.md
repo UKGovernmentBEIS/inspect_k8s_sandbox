@@ -27,9 +27,9 @@ The Inspect process itself still runs on your local machine.
 
 ## About
 
-[![AISI Logo](assets/aisi-logo.png){: style="height:60px;"}](https://www.aisi.gov.uk/)
+[![AISI Logo](assets/aisi-logo.svg){: style="height:60px;"}](https://www.aisi.gov.uk/)
 
-Created by the [UK AI Safety Institute](https://aisi.gov.uk/).
+Created by the [UK AI Security Institute](https://aisi.gov.uk/).
 
 [^1]: gVisor can also be used in Docker Compose, but is enabled by default with the
     `k8s_sandbox` package.
