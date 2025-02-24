@@ -8,21 +8,35 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
+class ComposeAdapterError(Exception):
+    pass
+
+
 def convert(compose_path: Path) -> dict[str, Any]:
     compose = yaml.safe_load(compose_path.read_text())
-    helm: dict[str, Any] = dict(services={})
-    for key, service in compose["services"].items():
-        try:
-            helm["services"][key] = convert_service(key, service)
-        except ValueError as e:
-            raise ValueError(f"Error converting service '{key}'.") from e
-    # TODO: Consider adding support for x-allowDomains.
+    helm: dict[str, Any] = dict()
+    if services := compose.get("services"):
+        helm["services"] = _convert_services(services)
     if volumes := compose.get("volumes"):
         helm["volumes"] = volumes
+    # TODO: Consider adding support for x-allowDomains.
     return helm
 
 
-def convert_service(name: str, compose_service: dict[str, Any]) -> dict[str, Any]:
+def _convert_services(compose_services: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = dict()
+    for service_name, service_value in compose_services.items():
+        try:
+            result[service_name] = _convert_service(service_name, service_value)
+        except Exception as e:
+            # Raise a new exception with additional context.
+            raise ComposeAdapterError(
+                f"Error converting service '{service_name}'."
+            ) from e
+    return result
+
+
+def _convert_service(name: str, compose_service: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = dict()
     result["image"] = compose_service.pop("image", None)
     if command := compose_service.pop("command", None):
@@ -32,28 +46,28 @@ def convert_service(name: str, compose_service: dict[str, Any]) -> dict[str, Any
     # Create a DNS record for every service (default in Docker Compose).
     result["dnsRecord"] = True
     if env := compose_service.pop("environment", None):
-        result["env"] = convert_env(env)
+        result["env"] = _convert_env(env)
     if volumes := compose_service.pop("volumes", None):
         result["volumes"] = volumes
     if healthcheck := compose_service.pop("healthcheck", None):
-        result["readinessProbe"] = convert_healthcheck_to_readiness_probe(healthcheck)
+        result["readinessProbe"] = _convert_healthcheck_to_readiness_probe(healthcheck)
     mem_limit = compose_service.pop("mem_limit", None)
-    result.update(convert_deploy(compose_service.pop("deploy", {}), mem_limit))
+    result.update(_convert_deploy(compose_service.pop("deploy", {}), mem_limit))
     if user := compose_service.pop("user", None):
-        result["securityContext"] = convert_user_to_security_context(user)
+        result["securityContext"] = _convert_user_to_security_context(user)
     if compose_service.pop("expose", None):
         logger.info(
             f"Ignoring 'expose' key in service '{name}': all ports are open in K8s."
         )
     if compose_service.pop("init", None):
         logger.info(f"Ignoring 'init' key in service '{name}': not supported in K8s.")
-    if unsupported := get_keys(compose_service):
+    if unsupported := _get_keys(compose_service):
         raise ValueError(f"Unsupported keys {unsupported} in service '{name}'.")
     return result
 
 
-def convert_env(compose_env: dict[str, Any] | list[str]) -> list[dict[str, str]]:
-    result = []
+def _convert_env(compose_env: dict[str, Any] | list[str]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
     if isinstance(compose_env, dict):
         for key, value in compose_env.items():
             result.append({"name": key, "value": value})
@@ -71,47 +85,47 @@ def convert_env(compose_env: dict[str, Any] | list[str]) -> list[dict[str, str]]
     return result
 
 
-def convert_deploy(
+def _convert_deploy(
     compose_deploy: dict[str, Any], mem_limit: str | None
 ) -> dict[str, Any]:
-    result = {}
+    result: dict[str, Any] = dict()
     if resources := compose_deploy.pop("resources", None):
-        result["resources"] = convert_resources(resources)
+        result["resources"] = _convert_resources(resources)
         if mem_limit:
             logger.warning(
                 f"Ignoring 'mem_limit: {mem_limit}' because deploy.resources is set "
                 "which takes precedence."
             )
     elif mem_limit:
-        result["resources"] = {"limits": {"memory": convert_memory(mem_limit)}}
-    if unsupported := get_keys(compose_deploy):
+        result["resources"] = {"limits": {"memory": _convert_memory(mem_limit)}}
+    if unsupported := _get_keys(compose_deploy):
         raise ValueError(f"Unsupported keys in deploy: {unsupported}")
     return result
 
 
-def convert_resources(compose_resources: dict[str, Any]) -> dict[str, Any]:
+def _convert_resources(compose_resources: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = dict()
     limits = compose_resources.get("limits")
     if limits:
-        result["limits"] = convert_resource(limits)
+        result["limits"] = _convert_resource(limits)
     reservations = compose_resources.get("reservations")
     if reservations:
-        result["requests"] = convert_resource(reservations)
+        result["requests"] = _convert_resource(reservations)
     return result
 
 
-def convert_resource(original: dict[str, Any]) -> dict[str, Any]:
-    result = {}
+def _convert_resource(original: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = dict()
     if cpu := original.pop("cpus", None):
         result["cpu"] = cpu
     if memory := original.pop("memory", None):
-        result["memory"] = convert_memory(memory)
+        result["memory"] = _convert_memory(memory)
     if original:
         raise ValueError(f"Unrecognised keys in 'resource': {original}")
     return result
 
 
-def convert_memory(memory: str) -> str:
+def _convert_memory(memory: str) -> str:
     """Convert Docker memory format (e.g., '512m', '1g') to Ki/Mi/Gi."""
 
     def convert_unit(unit: str) -> str:
@@ -134,28 +148,28 @@ def convert_memory(memory: str) -> str:
     return f"{m.group(1)}{convert_unit(m.group(2))}"
 
 
-def convert_healthcheck_to_readiness_probe(
+def _convert_healthcheck_to_readiness_probe(
     compose_healthcheck: dict[str, Any],
 ) -> dict[str, Any]:
     """Assume that healthchecks are to be mapped to readiness probes."""
     result: dict[str, Any] = {}
-    result["exec"] = convert_healthcheck_test_to_exec(compose_healthcheck.pop("test"))
+    result["exec"] = _convert_healthcheck_test_to_exec(compose_healthcheck.pop("test"))
     if interval := compose_healthcheck.pop("interval", None):
-        result["periodSeconds"] = convert_duration_to_seconds(interval)
+        result["periodSeconds"] = _convert_duration_to_seconds(interval)
     if timeout := compose_healthcheck.pop("timeout", None):
-        result["timeoutSeconds"] = convert_duration_to_seconds(timeout)
+        result["timeoutSeconds"] = _convert_duration_to_seconds(timeout)
     if retries := compose_healthcheck.pop("retries", None):
         result["failureThreshold"] = retries
     if start_period := compose_healthcheck.pop("start_period", None):
-        result["initialDelaySeconds"] = convert_duration_to_seconds(start_period)
+        result["initialDelaySeconds"] = _convert_duration_to_seconds(start_period)
     if start_interval := compose_healthcheck.pop("start_interval", None):
-        result["failureThreshold"] = convert_duration_to_seconds(start_interval)
-    if unsupported := get_keys(compose_healthcheck):
+        result["failureThreshold"] = _convert_duration_to_seconds(start_interval)
+    if unsupported := _get_keys(compose_healthcheck):
         raise ValueError(f"Unsupported keys in healthcheck: {unsupported}")
     return result
 
 
-def convert_healthcheck_test_to_exec(test: list[str]) -> dict[str, Any]:
+def _convert_healthcheck_test_to_exec(test: list[str]) -> dict[str, Any]:
     if test[0] == "CMD":
         return {"command": test[1:]}
     if test[0] == "CMD-SHELL":
@@ -163,14 +177,14 @@ def convert_healthcheck_test_to_exec(test: list[str]) -> dict[str, Any]:
     raise ValueError(f"Unsupported healthcheck test: {test}")
 
 
-def convert_user_to_security_context(user: str) -> dict[str, Any]:
+def _convert_user_to_security_context(user: str) -> dict[str, Any]:
     if isinstance(user, str) and ":" in user:
         uid, gid = user.split(":", maxsplit=1)
         return {"runAsUser": int(uid), "runAsGroup": int(gid)}
     return {"runAsUser": int(user)}
 
 
-def convert_duration_to_seconds(duration: str) -> int:
+def _convert_duration_to_seconds(duration: str) -> int:
     """Convert Docker duration format (e.g., '30s', '1m') to seconds."""
     if duration.endswith("s"):
         return int(duration[:-1])
@@ -182,5 +196,5 @@ def convert_duration_to_seconds(duration: str) -> int:
         raise ValueError(f"Unsupported duration format: {duration}")
 
 
-def get_keys(dict: dict[str, Any], ignore: set[str] = set()) -> set[str]:
+def _get_keys(dict: dict[str, Any], ignore: set[str] = set()) -> set[str]:
     return set(dict) - ignore

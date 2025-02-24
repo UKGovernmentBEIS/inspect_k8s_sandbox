@@ -11,7 +11,7 @@ def resources() -> Path:
     return Path(__file__).parent / "resources" / "compose" / "basic"
 
 
-def test_converter(resources) -> None:
+def test_converter(resources: Path) -> None:
     expected = (resources / "helm-values.yaml").read_text()
 
     result = convert(resources / "compose.yaml")
@@ -20,7 +20,7 @@ def test_converter(resources) -> None:
     assert actual == expected
 
 
-def tmp_compose_file(contents: str, tmp_path) -> Path:
+def tmp_compose_file(contents: str, tmp_path: Path) -> Path:
     compose_path = tmp_path / "compose.yaml"
     compose_path.write_text(contents)
     return compose_path
@@ -41,7 +41,7 @@ services:
     assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
 
 
-def test_converts_deploy(tmp_path) -> None:
+def test_converts_deploy(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
 services:
@@ -59,7 +59,7 @@ services:
     assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
 
 
-def test_ignores_mem_limit_when_deploy_present(tmp_path) -> None:
+def test_ignores_mem_limit_when_deploy_present(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
 services:
