@@ -1,5 +1,6 @@
 import logging
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -21,16 +22,48 @@ logging.basicConfig(
 
 def main() -> None:
     samples = Path(__file__).parent / "samples"
+    verify_sample(samples / "compose.yaml")
+    verify_cybench_samples()
+
+
+def verify_sample(compose_path: Path) -> None:
     target = Path(__file__).parent / "helm-values.yaml"
-    cybench = samples / "cybench"
-    for cybench_dir in cybench.iterdir():
-        try:
-            helm = convert(cybench_dir / "compose.yaml")
-        except Exception as e:
-            raise ValueError(f"Error converting {cybench_dir}.") from e
-        yaml_str = yaml.dump(helm, sort_keys=False)
-        print(yaml_str)
-        target.write_text(yaml_str)
+    try:
+        helm = convert(compose_path)
+    except Exception as e:
+        raise ValueError(f"Error converting {compose_path}.") from e
+    yaml_str = yaml.dump(helm, sort_keys=False)
+    target.write_text(yaml_str)
+    verify_helm_template(target)
+
+
+def verify_cybench_samples() -> None:
+    cybench = Path(__file__).parent / "samples" / "cybench"
+    for cybench_sample in cybench.iterdir():
+        verify_sample(cybench_sample / "compose.yaml")
+
+
+def verify_helm_template(values_path: Path) -> None:
+    helm_chart_dir = (
+        Path(__file__).parent.parent.parent
+        / "src"
+        / "k8s_sandbox"
+        / "resources"
+        / "helm"
+        / "agent-env"
+    )
+    subprocess.run(
+        [
+            "helm",
+            "template",
+            "my-validation-release",
+            helm_chart_dir,
+            "-f",
+            values_path,
+        ],
+        text=True,
+        check=True,
+    )
 
 
 def convert(compose_path: Path) -> dict[str, Any]:
