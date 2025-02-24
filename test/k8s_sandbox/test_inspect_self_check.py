@@ -34,7 +34,8 @@ async def test_self_check_k8s_default_root(root: SandboxEnvironment) -> None:
         # Root can read from files after `chmod -r`.
         "test_read_file_not_allowed",
         # Root can write to files after `chmod -w`.
-        "test_write_file_without_permissions",
+        "test_write_text_file_without_permissions",
+        "test_write_binary_file_without_permissions",
     ]
 
     return await _run_self_check(root, known_failures)
