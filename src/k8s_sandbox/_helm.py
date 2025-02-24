@@ -33,6 +33,9 @@ class _ResourceQuotaModifiedError(Exception):
 class ReleaseProtocol(Protocol):
     """The interface for a Helm release."""
 
+    task_name: str
+    release_name: str
+
     async def install(self) -> None:
         pass
 
