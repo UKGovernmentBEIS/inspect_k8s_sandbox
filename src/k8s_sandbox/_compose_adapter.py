@@ -71,13 +71,17 @@ def _convert_service(name: str, src: dict[str, Any]) -> dict[str, Any]:
     mem_limit = src.pop("mem_limit", None)
     result.update(_convert_deploy(src.pop("deploy", {}), mem_limit))
     _transform(src, "user", result, "securityContext", _user_to_security_context)
-    # Remove "known" unsupported keys which do not materially affect the service.
     if src.pop("expose", None) is not None:
+        # Log at info level because this does not affect the service.
         logger.info(
-            f"Ignoring 'expose' key in service '{name}': all ports are open in K8s."
+            f"Ignoring 'expose' key in service '{name}': all ports are open in K8s "
+            "and the expose key only serves as documentation in Docker Compose."
         )
     if src.pop("init", None) is not None:
-        logger.info(f"Ignoring 'init' key in service '{name}': not supported in K8s.")
+        # Warn for init because it could materially affect the service.
+        logger.warning(
+            f"Ignoring 'init' key in service '{name}': not supported in K8s."
+        )
     # Raise an error for unsupported keys.
     if unsupported := _get_keys(src):
         raise ValueError(f"Unsupported keys {unsupported} in service '{name}'.")

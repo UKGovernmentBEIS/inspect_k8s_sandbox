@@ -4,6 +4,10 @@
 - Consider passing a conversion context or similar so that log messages and exceptions
   can be more informative. (This can be done for exceptions via chaining, but not for
   log messages.)
+- Consider using the [docker compose
+  spec](https://github.com/compose-spec/compose-spec/blob/main/spec.md) to first
+  validate what the user provided is valid docker compose.
+- Consider adding network support.
 
 # Design notes
 - I did consider using Pydantic models instead of dicts, but if we want to use Pydantic
