@@ -27,18 +27,27 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
         A dictionary representing the Helm values.
     """
     compose = yaml.safe_load(compose_file.read_text())
-    helm: dict[str, Any] = dict()
-    try:
-        services = compose["services"]
-    except KeyError:
+    result: dict[str, Any] = dict()
+    services = compose.pop("services", None)
+    if services is None:
         raise ComposeConverterError(
-            f"The 'services' key is required. Compose file: {compose_file}."
+            f"The 'services' key is required. Compose file: '{compose_file}'."
         )
-    helm["services"] = _convert_services(services, compose_file)
-    if volumes := compose.get("volumes"):
-        helm["volumes"] = volumes
-    # TODO: Consider adding support for x-allowDomains.
-    return helm
+    result["services"] = _convert_services(services, compose_file)
+    if volumes := compose.pop("volumes", None):
+        result["volumes"] = _convert_volumes(volumes, compose_file)
+    # The 'x-inspect_k8s_sandbox' element is used to add additional configuration to
+    # Docker Compose files for use in Helm values.
+    if extensions := compose.pop("x-inspect_k8s_sandbox", None):
+        result.update(_convert_extensions(extensions, compose_file))
+    # Ignore the version key.
+    compose.pop("version", None)
+    if unsupported := set(compose):
+        raise ComposeConverterError(
+            f"Unsupported key(s) in Docker Compose file: {unsupported}. Compose file: "
+            f"'{compose_file}'."
+        )
+    return result
 
 
 def _convert_services(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
@@ -46,6 +55,35 @@ def _convert_services(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
     for service_name, service_value in src.items():
         service_converter = ServiceConverter(service_name, service_value, compose_file)
         result[service_name] = service_converter.convert_service()
+    return result
+
+
+def _convert_volumes(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
+    for volume_name, volume_value in src.items():
+        if volume_value:
+            raise ComposeConverterError(
+                f"Unsupported volume value: '{volume_value}'. Converting non-empty "
+                f"volume values is not supported. Compose file: '{compose_file}'."
+            )
+    return src
+
+
+def _convert_extensions(
+    extensions: dict[str, Any], compose_file: Path
+) -> dict[str, Any]:
+    result: dict[str, Any] = dict()
+    if allow_domains := extensions.pop("x-allowDomains", None):
+        if not isinstance(allow_domains, list):
+            raise ComposeConverterError(
+                f"Invalid 'x-allowDomains' type: {type(allow_domains)}. Expected list. "
+                f"Compose file: '{compose_file}'."
+            )
+        result["allowDomains"] = allow_domains
+    if unsupported := set(extensions):
+        raise ComposeConverterError(
+            f"Unsupported key(s) in 'x-inspect_k8s_sandbox': {unsupported}. Compose "
+            f"file: '{compose_file}'."
+        )
     return result
 
 
@@ -99,7 +137,7 @@ class ServiceConverter:
         # Raise an error for unsupported keys.
         if unsupported := set(src):
             raise ComposeConverterError(
-                f"Unsupported service keys: {unsupported}. {self.context}"
+                f"Unsupported service key(s): {unsupported}. {self.context}"
             )
         return result
 
@@ -147,7 +185,7 @@ class ServiceConverter:
             }
         if unsupported := set(src):
             raise ComposeConverterError(
-                f"Unsupported keys in 'deploy': {unsupported}. {self.context}"
+                f"Unsupported key(s) in 'deploy': {unsupported}. {self.context}"
             )
         return result
 
@@ -228,7 +266,7 @@ class ServiceConverter:
             )
         if unsupported := set(src):
             raise ComposeConverterError(
-                f"Unsupported keys in 'healthcheck': {unsupported}. {self.context}"
+                f"Unsupported key(s) in 'healthcheck': {unsupported}. {self.context}"
             )
         return result
 

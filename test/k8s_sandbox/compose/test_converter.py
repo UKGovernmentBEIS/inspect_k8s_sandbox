@@ -301,3 +301,70 @@ services:
         convert_compose_to_helm_values(compose_path)
 
     assert "Unrecognised byte value (memory quantity)" in str(exc_info.value)
+
+
+def test_ignores_version(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+version: "3.8"
+services:
+  my-service:
+    image: my-image
+""",
+        tmp_path,
+    )
+
+    convert_compose_to_helm_values(compose_path)
+
+
+def test_ensures_services_key_exists(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+volumes:
+  my-volume:
+""",
+        tmp_path,
+    )
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "The 'services' key is required" in str(exc_info.value)
+
+
+def test_converts_volumes(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    volumes:
+      - /my-volume:/mnt/volume
+volumes:
+  my-volume:
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["volumes"] == ["/my-volume:/mnt/volume"]
+    assert result["volumes"]["my-volume"] is None
+
+
+def test_rejects_non_empty_volumes(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    image: my-image
+volumes:
+  my-volume:
+    driver: local
+""",
+        tmp_path,
+    )
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "non-empty volume values is not supported" in str(exc_info.value)
