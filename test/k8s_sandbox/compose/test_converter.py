@@ -8,7 +8,7 @@ from k8s_sandbox._compose.converter import convert_compose_to_helm_values
 
 @pytest.fixture
 def resources() -> Path:
-    return Path(__file__).parent / "resources" / "compose" / "basic"
+    return Path(__file__).parent / "resources" / "basic"
 
 
 def test_converter(resources: Path) -> None:
