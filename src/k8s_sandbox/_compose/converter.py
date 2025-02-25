@@ -17,7 +17,10 @@ class ComposeConverterError(Exception):
 def convert_compose_to_helm_values(compose_path: Path) -> dict[str, Any]:
     """Convert a Docker Compose file to Helm values.
 
-    The Helm values file is suitable for the built-in Helm chart.
+    The resulting Helm values file is suitable for the built-in Helm chart.
+
+    This is by no means a comprehensive conversion. It only supports a small subset
+    of commonly used Docker Compose functionality.
 
     Returns:
         A dictionary representing the Helm values.
