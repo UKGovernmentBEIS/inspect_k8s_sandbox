@@ -14,6 +14,20 @@ def resources() -> Path:
     return Path(__file__).parent / "resources" / "basic"
 
 
+def test_ignores_version(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+version: "3.8"
+services:
+  my-service:
+    image: my-image
+""",
+        tmp_path,
+    )
+
+    convert_compose_to_helm_values(compose_path)
+
+
 def test_converter(resources: Path) -> None:
     expected = (resources / "helm-values.yaml").read_text()
 
@@ -301,20 +315,6 @@ services:
         convert_compose_to_helm_values(compose_path)
 
     assert "Unrecognised byte value (memory quantity)" in str(exc_info.value)
-
-
-def test_ignores_version(tmp_path: Path) -> None:
-    compose_path = tmp_compose_file(
-        """
-version: "3.8"
-services:
-  my-service:
-    image: my-image
-""",
-        tmp_path,
-    )
-
-    convert_compose_to_helm_values(compose_path)
 
 
 def test_ensures_services_key_exists(tmp_path: Path) -> None:
