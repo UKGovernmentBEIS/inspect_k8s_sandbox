@@ -95,7 +95,7 @@ def _convert_service(name: str, src: dict[str, Any]) -> dict[str, Any]:
             f"Ignoring 'init' key in service '{name}': not supported in K8s."
         )
     # Raise an error for unsupported keys.
-    if unsupported := _get_keys(src):
+    if unsupported := set(src):
         raise ValueError(f"Unsupported keys {unsupported} in service '{name}'.")
     return result
 
@@ -132,7 +132,7 @@ def _convert_deploy(
             )
     elif mem_limit:
         result["resources"] = {"limits": {"memory": _convert_byte_value(mem_limit)}}
-    if unsupported := _get_keys(compose_deploy):
+    if unsupported := set(compose_deploy):
         raise ValueError(f"Unsupported keys in deploy: {unsupported}")
     return result
 
@@ -203,7 +203,7 @@ def _healthcheck_to_readiness_probe(
     _transform(src, "retries", result, "failureThreshold", lambda x: x + 1)
     if src.pop("start_interval", None):
         logger.info("Ignoring 'start_interval' in healthcheck: not supported in K8s.")
-    if unsupported := _get_keys(src):
+    if unsupported := set(src):
         raise ValueError(f"Unsupported keys in healthcheck: {unsupported}")
     return result
 
@@ -240,10 +240,6 @@ def _duration_str_to_seconds(duration: str) -> int:
     minutes = int(match.group("minutes") or 0)
     seconds = int(match.group("seconds") or 0)
     return hours * 3600 + minutes * 60 + seconds
-
-
-def _get_keys(dict: dict[str, Any], ignore: set[str] = set()) -> set[str]:
-    return set(dict) - ignore
 
 
 def _str_to_list(value: str | list[str]) -> list[str]:
