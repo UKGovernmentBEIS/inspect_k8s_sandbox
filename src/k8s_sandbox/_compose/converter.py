@@ -50,7 +50,6 @@ def _convert_services(src: dict[str, Any]) -> dict[str, Any]:
 
 def _convert_service(name: str, src: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = dict()
-    # TODO: Consider refactoring to creating the result dict in one.
     # Ordered as per Helm chart values.yaml documentation.
     _transform(src, "image", result, "image")
     _transform(src, "entrypoint", result, "command", _str_to_list)
