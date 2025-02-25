@@ -16,6 +16,14 @@
   chart already provides (though I recognise that failing sooner may be better).
 
 
+# Inspect/Infra discussion outcomes
+- avoid warning/info unless we can tell user what do to about it
+- use `x-inspecK8sSandbox.allowDomains`
+- include the ~10 domains in cybench
+- internet access off by default
+- can we give recommendations for alternative to init: true? E.g. baking it into
+  container. Or craft different entry point?
+
 # Reference
 https://docs.docker.com/reference/compose-file/services/
 https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/src/k8s_sandbox/resources/helm/agent-env/Chart.yaml
