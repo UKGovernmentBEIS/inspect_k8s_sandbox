@@ -23,7 +23,7 @@ logging.basicConfig(
 def main() -> None:
     samples = Path(__file__).parent / "samples"
     verify_sample(samples / "compose.yaml")
-    # verify_cybench_samples()
+    verify_cybench_samples()
 
 
 def verify_sample(compose_path: Path) -> None:
@@ -41,7 +41,11 @@ def verify_sample(compose_path: Path) -> None:
 def verify_cybench_samples() -> None:
     cybench = Path(__file__).parent / "samples" / "cybench"
     for cybench_sample in cybench.iterdir():
-        verify_sample(cybench_sample / "compose.yaml")
+        helm = convert_compose_to_helm_values(cybench_sample / "compose.yaml")
+        target = cybench_sample / "helm-values.yaml"
+        yaml_str = yaml.dump(helm, sort_keys=False)
+        target.write_text(yaml_str)
+        verify_helm_template(target)
 
 
 def verify_helm_template(values_path: Path) -> None:
