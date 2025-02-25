@@ -40,6 +40,9 @@ class K8sSandboxEnvironment(SandboxEnvironment):
 
     @classmethod
     def config_files(cls) -> list[str]:
+        # compose.yaml files are not automatically used; they must be explicitly
+        # specified as the values file. To reduce risk of a user accidentally using a
+        # compose.yaml file over a (e.g. misnamed) helm-values.yaml file.
         return ["values.yaml", "helm-values.yaml"]
 
     @classmethod
