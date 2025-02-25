@@ -250,3 +250,54 @@ services:
         convert_compose_to_helm_values(compose_path)
 
     assert "Unsupported duration format" in str(exc_info.value.__cause__)
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("512b", "512"),
+        ("512B", "512"),
+        ("1k", "1Ki"),
+        ("1kb", "1Ki"),
+        ("1K", "1Ki"),
+        ("1KB", "1Ki"),
+        ("2m", "2Mi"),
+        ("2mb", "2Mi"),
+        ("2M", "2Mi"),
+        ("2MB", "2Mi"),
+        ("3g", "3Gi"),
+        ("3gb", "3Gi"),
+        ("3G", "3Gi"),
+        ("3GB", "3Gi"),
+    ],
+)
+def test_can_convert_byte_value(value: str, expected: str, tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        f"""
+services:
+  my-service:
+    mem_limit: {value}
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    actual = result["services"]["my-service"]["resources"]["limits"]["memory"]
+    assert actual == expected
+
+
+def test_rejects_invalid_byte_values(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    mem_limit: 1x
+""",
+        tmp_path,
+    )
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unrecognised byte value (memory quantity)" in str(exc_info.value.__cause__)

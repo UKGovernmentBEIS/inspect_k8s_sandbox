@@ -131,7 +131,7 @@ def _convert_deploy(
                 "which takes precedence."
             )
     elif mem_limit:
-        result["resources"] = {"limits": {"memory": _convert_memory(mem_limit)}}
+        result["resources"] = {"limits": {"memory": _convert_byte_value(mem_limit)}}
     if unsupported := _get_keys(compose_deploy):
         raise ValueError(f"Unsupported keys in deploy: {unsupported}")
     return result
@@ -153,33 +153,38 @@ def _convert_resource(original: dict[str, Any]) -> dict[str, Any]:
     if cpu := original.pop("cpus", None):
         result["cpu"] = cpu
     if memory := original.pop("memory", None):
-        result["memory"] = _convert_memory(memory)
+        result["memory"] = _convert_byte_value(memory)
     if original:
         raise ValueError(f"Unrecognised keys in 'resource': {original}")
     return result
 
 
-def _convert_memory(memory: str) -> str:
-    """Convert Docker memory format (e.g., '512m', '1g') to Ki/Mi/Gi."""
+def _convert_byte_value(memory: str) -> str:
+    """Convert Docker compose byte values (memory quantity) to Ki/Mi/Gi.
+
+    https://docs.docker.com/reference/compose-file/extension/#specifying-byte-values
+    """
 
     def convert_unit(unit: str) -> str:
         match unit.lower():
             case "b":
                 return ""
-            case "k":
+            case "k" | "kb":
                 return "Ki"
-            case "m":
+            case "m" | "mb":
                 return "Mi"
-            case "g":
+            case "g" | "gb":
                 return "Gi"
             case _:
-                raise ValueError()
+                raise ValueError(
+                    f"Unrecognised byte value (memory quantity) unit: '{unit}'."
+                )
 
-    r = r"(\d+)(b|[mkg])b?"
-    m = re.match(r, memory, re.IGNORECASE)
-    if not m:
-        raise ValueError(f"Unrecognised memory value: {memory}")
-    return f"{m.group(1)}{convert_unit(m.group(2))}"
+    # Despite not being documented, Docker Compose allows uppercase units.
+    match = re.match(r"^(?P<value>\d+)(?P<unit>gb?|mb?|kb?|b)$", memory, re.IGNORECASE)
+    if not match:
+        raise ValueError(f"Unrecognised byte value (memory quantity): '{memory}'.")
+    return f"{match.group('value')}{convert_unit(match.group('unit'))}"
 
 
 def _healthcheck_to_readiness_probe(
@@ -219,7 +224,10 @@ def _user_to_security_context(user: str) -> dict[str, Any]:
 
 
 def _duration_str_to_seconds(duration: str) -> int:
-    """Convert Docker duration format (e.g., '30s', '1m') to seconds."""
+    """Convert Docker Compose duration format (e.g., '30s', '1m') to seconds.
+
+    https://docs.docker.com/reference/compose-file/extension/#specifying-durations
+    """
     match = re.match(
         r"^((?P<hours>\d+)h)?((?P<minutes>\d+)m)?((?P<seconds>\d+)s)?$", str(duration)
     )
