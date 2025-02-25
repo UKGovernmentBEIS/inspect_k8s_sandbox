@@ -249,7 +249,7 @@ services:
     with pytest.raises(ComposeConverterError) as exc_info:
         convert_compose_to_helm_values(compose_path)
 
-    assert "Unsupported duration format" in str(exc_info.value.__cause__)
+    assert "Unsupported duration format" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
@@ -300,4 +300,4 @@ services:
     with pytest.raises(ComposeConverterError) as exc_info:
         convert_compose_to_helm_values(compose_path)
 
-    assert "Unrecognised byte value (memory quantity)" in str(exc_info.value.__cause__)
+    assert "Unrecognised byte value (memory quantity)" in str(exc_info.value)
