@@ -220,15 +220,18 @@ def _user_to_security_context(user: str) -> dict[str, Any]:
 
 def _duration_str_to_seconds(duration: str) -> int:
     """Convert Docker duration format (e.g., '30s', '1m') to seconds."""
-    # TODO: Support 1m30s format, add test.
-    if duration.endswith("s"):
-        return int(duration[:-1])
-    elif duration.endswith("m"):
-        return int(duration[:-1]) * 60
-    elif duration.endswith("h"):
-        return int(duration[:-1]) * 3600
-    else:
-        raise ValueError(f"Unsupported duration format: {duration}")
+    match = re.match(
+        r"^((?P<hours>\d+)h)?((?P<minutes>\d+)m)?((?P<seconds>\d+)s)?$", str(duration)
+    )
+    if not match:
+        raise ValueError(
+            f"Unsupported duration format: '{duration}'. Only h, m, s supported e.g. "
+            "1m30s."
+        )
+    hours = int(match.group("hours") or 0)
+    minutes = int(match.group("minutes") or 0)
+    seconds = int(match.group("seconds") or 0)
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def _get_keys(dict: dict[str, Any], ignore: set[str] = set()) -> set[str]:

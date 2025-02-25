@@ -3,7 +3,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from k8s_sandbox._compose.converter import convert_compose_to_helm_values
+from k8s_sandbox._compose.converter import (
+    ComposeConverterError,
+    convert_compose_to_helm_values,
+)
 
 
 @pytest.fixture
@@ -199,3 +202,51 @@ services:
         "timeoutSeconds": 10,
         "failureThreshold": 4,
     }
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("42s", 42),
+        ("42m", 2520),
+        ("42h", 151200),
+        ("1h2m3s", 3723),
+    ],
+)
+def test_can_convert_duration_str_to_seconds(
+    value: str, expected: int, tmp_path: Path
+) -> None:
+    compose_path = tmp_compose_file(
+        f"""
+services:
+  my-service:
+    healthcheck:
+      interval: {value}
+      test: ["CMD", "curl", "-f", "http://localhost"]
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    actual = result["services"]["my-service"]["readinessProbe"]["periodSeconds"]
+    assert actual == expected
+
+
+@pytest.mark.parametrize("value", ["1", "1x", "1d", "1us", "1ns", "1s2m3h"])
+def test_rejects_invalid_durations(value: str, tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        f"""
+services:
+  my-service:
+    healthcheck:
+      interval: {value}
+      test: ["CMD", "curl", "-f", "http://localhost"]
+""",
+        tmp_path,
+    )
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported duration format" in str(exc_info.value.__cause__)
