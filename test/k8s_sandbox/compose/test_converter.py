@@ -368,3 +368,22 @@ volumes:
         convert_compose_to_helm_values(compose_path)
 
     assert "non-empty volume values is not supported" in str(exc_info.value)
+
+
+def test_converts_allow_domains(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    image: my-image
+x-inspect_k8s_sandbox:
+  allow_domains:
+    - example.com
+    - example.org
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["allowDomains"] == ["example.com", "example.org"]

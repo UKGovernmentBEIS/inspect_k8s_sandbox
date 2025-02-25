@@ -72,10 +72,10 @@ def _convert_extensions(
     extensions: dict[str, Any], compose_file: Path
 ) -> dict[str, Any]:
     result: dict[str, Any] = dict()
-    if allow_domains := extensions.pop("x-allowDomains", None):
+    if allow_domains := extensions.pop("allow_domains", None):
         if not isinstance(allow_domains, list):
             raise ComposeConverterError(
-                f"Invalid 'x-allowDomains' type: {type(allow_domains)}. Expected list. "
+                f"Invalid 'allow_domains' type: {type(allow_domains)}. Expected list. "
                 f"Compose file: '{compose_file}'."
             )
         result["allowDomains"] = allow_domains
