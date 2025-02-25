@@ -12,7 +12,7 @@ def uninstallable_release() -> Release:
     return Release(
         __file__,
         chart_path=Path("/non_existent_chart"),
-        values_source=ValuesSource.none,
+        values_source=ValuesSource.none(),
     )
 
 

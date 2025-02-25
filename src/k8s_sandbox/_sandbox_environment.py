@@ -12,8 +12,8 @@ from inspect_ai.util import (
 )
 from pydantic import BaseModel
 
+from k8s_sandbox._compose.compose import ComposeValuesSource, is_docker_compose_file
 from k8s_sandbox._helm import (
-    ComposeValuesSource,
     Release,
     StaticValuesSource,
     ValuesSource,
@@ -250,7 +250,7 @@ class _ReleaseConfig(BaseModel, frozen=True):
 
 
 def _create_values_source(release_config: _ReleaseConfig) -> ValuesSource:
-    if release_config.values and _is_docker_compose_file(release_config.values):
+    if release_config.values and is_docker_compose_file(release_config.values):
         if release_config.chart is not None:
             raise ValueError(
                 "Automatic conversion from compose.yaml to helm-values.yaml is only "
@@ -258,11 +258,6 @@ def _create_values_source(release_config: _ReleaseConfig) -> ValuesSource:
             )
         return ComposeValuesSource(release_config.values)
     return StaticValuesSource(release_config.values)
-
-
-def _is_docker_compose_file(file: Path) -> bool:
-    # Can also be `docker-compose.yaml`.
-    return file.name.endswith("compose.yaml") or file.name.endswith("compose.yml")
 
 
 def _resolve_release_config(

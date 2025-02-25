@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from k8s_sandbox._compose_adapter import convert_compose_to_helm_values
+from k8s_sandbox._compose.converter import convert_compose_to_helm_values
 
 
 @pytest.fixture

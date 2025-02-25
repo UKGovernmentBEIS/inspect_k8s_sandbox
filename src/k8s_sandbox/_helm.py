@@ -5,17 +5,14 @@ import logging
 import os
 import re
 import sys
-import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator, NoReturn, Protocol
 
-import yaml
 from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
 from shortuuid import uuid
 
-from k8s_sandbox._compose_adapter import convert_compose_to_helm_values
 from k8s_sandbox._kubernetes_api import (
     get_current_context_namespace,
     k8s_client,
@@ -52,6 +49,7 @@ class ValuesSource(Protocol):
 
     @staticmethod
     def none() -> ValuesSource:
+        """A ValuesSource which provides no values file."""
         return StaticValuesSource(None)
 
 
@@ -64,20 +62,6 @@ class StaticValuesSource(ValuesSource):
     @contextmanager
     def values_file(self) -> Generator[Path | None, None, None]:
         yield self._file
-
-
-class ComposeValuesSource(ValuesSource):
-    """A ValuesSource which converts a Docker Compose file to Helm values."""
-
-    def __init__(self, compose_file: Path) -> None:
-        self._compose_file = compose_file
-
-    @contextmanager
-    def values_file(self) -> Generator[Path | None, None, None]:
-        converted = convert_compose_to_helm_values(self._compose_file)
-        with tempfile.NamedTemporaryFile("w") as f:
-            f.write(yaml.dump(converted, sort_keys=False))
-            yield Path(f.name)
 
 
 class Release:
@@ -154,7 +138,7 @@ class Release:
         # Whilst `upgrade --install` could always be used, prefer explicitly using
         # `install` for the first attempt.
         subcommand = ["upgrade", "--install"] if upgrade else ["install"]
-        values = ["--values", str(values)] if values else []
+        values_args = ["--values", str(values)] if values else []
         result = await _run_subprocess(
             "helm",
             subcommand
@@ -174,7 +158,7 @@ class Release:
                 "--labels",
                 "inspectSandbox=true",
             ]
-            + values,
+            + values_args,
             capture_output=True,
         )
         if not result.success:

@@ -8,11 +8,20 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
-class ComposeAdapterError(Exception):
+class ComposeConverterError(Exception):
+    """An error raised when converting a Docker Compose file to Helm values."""
+
     pass
 
 
 def convert_compose_to_helm_values(compose_path: Path) -> dict[str, Any]:
+    """Convert a Docker Compose file to Helm values.
+
+    The Helm values file is suitable for the built-in Helm chart.
+
+    Returns:
+        A dictionary representing the Helm values.
+    """
     compose = yaml.safe_load(compose_path.read_text())
     helm: dict[str, Any] = dict()
     if services := compose.get("services"):
@@ -30,7 +39,7 @@ def _convert_services(compose_services: dict[str, Any]) -> dict[str, Any]:
             result[service_name] = _convert_service(service_name, service_value)
         except Exception as e:
             # Raise a new exception with additional context.
-            raise ComposeAdapterError(
+            raise ComposeConverterError(
                 f"Error converting service '{service_name}'."
             ) from e
     return result
