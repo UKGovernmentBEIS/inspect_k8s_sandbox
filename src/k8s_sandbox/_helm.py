@@ -1,15 +1,21 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
 import re
 import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, NoReturn, Protocol
+from typing import Any, Generator, NoReturn, Protocol
 
+import yaml
 from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
 from shortuuid import uuid
 
+from k8s_sandbox._compose_adapter import convert_compose_to_helm_values
 from k8s_sandbox._kubernetes_api import (
     get_current_context_namespace,
     k8s_client,
@@ -30,34 +36,59 @@ class _ResourceQuotaModifiedError(Exception):
     pass
 
 
-class ReleaseProtocol(Protocol):
-    """The interface for a Helm release."""
+class ValuesSource(Protocol):
+    """A protocol for classes which provide Helm values files.
 
-    task_name: str
-    release_name: str
+    Uses a context manager to support temporarily generating values files only when
+    needed, and ensuring they're cleaned up afterwards.
+    """
 
-    async def install(self) -> None:
+    def __init__(self, file: Path) -> None:
         pass
 
-    async def uninstall(self, quiet: bool) -> None:
+    @contextmanager
+    def values_file(self) -> Generator[Path | None, None, None]:
         pass
 
-    async def get_sandbox_pods(self) -> dict[str, Pod]:
-        pass
+    @staticmethod
+    def none() -> ValuesSource:
+        return StaticValuesSource(None)
 
 
-class Release(ReleaseProtocol):
+class StaticValuesSource(ValuesSource):
+    """A ValuesSource which uses a static file."""
+
+    def __init__(self, file: Path | None) -> None:
+        self._file = file
+
+    @contextmanager
+    def values_file(self) -> Generator[Path | None, None, None]:
+        yield self._file
+
+
+class ComposeValuesSource(ValuesSource):
+    """A ValuesSource which converts a Docker Compose file to Helm values."""
+
+    def __init__(self, compose_file: Path) -> None:
+        self._compose_file = compose_file
+
+    @contextmanager
+    def values_file(self) -> Generator[Path | None, None, None]:
+        converted = convert_compose_to_helm_values(self._compose_file)
+        with tempfile.NamedTemporaryFile("w") as f:
+            f.write(yaml.dump(converted, sort_keys=False))
+            yield Path(f.name)
+
+
+class Release:
     """A release of a Helm chart."""
 
     def __init__(
-        self,
-        task_name: str,
-        chart_path: Path | None = None,
-        values_path: Path | None = None,
+        self, task_name: str, chart_path: Path | None, values_source: ValuesSource
     ) -> None:
         self.task_name = task_name
         self._chart_path = chart_path or DEFAULT_CHART
-        self._values_path = values_path
+        self._values_source = values_source
         self._namespace = get_current_context_namespace()
         # The release name is used in pod names too, so limit it to 8 chars.
         self.release_name = self._generate_release_name()
@@ -67,24 +98,25 @@ class Release(ReleaseProtocol):
 
     async def install(self) -> None:
         async with _install_semaphore():
-            with inspect_trace_action(
-                "K8s install Helm chart",
-                chart=self._chart_path,
-                release=self.release_name,
-                values=self._values_path,
-                namespace=self._namespace,
-                task=self.task_name,
-            ):
-                attempt = 1
-                while True:
-                    try:
-                        await self._install(upgrade=attempt > 1)
-                        break
-                    except _ResourceQuotaModifiedError:
-                        if attempt >= MAX_INSTALL_ATTEMPTS:
-                            raise
-                        attempt += 1
-                        await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
+            with self._values_source.values_file() as values:
+                with inspect_trace_action(
+                    "K8s install Helm chart",
+                    chart=self._chart_path,
+                    release=self.release_name,
+                    values=values,
+                    namespace=self._namespace,
+                    task=self.task_name,
+                ):
+                    attempt = 1
+                    while True:
+                        try:
+                            await self._install(values, upgrade=attempt > 1)
+                            break
+                        except _ResourceQuotaModifiedError:
+                            if attempt >= MAX_INSTALL_ATTEMPTS:
+                                raise
+                            attempt += 1
+                            await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
 
     async def uninstall(self, quiet: bool) -> None:
         await uninstall(self.release_name, self._namespace, quiet)
@@ -118,11 +150,11 @@ class Release(ReleaseProtocol):
                 )
         return sandboxes
 
-    async def _install(self, upgrade: bool) -> None:
+    async def _install(self, values: Path | None, upgrade: bool) -> None:
         # Whilst `upgrade --install` could always be used, prefer explicitly using
         # `install` for the first attempt.
         subcommand = ["upgrade", "--install"] if upgrade else ["install"]
-        values = ["--values", str(self._values_path)] if self._values_path else []
+        values = ["--values", str(values)] if values else []
         result = await _run_subprocess(
             "helm",
             subcommand

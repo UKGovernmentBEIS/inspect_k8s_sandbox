@@ -4,12 +4,16 @@ from unittest.mock import patch
 import pytest
 from inspect_ai.util import ExecResult
 
-from k8s_sandbox._helm import Release, _run_subprocess
+from k8s_sandbox._helm import Release, ValuesSource, _run_subprocess
 
 
 @pytest.fixture
 def uninstallable_release() -> Release:
-    return Release(__file__, chart_path=Path("/non_existent_chart"))
+    return Release(
+        __file__,
+        chart_path=Path("/non_existent_chart"),
+        values_source=ValuesSource.none,
+    )
 
 
 async def test_helm_install_error(uninstallable_release: Release) -> None:

@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
 
-from k8s_sandbox._helm import ReleaseProtocol, get_all_release_names
+from k8s_sandbox._helm import Release, get_all_release_names
 from k8s_sandbox._helm import uninstall as helm_uninstall
 from k8s_sandbox._kubernetes_api import get_current_context_namespace
 
@@ -23,7 +23,7 @@ class HelmReleaseManager:
     _context_var: ContextVar[HelmReleaseManager] = ContextVar("k8s_manager_instance")
 
     def __init__(self) -> None:
-        self._installed_releases: list[ReleaseProtocol] = []
+        self._installed_releases: list[Release] = []
 
     @classmethod
     def get_instance(cls) -> HelmReleaseManager:
@@ -35,23 +35,23 @@ class HelmReleaseManager:
             cls._context_var.set(manager)
             return manager
 
-    async def install(self, release: ReleaseProtocol) -> None:
+    async def install(self, release: Release) -> None:
         """
         Installs a release and tracks it for eventual cleanup.
 
         Args:
-          release (ReleaseProtocol): The release to install and track.
+          release (Release): The release to install and track.
         """
         # Track the release regardless of the install result.
         self._installed_releases.append(release)
         await release.install()
 
-    async def uninstall(self, release: ReleaseProtocol, quiet: bool) -> None:
+    async def uninstall(self, release: Release, quiet: bool) -> None:
         """
         Uninstalls a release managed by this instance.
 
         Args:
-          release (ReleaseProtocol): The release to uninstall.
+          release (Release): The release to uninstall.
           quiet (bool): If True, suppress output to the console.
         """
         await release.uninstall(quiet)
