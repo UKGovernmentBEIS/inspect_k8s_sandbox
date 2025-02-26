@@ -14,7 +14,12 @@ from k8s_sandbox._kubernetes_api import (
     get_current_context_namespace,
     k8s_client,
 )
-from k8s_sandbox._logger import format_log_message, inspect_trace_action, log_trace
+from k8s_sandbox._logger import (
+    format_log_message,
+    inspect_trace_action,
+    log_trace,
+    log_warning,
+)
 from k8s_sandbox._pod import Pod
 
 DEFAULT_CHART = Path(__file__).parent / "resources" / "helm" / "agent-env"
@@ -24,9 +29,14 @@ INSTALL_RETRY_DELAY_SECONDS = 5
 
 
 logger = logging.getLogger(__name__)
+resource_quota_exceeded_counter = 0
 
 
 class _ResourceQuotaModifiedError(Exception):
+    pass
+
+
+class _ResourceQuotaExceededError(Exception):
     pass
 
 
@@ -60,15 +70,17 @@ class Release:
                 task=self.task_name,
             ):
                 attempt = 1
+                retry_delay = INSTALL_RETRY_DELAY_SECONDS
                 while True:
                     try:
                         await self._install(upgrade=attempt > 1)
                         break
-                    except _ResourceQuotaModifiedError:
+                    except (_ResourceQuotaModifiedError, _ResourceQuotaExceededError):
                         if attempt >= MAX_INSTALL_ATTEMPTS:
                             raise
                         attempt += 1
-                        await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2
 
     async def uninstall(self, quiet: bool) -> None:
         await uninstall(self.release_name, self._namespace, quiet)
@@ -147,6 +159,26 @@ class Release:
                 error=result.stderr,
             )
             raise _ResourceQuotaModifiedError(result.stderr)
+        if match := re.search(
+            r"forbidden: exceeded quota: .*requested:.*used:.*limited:.*",
+            result.stderr,
+        ):
+            log_trace(
+                "exceeded resource quota error whilst installing helm chart.",
+                release=self.release_name,
+                error=result.stderr,
+            )
+            global resource_quota_exceeded_counter
+            if resource_quota_exceeded_counter == 0:
+                # Log only once.
+                log_warning(
+                    "K8s resource quota exceeded. Please uninstall any unused Helm "
+                    "releases or reduce the level of concurrency in your Inspect eval. "
+                    + match.group()
+                )
+            resource_quota_exceeded_counter += 1
+            # status("K8s resource quota", f"{resource_quota_exceeded_counter:,}")
+            raise _ResourceQuotaExceededError(result.stderr)
         _raise_runtime_error(
             "Helm install failed.", release=self.release_name, result=result
         )
