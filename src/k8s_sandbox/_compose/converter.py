@@ -36,16 +36,16 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
     result["services"] = _convert_services(services, compose_file)
     if volumes := compose.pop("volumes", None):
         result["volumes"] = _convert_volumes(volumes, compose_file)
-    # The 'x-inspect_k8s_sandbox' element is used to add additional configuration to
+    # The 'x-inspect_k8s_sandbox' key is used to add additional configuration to
     # Docker Compose files for use in Helm values.
     if extensions := compose.pop("x-inspect_k8s_sandbox", None):
         result.update(_convert_extensions(extensions, compose_file))
     # Ignore the version key.
     compose.pop("version", None)
-    if unsupported := set(compose):
+    if compose:
         raise ComposeConverterError(
-            f"Unsupported key(s) in Docker Compose file: {unsupported}. Compose file: "
-            f"'{compose_file}'."
+            f"Unsupported top-level key(s) in Docker Compose file: {set(compose)}. "
+            f"Compose file: '{compose_file}'."
         )
     return result
 
@@ -79,17 +79,17 @@ def _convert_extensions(
                 f"Compose file: '{compose_file}'."
             )
         result["allowDomains"] = allow_domains
-    if unsupported := set(extensions):
+    if extensions:
         raise ComposeConverterError(
-            f"Unsupported key(s) in 'x-inspect_k8s_sandbox': {unsupported}. Compose "
-            f"file: '{compose_file}'."
+            f"Unsupported key(s) in 'x-inspect_k8s_sandbox': {set(extensions)}. "
+            f"Compose file: '{compose_file}'."
         )
     return result
 
 
 class ServiceConverter:
     """
-    Converts a Docker Compose service to a Helm service.
+    Converts a Docker Compose service to a service for the built-in Helm chart.
 
     Implemented as a class to facilitate flowing context information to error and
     logging messages such as the service name and originating Compose file.
@@ -103,7 +103,7 @@ class ServiceConverter:
     def convert_service(self) -> dict[str, Any]:
         src = self._src_service
         result: dict[str, Any] = dict()
-        # Ordered as per Helm chart values.yaml documentation.
+        # Ordered as per built-in Helm chart values.yaml documentation.
         _transform(src, "image", result, "image")
         _transform(src, "entrypoint", result, "command", _str_to_list)
         _transform(src, "command", result, "args", _str_to_list)
@@ -119,8 +119,8 @@ class ServiceConverter:
             "readinessProbe",
             self._healthcheck_to_readiness_probe,
         )
-        mem_limit = src.pop("mem_limit", None)
         # Memory limits can be specified in either deploy.resources or mem_limit.
+        mem_limit = src.pop("mem_limit", None)
         result.update(self._convert_deploy(src.pop("deploy", {}), mem_limit))
         _transform(
             src, "user", result, "securityContext", self._user_to_security_context
@@ -134,10 +134,9 @@ class ServiceConverter:
         if src.pop("init", None) is not None:
             # Warn for init because it could materially affect the service.
             logger.warning(f"Ignoring 'init' key: not supported in K8s. {self.context}")
-        # Raise an error for unsupported keys.
-        if unsupported := set(src):
+        if src:
             raise ComposeConverterError(
-                f"Unsupported service key(s): {unsupported}. {self.context}"
+                f"Unsupported service key(s): {set(src)}. {self.context}"
             )
         return result
 
@@ -183,9 +182,9 @@ class ServiceConverter:
             result["resources"] = {
                 "limits": {"memory": self._convert_byte_value(mem_limit)}
             }
-        if unsupported := set(src):
+        if src:
             raise ComposeConverterError(
-                f"Unsupported key(s) in 'deploy': {unsupported}. {self.context}"
+                f"Unsupported key(s) in 'deploy': {set(src)}. {self.context}"
             )
         return result
 
@@ -264,9 +263,9 @@ class ServiceConverter:
                 f"Ignoring 'start_interval' in 'healthcheck': not supported in K8s. "
                 f"{self.context}"
             )
-        if unsupported := set(src):
+        if src:
             raise ComposeConverterError(
-                f"Unsupported key(s) in 'healthcheck': {unsupported}. {self.context}"
+                f"Unsupported key(s) in 'healthcheck': {set(src)}. {self.context}"
             )
         return result
 
