@@ -183,18 +183,18 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
                 ],
                 capture_output=True,
             )
-            if not quiet:
-                sys.stdout.write(result.stdout)
-                sys.stderr.write(result.stderr)
             # A helm uninstall failure with "release not found" implies that the release
             # was never successfully installed or has already been uninstalled.
             # When a helm release fails to install (or the user cancels the eval), this
             # uninstall function will still be called, so these errors are common and
             # result in error desensitisation.
-            if (
-                not result.success
-                and "release: not found" not in result.stderr.casefold()
-            ):
+            is_release_not_found_error = (
+                "release: not found" in result.stderr.casefold()
+            )
+            if not quiet and not is_release_not_found_error:
+                sys.stdout.write(result.stdout)
+                sys.stderr.write(result.stderr)
+            if not result.success and not is_release_not_found_error:
                 _raise_runtime_error(
                     "Helm uninstall failed.",
                     release=release_name,
