@@ -112,6 +112,9 @@ def test_annotations(chart_dir: Path, test_resources_dir: Path) -> None:
         assert stateful_set["metadata"]["annotations"]["myValue"] == attr_value
         template = stateful_set["spec"]["template"]
         assert template["metadata"]["annotations"]["myValue"] == attr_value
+        assert (
+            template["metadata"]["annotations"]["karpenter.sh/do-not-disrupt"] == "true"
+        )
     for network_policy in _get_documents(documents, "NetworkPolicy"):
         assert network_policy["metadata"]["annotations"]["myValue"] == attr_value
     for pvc in _get_documents(documents, "PersistentVolumeClaim"):
