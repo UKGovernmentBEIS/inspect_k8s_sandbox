@@ -177,7 +177,9 @@ class Release:
                     + match.group()
                 )
             resource_quota_exceeded_counter += 1
-            # status("K8s resource quota", f"{resource_quota_exceeded_counter:,}")
+            # display_counter(
+            #     "K8s resource quota", f"{resource_quota_exceeded_counter:,}"
+            # )
             raise _ResourceQuotaExceededError(result.stderr)
         _raise_runtime_error(
             "Helm install failed.", release=self.release_name, result=result
