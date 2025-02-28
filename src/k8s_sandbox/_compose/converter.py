@@ -197,7 +197,7 @@ class ServiceConverter:
         if test[0] == "CMD":
             return {"command": test[1:]}
         if test[0] == "CMD-SHELL":
-            return {"command": ["/bin/sh", "-c", test[1]]}
+            return {"command": ["sh", "-c", test[1]]}
         raise ComposeConverterError(
             f"Unsupported 'healthcheck.test': '{test}'. Only CMD and CMD-SHELL "
             f"are supported. {self.context}"

@@ -43,6 +43,21 @@ services:
     convert_compose_to_helm_values(compose_path)
 
 
+def test_ensures_services_key_exists(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+volumes:
+  my-volume:
+""",
+        tmp_path,
+    )
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "The 'services' key is required" in str(exc_info.value)
+
+
 def test_converts_entrypoint(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
@@ -245,15 +260,13 @@ services:
     assert "Invalid 'environment' format" in str(exc_info.value)
 
 
-def test_converts_volumes(tmp_path: Path) -> None:
+def test_converts_service_volumes(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
 services:
   my-service:
     volumes:
       - /my-volume:/mnt/volume
-volumes:
-  my-volume:
 """,
         tmp_path,
     )
@@ -261,26 +274,6 @@ volumes:
     result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["volumes"] == ["/my-volume:/mnt/volume"]
-    assert result["volumes"]["my-volume"] is None
-
-
-def test_rejects_non_empty_volumes(tmp_path: Path) -> None:
-    compose_path = tmp_compose_file(
-        """
-services:
-  my-service:
-    image: my-image
-volumes:
-  my-volume:
-    driver: local
-""",
-        tmp_path,
-    )
-
-    with pytest.raises(ComposeConverterError) as exc_info:
-        convert_compose_to_helm_values(compose_path)
-
-    assert "non-empty volume values is not supported" in str(exc_info.value)
 
 
 def test_converts_healthcheck_to_readiness_probe(tmp_path: Path) -> None:
@@ -308,6 +301,59 @@ services:
         "timeoutSeconds": 10,
         "failureThreshold": 4,
     }
+
+
+def test_converts_healthcheck_to_readiness_probe_cmd_shell(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost"]
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["readinessProbe"] == {
+        "exec": {"command": ["sh", "-c", "curl -f http://localhost"]},
+    }
+
+
+def test_rejects_invalid_healthcheck_test(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    healthcheck:
+      test: ["INVALID", "curl -f http://localhost"]
+""",
+        tmp_path,
+    )
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported 'healthcheck.test'" in str(exc_info.value)
+
+
+def test_rejects_invalid_healthcheck_key(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost"]
+      invalid: 42
+""",
+        tmp_path,
+    )
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported key(s) in 'healthcheck'" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
@@ -461,11 +507,32 @@ services:
     assert "Unrecognised byte value (memory quantity)" in str(exc_info.value)
 
 
-def test_ensures_services_key_exists(tmp_path: Path) -> None:
+def test_converts_top_level_volumes(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
+services:
+  my-service:
+    image: my-image
 volumes:
   my-volume:
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["volumes"]["my-volume"] is None
+
+
+def test_rejects_non_empty_top_level_volumes(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    image: my-image
+volumes:
+  my-volume:
+    driver: local
 """,
         tmp_path,
     )
@@ -473,7 +540,7 @@ volumes:
     with pytest.raises(ComposeConverterError) as exc_info:
         convert_compose_to_helm_values(compose_path)
 
-    assert "The 'services' key is required" in str(exc_info.value)
+    assert "non-empty volume values is not supported" in str(exc_info.value)
 
 
 def test_converts_allow_domains(tmp_path: Path) -> None:
