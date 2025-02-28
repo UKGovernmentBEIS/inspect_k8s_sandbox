@@ -14,6 +14,21 @@ def resources() -> Path:
     return Path(__file__).parent / "resources" / "basic"
 
 
+def tmp_compose_file(contents: str, tmp_path: Path) -> Path:
+    compose_path = tmp_path / "compose.yaml"
+    compose_path.write_text(contents)
+    return compose_path
+
+
+def test_converter_on_real_file(resources: Path) -> None:
+    expected = (resources / "helm-values.yaml").read_text()
+
+    result = convert_compose_to_helm_values(resources / "compose.yaml")
+    actual = yaml.dump(result, sort_keys=False)
+
+    assert actual == expected
+
+
 def test_ignores_version(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
@@ -26,21 +41,6 @@ services:
     )
 
     convert_compose_to_helm_values(compose_path)
-
-
-def test_converter(resources: Path) -> None:
-    expected = (resources / "helm-values.yaml").read_text()
-
-    result = convert_compose_to_helm_values(resources / "compose.yaml")
-    actual = yaml.dump(result, sort_keys=False)
-
-    assert actual == expected
-
-
-def tmp_compose_file(contents: str, tmp_path: Path) -> Path:
-    compose_path = tmp_path / "compose.yaml"
-    compose_path.write_text(contents)
-    return compose_path
 
 
 def test_converts_mem_limit(tmp_path) -> None:

@@ -166,6 +166,43 @@ class ServiceConverter:
             )
         return result
 
+    def _healthcheck_to_readiness_probe(self, src: dict[str, Any]) -> dict[str, Any]:
+        """Assume that healthchecks are to be mapped to readiness probes."""
+        result: dict[str, Any] = {}
+        # Allow KeyError to be raised if test is not present.
+        result["exec"] = self._convert_healthcheck_test_to_exec(src.pop("test"))
+        _transform(
+            src,
+            "start_period",
+            result,
+            "initialDelaySeconds",
+            self._duration_to_seconds,
+        )
+        _transform(src, "interval", result, "periodSeconds", self._duration_to_seconds)
+        _transform(src, "timeout", result, "timeoutSeconds", self._duration_to_seconds)
+        # N retries is equivalent to a failureThreshold of N+1.
+        _transform(src, "retries", result, "failureThreshold", lambda x: x + 1)
+        if src.pop("start_interval", None):
+            logger.info(
+                f"Ignoring 'start_interval' in 'healthcheck': not supported in K8s. "
+                f"{self.context}"
+            )
+        if src:
+            raise ComposeConverterError(
+                f"Unsupported key(s) in 'healthcheck': {set(src)}. {self.context}"
+            )
+        return result
+
+    def _convert_healthcheck_test_to_exec(self, test: list[str]) -> dict[str, Any]:
+        if test[0] == "CMD":
+            return {"command": test[1:]}
+        if test[0] == "CMD-SHELL":
+            return {"command": ["/bin/sh", "-c", test[1]]}
+        raise ComposeConverterError(
+            f"Unsupported 'healthcheck.test': '{test}'. Only CMD and CMD-SHELL "
+            f"are supported. {self.context}"
+        )
+
     def _convert_deploy(
         self, src: dict[str, Any], mem_limit: str | None
     ) -> dict[str, Any]:
@@ -241,43 +278,6 @@ class ServiceConverter:
                 f"Unrecognised byte value (memory quantity): '{value}'. {self.context}"
             )
         return f"{match.group('value')}{convert_unit(match.group('unit'))}"
-
-    def _healthcheck_to_readiness_probe(self, src: dict[str, Any]) -> dict[str, Any]:
-        """Assume that healthchecks are to be mapped to readiness probes."""
-        result: dict[str, Any] = {}
-        # Allow KeyError to be raised if test is not present.
-        result["exec"] = self._convert_healthcheck_test_to_exec(src.pop("test"))
-        _transform(
-            src,
-            "start_period",
-            result,
-            "initialDelaySeconds",
-            self._duration_to_seconds,
-        )
-        _transform(src, "interval", result, "periodSeconds", self._duration_to_seconds)
-        _transform(src, "timeout", result, "timeoutSeconds", self._duration_to_seconds)
-        # N retries is equivalent to a failureThreshold of N+1.
-        _transform(src, "retries", result, "failureThreshold", lambda x: x + 1)
-        if src.pop("start_interval", None):
-            logger.info(
-                f"Ignoring 'start_interval' in 'healthcheck': not supported in K8s. "
-                f"{self.context}"
-            )
-        if src:
-            raise ComposeConverterError(
-                f"Unsupported key(s) in 'healthcheck': {set(src)}. {self.context}"
-            )
-        return result
-
-    def _convert_healthcheck_test_to_exec(self, test: list[str]) -> dict[str, Any]:
-        if test[0] == "CMD":
-            return {"command": test[1:]}
-        if test[0] == "CMD-SHELL":
-            return {"command": ["/bin/sh", "-c", test[1]]}
-        raise ComposeConverterError(
-            f"Unsupported 'healthcheck.test': '{test}'. Only CMD and CMD-SHELL "
-            f"are supported. {self.context}"
-        )
 
     def _user_to_security_context(self, user: str) -> dict[str, Any]:
         if isinstance(user, str) and ":" in user:

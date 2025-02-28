@@ -263,6 +263,8 @@ def _create_values_source(release_config: _ReleaseConfig) -> ValuesSource:
 def _resolve_release_config(
     config: SandboxEnvironmentConfigType | None,
 ) -> _ReleaseConfig:
+    """Consolidates the many options configuration methods into a _ReleaseConfig."""
+
     def validate_values_file(values: Path | None) -> None:
         if values is not None and not values.is_file():
             raise FileNotFoundError(f"Helm values file not found: '{values}'.")
