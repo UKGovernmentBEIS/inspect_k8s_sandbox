@@ -43,58 +43,6 @@ services:
     convert_compose_to_helm_values(compose_path)
 
 
-def test_converts_mem_limit(tmp_path) -> None:
-    compose_path = tmp_compose_file(
-        """
-services:
-  my-service:
-    mem_limit: 1G
-""",
-        tmp_path,
-    )
-
-    result = convert_compose_to_helm_values(compose_path)
-
-    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
-
-
-def test_converts_deploy(tmp_path: Path) -> None:
-    compose_path = tmp_compose_file(
-        """
-services:
-  my-service:
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-""",
-        tmp_path,
-    )
-
-    result = convert_compose_to_helm_values(compose_path)
-
-    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
-
-
-def test_ignores_mem_limit_when_deploy_present(tmp_path: Path) -> None:
-    compose_path = tmp_compose_file(
-        """
-services:
-  my-service:
-    mem_limit: 1G
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-    """,
-        tmp_path,
-    )
-
-    result = convert_compose_to_helm_values(compose_path)
-
-    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "2Gi"
-
-
 def test_converts_entrypoint(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
@@ -189,6 +137,147 @@ services:
     result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["args"] == ["foo", "bar", "baz"]
+
+
+def test_converts_working_dir(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    working_dir: /app
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["workingDir"] == "/app"
+
+
+def test_sets_dns_record_true_for_every_service(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+    default:
+      image: my-image
+    victim:
+      image: my-image
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert all(service["dnsRecord"] is True for service in result["services"].values())
+
+
+def test_converts_environment_dict(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    environment:
+      FOO: bar
+      BAZ: 42
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["env"] == [
+        {"name": "FOO", "value": "bar"},
+        {"name": "BAZ", "value": "42"},
+    ]
+
+
+def test_converts_environment_list(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    environment:
+      - FOO=bar
+      - BAZ=42
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["env"] == [
+        {"name": "FOO", "value": "bar"},
+        {"name": "BAZ", "value": "42"},
+    ]
+
+
+def test_rejects_invalid_environment_type(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    environment:
+      42
+""",
+        tmp_path,
+    )
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Invalid 'environment' format" in str(exc_info.value)
+
+
+def test_converts_mem_limit(tmp_path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    mem_limit: 1G
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
+
+
+def test_converts_deploy(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
+
+
+def test_ignores_mem_limit_when_deploy_present(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    mem_limit: 1G
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    """,
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "2Gi"
 
 
 def test_converts_healthcheck_to_readiness_probe(tmp_path: Path) -> None:
