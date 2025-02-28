@@ -187,7 +187,7 @@ services:
 
     assert result["services"]["my-service"]["env"] == [
         {"name": "FOO", "value": "bar"},
-        {"name": "BAZ", "value": "42"},
+        {"name": "BAZ", "value": 42},
     ]
 
 
@@ -211,6 +211,23 @@ services:
     ]
 
 
+def test_rejects_invalid_environment_list(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    environment:
+      - FOO
+""",
+        tmp_path,
+    )
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Invalid environment variable: 'FOO'" in str(exc_info.value)
+
+
 def test_rejects_invalid_environment_type(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
@@ -228,56 +245,42 @@ services:
     assert "Invalid 'environment' format" in str(exc_info.value)
 
 
-def test_converts_mem_limit(tmp_path) -> None:
+def test_converts_volumes(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
 services:
   my-service:
-    mem_limit: 1G
+    volumes:
+      - /my-volume:/mnt/volume
+volumes:
+  my-volume:
 """,
         tmp_path,
     )
 
     result = convert_compose_to_helm_values(compose_path)
 
-    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
+    assert result["services"]["my-service"]["volumes"] == ["/my-volume:/mnt/volume"]
+    assert result["volumes"]["my-volume"] is None
 
 
-def test_converts_deploy(tmp_path: Path) -> None:
+def test_rejects_non_empty_volumes(tmp_path: Path) -> None:
     compose_path = tmp_compose_file(
         """
 services:
   my-service:
-    deploy:
-      resources:
-        limits:
-          memory: 1G
+    image: my-image
+volumes:
+  my-volume:
+    driver: local
 """,
         tmp_path,
     )
 
-    result = convert_compose_to_helm_values(compose_path)
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
 
-    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
-
-
-def test_ignores_mem_limit_when_deploy_present(tmp_path: Path) -> None:
-    compose_path = tmp_compose_file(
-        """
-services:
-  my-service:
-    mem_limit: 1G
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-    """,
-        tmp_path,
-    )
-
-    result = convert_compose_to_helm_values(compose_path)
-
-    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "2Gi"
+    assert "non-empty volume values is not supported" in str(exc_info.value)
 
 
 def test_converts_healthcheck_to_readiness_probe(tmp_path: Path) -> None:
@@ -355,6 +358,58 @@ services:
     assert "Unsupported duration format" in str(exc_info.value)
 
 
+def test_converts_mem_limit(tmp_path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    mem_limit: 1G
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
+
+
+def test_converts_deploy(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+""",
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
+
+
+def test_ignores_mem_limit_when_deploy_present(tmp_path: Path) -> None:
+    compose_path = tmp_compose_file(
+        """
+services:
+  my-service:
+    mem_limit: 1G
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    """,
+        tmp_path,
+    )
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "2Gi"
+
+
 @pytest.mark.parametrize(
     "value,expected",
     [
@@ -419,44 +474,6 @@ volumes:
         convert_compose_to_helm_values(compose_path)
 
     assert "The 'services' key is required" in str(exc_info.value)
-
-
-def test_converts_volumes(tmp_path: Path) -> None:
-    compose_path = tmp_compose_file(
-        """
-services:
-  my-service:
-    volumes:
-      - /my-volume:/mnt/volume
-volumes:
-  my-volume:
-""",
-        tmp_path,
-    )
-
-    result = convert_compose_to_helm_values(compose_path)
-
-    assert result["services"]["my-service"]["volumes"] == ["/my-volume:/mnt/volume"]
-    assert result["volumes"]["my-volume"] is None
-
-
-def test_rejects_non_empty_volumes(tmp_path: Path) -> None:
-    compose_path = tmp_compose_file(
-        """
-services:
-  my-service:
-    image: my-image
-volumes:
-  my-volume:
-    driver: local
-""",
-        tmp_path,
-    )
-
-    with pytest.raises(ComposeConverterError) as exc_info:
-        convert_compose_to_helm_values(compose_path)
-
-    assert "non-empty volume values is not supported" in str(exc_info.value)
 
 
 def test_converts_allow_domains(tmp_path: Path) -> None:
