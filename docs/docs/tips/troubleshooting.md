@@ -29,8 +29,9 @@ or scaling up the relevant cluster node group.
 
 Try installing the chart again (this can also be [done
 manually](../helm/built-in-chart.md#manual-chart-install)) and check the Pod statuses
-and events using a tool like K9s to get a definitive answer as to the underlying
-problem. Use the Helm release name (will be in error message) to filter the Pods.
+and events using a tool like kubectl or K9s to get a definitive answer as to the
+underlying problem. Use the Helm release name (will be in error message) to filter the
+Pods.
 
 ## I'm seeing "Helm uninstall failed" errors
 
