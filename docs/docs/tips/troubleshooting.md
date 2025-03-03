@@ -28,9 +28,11 @@ filter the Pods.
 
 ## I'm seeing "Helm uninstall failed" errors
 
-These are likely because the Helm chart was never installed. This typically happens if
-you cancel an eval, or an eval fails before a certain sample's Helm chart was installed
-(including if the chart installation failed).
+The `k8s_sandbox` package ignores "release not found" errors when uninstalling Helm
+releases because they are expected when the Helm release was not successfully installed
+(including when the user cancelled the eval).
+
+Other uninstall failures (e.g. "failed to delete release") will result in an error.
 
 Check to see if any Helm releases were left behind:
 
@@ -43,6 +45,9 @@ And if you wish to uninstall them:
 ```sh
 helm uninstall <release-name>
 ```
+
+If you wish to bulk uninstall all Inspect Helm charts, see the [cleanup
+command](cleanup.md).
 
 ## I'm seeing "Handshake status 404 Not Found" errors from Pod operations
 
