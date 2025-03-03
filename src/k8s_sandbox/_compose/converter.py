@@ -279,11 +279,26 @@ class ServiceConverter:
             )
         return f"{match.group('value')}{convert_unit(match.group('unit'))}"
 
-    def _user_to_security_context(self, user: str) -> dict[str, Any]:
-        if isinstance(user, str) and ":" in user:
-            uid, gid = user.split(":", maxsplit=1)
-            return {"runAsUser": int(uid), "runAsGroup": int(gid)}
-        return {"runAsUser": int(user)}
+    def _user_to_security_context(self, user: str | int) -> dict[str, Any]:
+        def parse_int(value: str) -> int:
+            try:
+                return int(value)
+            except ValueError:
+                raise ComposeConverterError(
+                    f"Invalid 'user' value: '{value}'. Expected int. {self.context}"
+                )
+
+        if isinstance(user, int):
+            return {"runAsUser": user}
+        if isinstance(user, str):
+            if ":" in user:
+                uid, gid = user.split(":", maxsplit=1)
+                return {"runAsUser": parse_int(uid), "runAsGroup": parse_int(gid)}
+            return {"runAsUser": parse_int(user)}
+        raise ComposeConverterError(
+            f"Invalid 'user' type: {type(user)} with value '{user}'. Expected int or "
+            f"str. {self.context}"
+        )
 
     def _duration_to_seconds(self, value: str) -> int:
         """Convert Docker Compose duration format (e.g., '30s', '1m') to seconds.
