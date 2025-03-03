@@ -18,7 +18,7 @@ from k8s_sandbox._logger import format_log_message, inspect_trace_action, log_tr
 from k8s_sandbox._pod import Pod
 
 DEFAULT_CHART = Path(__file__).parent / "resources" / "helm" / "agent-env"
-DEFAULT_TIMEOUT = 300
+DEFAULT_TIMEOUT = 600  # 10 minutes
 MAX_INSTALL_ATTEMPTS = 3
 INSTALL_RETRY_DELAY_SECONDS = 5
 INSPECT_HELM_TIMEOUT = "INSPECT_HELM_TIMEOUT"
