@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- For "helm install timeout" errors, add link to docs within and include instructions on increasing timeout within the error message.
 - Ignore "release not found" errors when uninstalling Helm charts (expected when helm release was not successfully installed).
 - Prevent DNS exfiltration attacks by limiting which domains can be looked up (when using the built-in Helm chart).
 - If a namespace is not includes in the kubeconfig context, default to a namespace named "default".

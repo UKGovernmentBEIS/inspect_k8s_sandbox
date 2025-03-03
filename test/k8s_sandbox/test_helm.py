@@ -6,7 +6,12 @@ import pytest
 from inspect_ai.util import ExecResult
 from pytest import LogCaptureFixture
 
-from k8s_sandbox._helm import Release, _run_subprocess, uninstall
+from k8s_sandbox._helm import (
+    INSPECT_HELM_TIMEOUT,
+    Release,
+    _run_subprocess,
+    uninstall,
+)
 
 
 @pytest.fixture
@@ -79,7 +84,19 @@ async def test_helm_resourcequota_retries(uninstallable_release: Release) -> Non
 async def test_invalid_helm_timeout(
     uninstallable_release: Release, value: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("INSPECT_HELM_TIMEOUT", value)
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, value)
 
     with pytest.raises(ValueError):
         await uninstallable_release.install()
+
+
+async def test_helm_install_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await Release(__file__).install()
+
+    # Verify that we detect the install timeout and add our own message.
+    assert "The configured timeout value was 1s. Please see the docs" in str(
+        excinfo.value
+    )
