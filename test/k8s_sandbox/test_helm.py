@@ -1,10 +1,17 @@
+import logging
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from inspect_ai.util import ExecResult
+from pytest import LogCaptureFixture
 
-from k8s_sandbox._helm import INSPECT_HELM_TIMEOUT, Release, _run_subprocess
+from k8s_sandbox._helm import (
+    INSPECT_HELM_TIMEOUT,
+    Release,
+    _run_subprocess,
+    uninstall,
+)
 
 
 @pytest.fixture
@@ -12,13 +19,44 @@ def uninstallable_release() -> Release:
     return Release(__file__, chart_path=Path("/non_existent_chart"))
 
 
-async def test_helm_install_error(uninstallable_release: Release) -> None:
+@pytest.fixture
+def log_err(caplog: LogCaptureFixture) -> LogCaptureFixture:
+    # Note: this will prevent lower level messages from being shown in pytest output.
+    caplog.set_level(logging.ERROR)
+    return caplog
+
+
+async def test_helm_install_error(
+    uninstallable_release: Release, log_err: LogCaptureFixture
+) -> None:
     with patch("k8s_sandbox._helm._run_subprocess", wraps=_run_subprocess) as spy:
         with pytest.raises(RuntimeError) as excinfo:
             await uninstallable_release.install()
 
     assert spy.call_count == 1
     assert "not found" in str(excinfo.value)
+    assert "not found" in log_err.text
+
+
+async def test_helm_uninstall_does_not_error_for_release_not_found(
+    log_err: LogCaptureFixture,
+) -> None:
+    release = Release(__file__)
+
+    # Note: we haven't called install() on release.
+    await release.uninstall(quiet=False)
+
+    assert log_err.text == ""
+
+
+async def test_helm_uninstall_errors_for_other_errors(
+    log_err: LogCaptureFixture,
+) -> None:
+    with pytest.raises(RuntimeError) as excinfo:
+        await uninstall("my invalid release name!", "fake-namespace", quiet=False)
+
+    assert "Release name is invalid" in log_err.text
+    assert "Release name is invalid" in str(excinfo.value)
 
 
 async def test_helm_resourcequota_retries(uninstallable_release: Release) -> None:
