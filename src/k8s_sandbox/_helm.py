@@ -21,7 +21,11 @@ DEFAULT_CHART = Path(__file__).parent / "resources" / "helm" / "agent-env"
 DEFAULT_TIMEOUT = 600  # 10 minutes
 MAX_INSTALL_ATTEMPTS = 3
 INSTALL_RETRY_DELAY_SECONDS = 5
-
+INSPECT_HELM_TIMEOUT = "INSPECT_HELM_TIMEOUT"
+HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
+    "https://k8s-sandbox.ai-safety-institute.org.uk/tips/troubleshooting/"
+    "#helm-context-deadline-exceeded"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +151,16 @@ class Release:
                 error=result.stderr,
             )
             raise _ResourceQuotaModifiedError(result.stderr)
+        if re.search(r"INSTALLATION FAILED: context deadline exceeded", result.stderr):
+            _raise_runtime_error(
+                f"Helm install timed out (context deadline exceeded). The configured "
+                f"timeout value was {_get_timeout()}s. Please see the docs for why "
+                f"this might occur: {HELM_CONTEXT_DEADLINE_EXCEEDED_URL}. Also "
+                f"consider increasing the timeout by setting the "
+                f"{INSPECT_HELM_TIMEOUT} environment variable.",
+                release=self.release_name,
+                result=result,
+            )
         _raise_runtime_error(
             "Helm install failed.", release=self.release_name, result=result
         )
@@ -158,12 +172,28 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
 
     The number of concurrent uninstall operations is limited by a semaphore.
 
+    "Release not found" errors are ignored.
+
     Args:
         release_name: The name of the Helm release to uninstall (e.g. abcdefgh).
         namespace: The Kubernetes namespace in which the release is installed.
         quiet: If False, allow the output of the `helm uninstall` command to be written
           to this process's stdout/stderr. If True, suppress the output.
     """
+
+    def _is_release_not_found_error(stderr: str) -> bool:
+        # The consequence of a false positive is to discard a useful error message, so
+        # err on the side of strictness.
+        return (
+            re.match(
+                rf"^Error: uninstall: Release not loaded: {release_name}: release: not "
+                "found$",
+                stderr,
+                re.IGNORECASE,
+            )
+            is not None
+        )
+
     async with _uninstall_semaphore():
         with inspect_trace_action(
             "K8s uninstall Helm chart", release=release_name, namespace=namespace
@@ -181,14 +211,21 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
                 ],
                 capture_output=True,
             )
-            if not quiet:
+            # A helm uninstall failure with "release not found" implies that the release
+            # was never successfully installed or has already been uninstalled.
+            # When a helm release fails to install (or the user cancels the eval), this
+            # uninstall function will still be called, so these errors are common and
+            # result in error desensitisation.
+            is_release_not_found_error = _is_release_not_found_error(result.stderr)
+            if not quiet and not is_release_not_found_error:
                 sys.stdout.write(result.stdout)
                 sys.stderr.write(result.stderr)
-            if not result.success:
+            if not result.success and not is_release_not_found_error:
                 _raise_runtime_error(
                     "Helm uninstall failed.",
                     release=release_name,
                     namespace=namespace,
+                    returncode=result.returncode,
                     stdout=result.stdout,
                     stderr=result.stderr,
                 )
@@ -242,15 +279,10 @@ async def _run_subprocess(
 
 
 def _get_timeout() -> int:
-    if user_configured_timeout := os.environ.get("INSPECT_HELM_TIMEOUT"):
-        timeout_int = int(user_configured_timeout)
-        if timeout_int <= 0:
-            raise ValueError(
-                "INSPECT_HELM_TIMEOUT must be a positive int: "
-                f"{user_configured_timeout}"
-            )
-        return timeout_int
-    return DEFAULT_TIMEOUT
+    timeout = _get_environ_int(INSPECT_HELM_TIMEOUT, DEFAULT_TIMEOUT)
+    if timeout <= 0:
+        raise ValueError(f"{INSPECT_HELM_TIMEOUT} must be a positive int: '{timeout}'.")
+    return timeout
 
 
 def _install_semaphore() -> asyncio.Semaphore:
@@ -272,5 +304,7 @@ def _uninstall_semaphore() -> asyncio.Semaphore:
 def _get_environ_int(name: str, default: int) -> int:
     try:
         return int(os.environ[name])
-    except (KeyError, ValueError):
+    except KeyError:
         return default
+    except ValueError as e:
+        raise ValueError(f"{name} must be an int: '{os.environ[name]}'.") from e
