@@ -186,7 +186,8 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
         # err on the side of strictness.
         return (
             re.match(
-                r"^Error: uninstall: Release not loaded: [a-z-]+: release: not found$",
+                rf"^Error: uninstall: Release not loaded: {release_name}: release: not "
+                "found$",
                 stderr,
                 re.IGNORECASE,
             )
