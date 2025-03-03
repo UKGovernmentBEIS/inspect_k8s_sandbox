@@ -9,22 +9,28 @@ A good starting point to many issues is to view the `TRACE`-level logs written b
 Inspect. See the [`TRACE` log level
 section](debugging-k8s-sandboxes.md#trace-log-level).
 
-## I'm seeing "Helm install: context deadline exceeded" errors
+## I'm seeing "Helm install: context deadline exceeded" errors {#helm-context-deadline-exceeded}
 
 This means that the Helm chart installation timed out. When installing the Helm chart,
 the `k8s_sandbox` package uses the `--wait` flag to wait for all Pods to be ready.
 
 Therefore, this error can be an indication of:
 
-* Cluster capacity issues. Consider [increasing the
-  timeout](configuration.md#helm-install-timeout) or scaling up your cluster.
+* If you have an auto-scaling cluster, it may need more time to provision new nodes.
+* If you don't have an auto-scaling cluster, you may have reached capacity.
+* If you are using large images, they may take a long time to pull onto the nodes.
 * A Pod failing to enter the ready state (could be a failing readiness probe, failing to
   pull the image, crash loop backoff, etc.)
 
+Consider [increasing the timeout](configuration.md#helm-install-timeout).
+
+If your cluster does not auto-scale and it is at capacity, consider reducing parallelism
+or scaling up the relevant cluster node group.
+
 Try installing the chart again (this can also be [done
 manually](../helm/built-in-chart.md#manual-chart-install)) and check the Pod statuses
-and logs using a tool like K9s. Use the helm release name (will be in error message) to
-filter the Pods.
+and events using a tool like K9s to get a definitive answer as to the underlying
+problem. Use the Helm release name (will be in error message) to filter the Pods.
 
 ## I'm seeing "Helm uninstall failed" errors
 
