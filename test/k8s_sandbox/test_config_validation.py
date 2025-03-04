@@ -33,3 +33,14 @@ async def test_invalid_config_type() -> None:
 
     with pytest.raises(TypeError):
         await K8sSandboxEnvironment.sample_init(__file__, MyModel(), {})
+
+
+def test_can_serialize_and_deserialize_config() -> None:
+    original = K8sSandboxEnvironmentConfig(
+        chart="my-chart", values=Path("my-values.yaml")
+    )
+
+    as_json = original.model_dump()
+    recreated = K8sSandboxEnvironmentConfig.model_validate(as_json)
+
+    assert recreated == original
