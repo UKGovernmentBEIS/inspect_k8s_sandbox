@@ -17,8 +17,8 @@ from k8s_sandbox._kubernetes_api import (
 from k8s_sandbox._logger import (
     format_log_message,
     inspect_trace_action,
+    log_message,
     log_trace,
-    log_warning,
 )
 from k8s_sandbox._pod import Pod
 
@@ -179,10 +179,11 @@ class Release:
             global resource_quota_exceeded_counter
             if resource_quota_exceeded_counter == 0:
                 # Log only once.
-                log_warning(
+                log_message(
+                    logging.WARNING,
                     "K8s resource quota exceeded. Please uninstall any unused Helm "
                     "releases or reduce the level of concurrency in your Inspect eval. "
-                    + match.group()
+                    + match.group(),
                 )
             resource_quota_exceeded_counter += 1
             display_counter(

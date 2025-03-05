@@ -27,30 +27,18 @@ def log_trace(message: str, **kwargs: Any) -> None:
     trace_message(logger, category="K8s", message=formatted)
 
 
-def log_warning(message: str, **kwargs: Any) -> None:
-    """Format and log a message at WARNING level with K8s prefix.
+def log_message(level: int, message: str, **kwargs: Any) -> None:
+    """Format and log a message at the specified level with K8s prefix.
 
     Args:
+        level: The log level to use (e.g. logging.WARNING).
         message: The log message.
         **kwargs: Key-value pairs to include in the log message. Values are truncated if
           they exceed DEFAULT_ARG_TRUNCATION_THRESHOLD (which can be overridden with env
           var INSPECT_K8S_LOG_TRUNCATION_THRESHOLD).
     """
     formatted = format_log_message(message, **kwargs)
-    logger.error(f"K8s: {formatted}")
-
-
-def log_error(message: str, **kwargs: Any) -> None:
-    """Format and log a message at ERROR level with K8s prefix.
-
-    Args:
-        message: The log message.
-        **kwargs: Key-value pairs to include in the log message. Values are truncated if
-          they exceed DEFAULT_ARG_TRUNCATION_THRESHOLD (which can be overridden with env
-          var INSPECT_K8S_LOG_TRUNCATION_THRESHOLD).
-    """
-    formatted = format_log_message(message, **kwargs)
-    logger.error(f"K8s: {formatted}")
+    logger.log(level, f"K8s: {formatted}")
 
 
 def format_log_message(message: str, **kwargs: Any) -> str:

@@ -1,3 +1,4 @@
+import logging
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,7 +17,7 @@ from k8s_sandbox._helm import Release
 from k8s_sandbox._logger import (
     format_log_message,
     inspect_trace_action,
-    log_error,
+    log_message,
     log_trace,
 )
 from k8s_sandbox._manager import (
@@ -205,7 +206,9 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             except Exception as e:
                 # Whilst Inspect's trace_action will have logged the exception, log it
                 # at ERROR level here for user visibility.
-                log_error(f"Error during: {op}.", cause=e, **log_kwargs)
+                log_message(
+                    logging.ERROR, f"Error during: {op}.", cause=e, **log_kwargs
+                )
                 # Enrich the unexpected exception with additional context.
                 raise K8sError(f"Error during: {op}.", **log_kwargs) from e
 
