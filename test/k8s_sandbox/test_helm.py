@@ -59,7 +59,9 @@ async def test_helm_uninstall_errors_for_other_errors(
     assert "Release name is invalid" in str(excinfo.value)
 
 
-async def test_helm_resourcequota_retries(uninstallable_release: Release) -> None:
+async def test_helm_resourcequota_modified_retries(
+    uninstallable_release: Release,
+) -> None:
     fail_result = ExecResult(
         False,
         1,
@@ -78,6 +80,34 @@ async def test_helm_resourcequota_retries(uninstallable_release: Release) -> Non
 
     assert mock.call_count == 3
     assert "resourcequotas" in str(excinfo.value)
+
+
+async def test_helm_resource_quota_exceeded_retries(
+    uninstallable_release: Release,
+) -> None:
+    fail_result = ExecResult(
+        False,
+        1,
+        "",
+        "INSTALLATION FAILED: 2 errors occurred:\n"
+        '* configmaps "agent-env-3i6uflxc-resolv-conf" is forbidden: exceeded quota: '
+        "resource-quota, requested: configmaps=1, used: configmaps=2k, limited: "
+        "configmaps=2k\n"
+        '* configmaps "agent-env-3i6uflxc-coredns-configmap" is forbidden: exceeded '
+        "quota: resource-quota, requested: configmaps=1, used: configmaps=2k, limited: "
+        "configmaps=2k",
+    )
+    print(fail_result.stderr)
+
+    with patch("k8s_sandbox._helm.INSTALL_RETRY_DELAY_SECONDS", 0):
+        with patch(
+            "k8s_sandbox._helm._run_subprocess", return_value=fail_result
+        ) as mock:
+            with pytest.raises(Exception) as excinfo:
+                await uninstallable_release.install()
+
+    assert mock.call_count == 3
+    assert "exceeded quota: resource-quota" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "abcd"])

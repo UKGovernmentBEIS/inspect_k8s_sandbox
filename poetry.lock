@@ -896,13 +896,13 @@ files = [
 
 [[package]]
 name = "inspect-ai"
-version = "0.3.69"
+version = "0.3.72"
 description = "Framework for large language model evaluations"
 optional = false
 python-versions = ">=3.10"
 files = [
-    {file = "inspect_ai-0.3.69-py3-none-any.whl", hash = "sha256:caf2ad9d4ed054c54bccaac54c8eead698384ebd81c7fc0de24c58c41ea9ecad"},
-    {file = "inspect_ai-0.3.69.tar.gz", hash = "sha256:a1faf797a5bd86fc56332aa7c92339d36fe3967d629af98d9520afed7a39d442"},
+    {file = "inspect_ai-0.3.72-py3-none-any.whl", hash = "sha256:8151574aae304a461b40ba08e4bec777848f217802e61276a118d355cfc2062a"},
+    {file = "inspect_ai-0.3.72.tar.gz", hash = "sha256:e6187d5dda59b2b740072b3afc2aa6b29255f188663723bd2c2960e3402292d7"},
 ]
 
 [package.dependencies]
@@ -912,7 +912,7 @@ beautifulsoup4 = "*"
 click = ">=8.1.3"
 debugpy = "*"
 docstring-parser = ">=0.16"
-fsspec = ">=2021.09.0"
+fsspec = ">=2023.1.0,<=2024.12.0"
 httpx = "*"
 ijson = ">=3.2.0"
 jsonlines = ">=3.0.0"
@@ -931,7 +931,7 @@ s3fs = ">=2023"
 semver = ">=3.0.0"
 shortuuid = "*"
 tenacity = "*"
-textual = ">=0.86.2,<=1.0.0"
+textual = ">=0.86.2"
 typing_extensions = ">=4.9.0"
 zipp = ">=3.19.1"
 
@@ -2665,4 +2665,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "a8a5a8ea2adc5c3b6f8032c2a6619f743452e71553cbc9c492e5ae82f2a6d9aa"
+content-hash = "c24c3818f461fd91dffa06ee430b2d04daff9ad76e476ddb6c2c14dab8d296f3"
