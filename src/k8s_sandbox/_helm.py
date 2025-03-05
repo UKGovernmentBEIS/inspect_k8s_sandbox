@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
 import re
 import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, AsyncContextManager, NoReturn
+from typing import Any, AsyncContextManager, Generator, NoReturn, Protocol
 
 from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
@@ -34,18 +37,46 @@ class _ResourceQuotaModifiedError(Exception):
     pass
 
 
+class ValuesSource(Protocol):
+    """A protocol for classes which provide Helm values files.
+
+    Uses a context manager to support temporarily generating values files only when
+    needed, and ensuring they're cleaned up afterwards.
+    """
+
+    def __init__(self, file: Path) -> None:
+        pass
+
+    @contextmanager
+    def values_file(self) -> Generator[Path | None, None, None]:
+        pass
+
+    @staticmethod
+    def none() -> ValuesSource:
+        """A ValuesSource which provides no values file."""
+        return StaticValuesSource(None)
+
+
+class StaticValuesSource(ValuesSource):
+    """A ValuesSource which uses a static file."""
+
+    def __init__(self, file: Path | None) -> None:
+        self._file = file
+
+    @contextmanager
+    def values_file(self) -> Generator[Path | None, None, None]:
+        yield self._file
+
+
 class Release:
     """A release of a Helm chart."""
 
     def __init__(
-        self,
-        task_name: str,
-        chart_path: Path | None = None,
-        values_path: Path | None = None,
+        self, task_name: str, chart_path: Path | None, values_source: ValuesSource
     ) -> None:
         self.task_name = task_name
         self._chart_path = chart_path or DEFAULT_CHART
-        self._values_path = values_path
+        self._values_source = values_source
         self._namespace = get_current_context_namespace()
         # The release name is used in pod names too, so limit it to 8 chars.
         self.release_name = self._generate_release_name()
@@ -55,24 +86,25 @@ class Release:
 
     async def install(self) -> None:
         async with _install_semaphore():
-            with inspect_trace_action(
-                "K8s install Helm chart",
-                chart=self._chart_path,
-                release=self.release_name,
-                values=self._values_path,
-                namespace=self._namespace,
-                task=self.task_name,
-            ):
-                attempt = 1
-                while True:
-                    try:
-                        await self._install(upgrade=attempt > 1)
-                        break
-                    except _ResourceQuotaModifiedError:
-                        if attempt >= MAX_INSTALL_ATTEMPTS:
-                            raise
-                        attempt += 1
-                        await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
+            with self._values_source.values_file() as values:
+                with inspect_trace_action(
+                    "K8s install Helm chart",
+                    chart=self._chart_path,
+                    release=self.release_name,
+                    values=values,
+                    namespace=self._namespace,
+                    task=self.task_name,
+                ):
+                    attempt = 1
+                    while True:
+                        try:
+                            await self._install(values, upgrade=attempt > 1)
+                            break
+                        except _ResourceQuotaModifiedError:
+                            if attempt >= MAX_INSTALL_ATTEMPTS:
+                                raise
+                            attempt += 1
+                            await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
 
     async def uninstall(self, quiet: bool) -> None:
         await uninstall(self.release_name, self._namespace, quiet)
@@ -106,11 +138,11 @@ class Release:
                 )
         return sandboxes
 
-    async def _install(self, upgrade: bool) -> None:
+    async def _install(self, values: Path | None, upgrade: bool) -> None:
         # Whilst `upgrade --install` could always be used, prefer explicitly using
         # `install` for the first attempt.
         subcommand = ["upgrade", "--install"] if upgrade else ["install"]
-        values = ["--values", str(self._values_path)] if self._values_path else []
+        values_args = ["--values", str(values)] if values else []
         result = await _run_subprocess(
             "helm",
             subcommand
@@ -130,7 +162,7 @@ class Release:
                 "--labels",
                 "inspectSandbox=true",
             ]
-            + values,
+            + values_args,
             capture_output=True,
         )
         if not result.success:

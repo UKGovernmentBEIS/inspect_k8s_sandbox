@@ -36,6 +36,7 @@ nav:
   - "Helm Charts":
     - "What is Helm?": helm/helm.md
     - "Built-in Helm Chart": helm/built-in-chart.md
+    - "Compose to Helm": helm/compose-to-helm.md
     - "Custom Helm Chart": helm/custom-chart.md
   - "Security":
     - "Container Runtime": security/container-runtime.md
