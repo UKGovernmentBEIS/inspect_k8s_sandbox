@@ -209,6 +209,10 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 # Enrich the unexpected exception with additional context.
                 raise K8sError(f"Error during: {op}.", **log_kwargs) from e
 
+    @classmethod
+    def deserialize_config(cls, config: dict[str, Any]) -> BaseModel:
+        return K8sSandboxEnvironmentConfig(**config)
+
 
 class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     """A config Pydantic model for the K8s sandbox environment."""
