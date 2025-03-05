@@ -24,7 +24,7 @@ from k8s_sandbox._pod import Pod
 
 DEFAULT_CHART = Path(__file__).parent / "resources" / "helm" / "agent-env"
 DEFAULT_TIMEOUT = 600  # 10 minutes
-MAX_INSTALL_ATTEMPTS = 3
+MAX_INSTALL_ATTEMPTS = 5
 INSTALL_RETRY_DELAY_SECONDS = 5
 INSPECT_HELM_TIMEOUT = "INSPECT_HELM_TIMEOUT"
 HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (

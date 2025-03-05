@@ -78,7 +78,7 @@ async def test_helm_resourcequota_modified_retries(
             with pytest.raises(Exception) as excinfo:
                 await uninstallable_release.install()
 
-    assert mock.call_count == 3
+    assert mock.call_count == 5
     assert "resourcequotas" in str(excinfo.value)
 
 
@@ -106,7 +106,7 @@ async def test_helm_resource_quota_exceeded_retries(
             with pytest.raises(Exception) as excinfo:
                 await uninstallable_release.install()
 
-    assert mock.call_count == 3
+    assert mock.call_count == 5
     assert "exceeded quota: resource-quota" in str(excinfo.value)
 
 
