@@ -4,7 +4,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, AsyncContextManager, NoReturn
 
 from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
@@ -285,7 +285,7 @@ def _get_timeout() -> int:
     return timeout
 
 
-def _install_semaphore() -> asyncio.Semaphore:
+def _install_semaphore() -> AsyncContextManager[None]:
     # Limit concurrent subprocess calls to `helm install` and `helm uninstall`.
     # Use distinct semaphores for each operation to avoid deadlocks where all permits
     # are acquired by the "install" operations which are waiting for cluster resources
@@ -295,7 +295,7 @@ def _install_semaphore() -> asyncio.Semaphore:
     return concurrency("helm-install", _get_environ_int("INSPECT_MAX_HELM_INSTALL", 8))
 
 
-def _uninstall_semaphore() -> asyncio.Semaphore:
+def _uninstall_semaphore() -> AsyncContextManager[None]:
     return concurrency(
         "helm-uninstall", _get_environ_int("INSPECT_MAX_HELM_UNINSTALL", 8)
     )
