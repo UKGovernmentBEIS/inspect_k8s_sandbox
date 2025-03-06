@@ -12,6 +12,7 @@ packages = [
 python = "^3.10"
 inspect-ai = ">=0.3.57"
 kubernetes = "^31.0.0"
+jsonschema = "^4.23.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.9.0"
@@ -21,6 +22,7 @@ pytest-asyncio = "^0.23.7"
 pytest-repeat = "^0.9.3"
 ruff = "^0.9.6"
 types-pyyaml = "^6.0.12"
+types-jsonschema = "^4.23.0.20241208"
 
 [tool.poetry.plugins.inspect_ai]
 k8s-sandbox = "k8s_sandbox._sandbox_environment"

@@ -9,6 +9,7 @@ from pytest import LogCaptureFixture
 from k8s_sandbox._helm import (
     INSPECT_HELM_TIMEOUT,
     Release,
+    ValuesSource,
     _run_subprocess,
     uninstall,
 )
@@ -16,7 +17,11 @@ from k8s_sandbox._helm import (
 
 @pytest.fixture
 def uninstallable_release() -> Release:
-    return Release(__file__, chart_path=Path("/non_existent_chart"))
+    return Release(
+        __file__,
+        chart_path=Path("/non_existent_chart"),
+        values_source=ValuesSource.none(),
+    )
 
 
 @pytest.fixture
@@ -41,7 +46,7 @@ async def test_helm_install_error(
 async def test_helm_uninstall_does_not_error_for_release_not_found(
     log_err: LogCaptureFixture,
 ) -> None:
-    release = Release(__file__)
+    release = Release(__file__, None, ValuesSource.none())
 
     # Note: we haven't called install() on release.
     await release.uninstall(quiet=False)
@@ -94,7 +99,7 @@ async def test_helm_install_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
 
     with pytest.raises(RuntimeError) as excinfo:
-        await Release(__file__).install()
+        await Release(__file__, None, ValuesSource.none()).install()
 
     # Verify that we detect the install timeout and add our own message.
     assert "The configured timeout value was 1s. Please see the docs" in str(
