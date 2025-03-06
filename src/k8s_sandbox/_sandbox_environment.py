@@ -210,7 +210,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 raise K8sError(f"Error during: {op}.", **log_kwargs) from e
 
     @classmethod
-    def deserialize_config(cls, config: dict[str, Any]) -> BaseModel:
+    def config_deserialize(cls, config: dict[str, Any]) -> BaseModel:
         return K8sSandboxEnvironmentConfig(**config)
 
 
