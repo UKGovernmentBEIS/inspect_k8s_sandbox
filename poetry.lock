@@ -2385,6 +2385,20 @@ files = [
 ]
 
 [[package]]
+name = "types-jsonschema"
+version = "4.23.0.20241208"
+description = "Typing stubs for jsonschema"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "types_jsonschema-4.23.0.20241208-py3-none-any.whl", hash = "sha256:87934bd9231c99d8eff94cacfc06ba668f7973577a9bd9e1f9de957c5737313e"},
+    {file = "types_jsonschema-4.23.0.20241208.tar.gz", hash = "sha256:e8b15ad01f290ecf6aea53f93fbdf7d4730e4600313e89e8a7f95622f7e87b7c"},
+]
+
+[package.dependencies]
+referencing = "*"
+
+[[package]]
 name = "types-pyyaml"
 version = "6.0.12.20240917"
 description = "Typing stubs for PyYAML"
@@ -2665,4 +2679,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "a8a5a8ea2adc5c3b6f8032c2a6619f743452e71553cbc9c492e5ae82f2a6d9aa"
+content-hash = "1cef45c87b3cd405fefcabaa164389b7c8e5d01c643702daf2198cdb93d65b0b"

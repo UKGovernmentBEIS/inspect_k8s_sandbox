@@ -11,6 +11,11 @@ which is structured much like a Docker `compose.yaml` file.
 This is to simplify the complexities of Kubernetes manifests for users who are not
 familiar with them.
 
+!!! tip
+
+    [Automatic translation](compose-to-helm.md) from basic `compose.yaml` files is
+    supported.
+
 In addition to the info below, see `agent-env/README.md` and `agent-env/values.yaml` for
 a full list of configurable options.
 
