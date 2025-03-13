@@ -252,8 +252,6 @@ def validate_k8s_name(name: str) -> tuple[bool, str]:
     This is, as of the time of writing, located here in the Kubernetes source code:
     https://github.com/kubernetes/kubernetes/blob/68899f8e6d5861e7b6197c51b0dee9f8a486e3e0/staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go#L179
 
-    This function identifies failures in the
-
     Args:
         name: The string to validate as a Kubernetes resource name
 
