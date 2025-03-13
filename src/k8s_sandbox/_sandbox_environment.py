@@ -1,8 +1,10 @@
+import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator, Literal, cast, overload
 
+import yaml
 from inspect_ai.util import (
     ExecResult,
     OutputLimitExceededError,
@@ -228,12 +230,122 @@ class K8sError(Exception):
         super().__init__(format_log_message(message, **kwargs))
 
 
+def validate_k8s_name(name: str) -> tuple[bool, str]:
+    """
+    Validates if a given string can be used as a Kubernetes identifier.
+
+    Most Kubernetes resources must confirm to RFC 1123 naming standards, as per:
+    https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
+
+    If you try to apply a resource that does not conform to RFC 1123, Kubernetes will
+    return an error like:
+
+        Invalid value: "agent-env-byzslntg-web_browser": a lowercase RFC 1123 label must
+        consist of lower case alphanumeric characters or '-', and must start and end
+        with an alphanumeric character (e.g. 'my-name', or '123-abc', regex used for
+        validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?'
+
+    This is, as of the time of writing, located here in the Kubernetes source code:
+    https://github.com/kubernetes/kubernetes/blob/68899f8e6d5861e7b6197c51b0dee9f8a486e3e0/staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go#L179
+
+    This function identifies failures in the
+
+    Args:
+        name: The string to validate as a Kubernetes resource name
+
+    Returns:
+        A tuple of (is_valid, error_message)
+    """
+    # DNS-1123 subdomain must consist of lowercase alphanumeric characters, '-' or '.',
+    # and must start and end with an alphanumeric character
+    if not name:
+        return False, "Service name cannot be empty"
+
+    if len(name) > 63:
+        return False, f"Service name '{name}' is too long (max 63 characters)"
+
+    # Check if name starts with alphanumeric
+    if not name[0].isalnum():
+        return False, f"Service name '{name}' must start with an alphanumeric character"
+
+    # Check if name ends with alphanumeric
+    if not name[-1].isalnum():
+        return False, f"Service name '{name}' must end with an alphanumeric character"
+
+    # Check for valid characters (lowercase alphanumeric, '-', '.')
+    if not re.match(r"^[a-z0-9\.\-]+$", name):
+        return (
+            False,
+            f"Service name '{name}' must consist only of lowercase alphanumeric"
+            " characters, '-' or '.'",
+        )
+
+    return True, ""
+
+
+def validate_service_names(values_content: dict) -> None:
+    """
+    Validates that all service names in a values dictionary conform to naming rules.
+
+    Example error:
+        ```
+        Invalid Kubernetes service name(s) in values file:
+            - Service name '-invalid-start' must start with an alphanumeric character
+            - Service name 'Invalid_Service' must consist only of lowercase alphanumeric
+                characters, '-' or '.'
+            - Service name 'invalid-end-' must end with an alphanumeric character
+
+            Service names must:
+            - Contain only lowercase alphanumeric characters, '-' or '.'
+            - Start and end with an alphanumeric character
+            - Be no more than 63 characters long
+        ```
+
+    Args:
+        values_content: Dictionary containing the parsed YAML values
+
+    Raises:
+        ValueError: If any service name doesn't conform to Kubernetes naming rules
+    """
+    if not values_content or not isinstance(values_content, dict):
+        return
+
+    services = values_content.get("services", {})
+    if not services or not isinstance(services, dict):
+        return
+
+    invalid_services = []
+    for service_name in services.keys():
+        is_valid, error = validate_k8s_name(service_name)
+        if not is_valid:
+            invalid_services.append(f"  - {error}")
+
+    if invalid_services:
+        error_message = f"""Invalid Kubernetes service name(s) in values file:
+{"\n".join(invalid_services)}
+
+Service names must:
+  - Contain only lowercase alphanumeric characters, '-' or '.'
+  - Start and end with an alphanumeric character
+  - Be no more than 63 characters long"""
+
+        log_trace("Values file contains invalid service names")
+        raise ValueError(error_message)
+
+
 def _create_release(
     task_name: str, config: SandboxEnvironmentConfigType | None
 ) -> Release:
     def validate_values_file(values: Path | None) -> None:
-        if values is not None and not values.is_file():
-            raise FileNotFoundError(f"Helm values file not found: '{values}'.")
+        if values is not None:
+            if not values.is_file():
+                raise FileNotFoundError(f"Helm values file not found: '{values}'.")
+
+            with open(values, "r") as f:
+                # Will throw `yaml.YAMLError` if file is invalid YAML
+                values_content = yaml.safe_load(f)
+                if values_content:
+                    validate_service_names(values_content)
 
     def validate_chart_dir(chart: Path | None) -> None:
         if chart is not None and not chart.is_dir():
