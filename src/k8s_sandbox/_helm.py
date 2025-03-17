@@ -23,7 +23,7 @@ MAX_INSTALL_ATTEMPTS = 3
 INSTALL_RETRY_DELAY_SECONDS = 5
 INSPECT_HELM_TIMEOUT = "INSPECT_HELM_TIMEOUT"
 HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
-    "https://k8s-sandbox.ai-safety-institute.org.uk/tips/troubleshooting/"
+    "https://k8s-sandbox.aisi.org.uk/tips/troubleshooting/"
     "#helm-context-deadline-exceeded"
 )
 
