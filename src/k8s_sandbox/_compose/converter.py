@@ -10,6 +10,10 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+COMPOSE_SCHEMA_PATH = (
+    Path(__file__).parent.parent / "resources" / "compose" / "compose-spec.json"
+)
+
 
 class ComposeConverterError(Exception):
     """Raised when an error occurs converting a Docker Compose file to Helm values."""
@@ -61,10 +65,7 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
 
 
 def _validate_compose(compose: dict[str, Any], compose_file: Path) -> None:
-    schema_path = (
-        Path(__file__).parent.parent / "resources" / "compose" / "compose-spec.json"
-    )
-    schema = json.loads(schema_path.read_text())
+    schema = json.loads(COMPOSE_SCHEMA_PATH.read_text())
     try:
         jsonschema.validate(compose, schema)
     except jsonschema.ValidationError as e:
