@@ -53,7 +53,6 @@ nav:
   - "Design Notes":
     - "Limitations": design/limitations.md
     - "Complexities": design/complexities.md
-    - "Future Work": design/future.md
 extra_css:
   - assets/extra.css
 extra:
