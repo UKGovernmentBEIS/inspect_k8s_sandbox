@@ -79,7 +79,7 @@ def _convert_services(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
     result: dict[str, Any] = dict()
     for service_name, service_value in src.items():
         service_converter = ServiceConverter(service_name, service_value, compose_file)
-        result[service_name] = service_converter.convert_service()
+        result[service_name] = service_converter.convert()
     return result
 
 
@@ -120,6 +120,8 @@ class ServiceConverter:
 
     Implemented as a class to facilitate flowing context information to error and
     logging messages such as the service name and originating Compose file.
+
+    The src_service dict will be mutated during conversion.
     """
 
     def __init__(self, name: str, src_service: dict[str, Any], compose_file: Path):
@@ -127,8 +129,15 @@ class ServiceConverter:
         self._src_service = src_service
         self._compose_file = compose_file
 
-    def convert_service(self) -> dict[str, Any]:
-        src = self._src_service
+    def convert(self) -> dict[str, Any]:
+        return self._convert_service(self._src_service)
+
+    @cached_property
+    def context(self):
+        # A reference to the service being converted for logging & error messages.
+        return f"Service: '{self._name}'; Compose file: '{self._compose_file}'."
+
+    def _convert_service(self, src: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = dict()
         # Ordered as per built-in Helm chart values.yaml documentation.
         _transform(src, "runtime", result, "runtimeClassName")
@@ -170,11 +179,6 @@ class ServiceConverter:
                 f"Unsupported key(s) in 'service': {set(src)}. {self.context}"
             )
         return result
-
-    @cached_property
-    def context(self):
-        # A reference to the service being converted for logging & error messages.
-        return f"Service: '{self._name}'; Compose file: '{self._compose_file}'."
 
     def _convert_env(self, src: dict[str, Any] | list[str]) -> list[dict[str, str]]:
         result: list[dict[str, str]] = []
