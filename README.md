@@ -14,7 +14,7 @@ adopting this plugin, come join us in the [Inspect
 Slack](https://join.slack.com/t/inspectcommunity/shared_invite/zt-2w9eaeusj-4Hu~IBHx2aORsKz~njuz4g)!
 
 You can find documentation at
-[https://k8s-sandbox.ai-safety-institute.org.uk/](https://k8s-sandbox.ai-safety-institute.org.uk/).
+[https://k8s-sandbox.aisi.org.uk/](https://k8s-sandbox.aisi.org.uk/).
 
 If you’d like to contribute to the development of the plugin, please review our
 [contributing guidelines](CONTRIBUTING.md) before raising a pull request.
