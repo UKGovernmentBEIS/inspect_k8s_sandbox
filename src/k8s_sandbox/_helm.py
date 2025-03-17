@@ -291,6 +291,9 @@ async def _run_subprocess(
         # Task may have been cancelled before proc was assigned.
         except UnboundLocalError:
             pass
+        # Process may have already naturally terminated.
+        except ProcessLookupError:
+            pass
         raise
     return ExecResult(
         success=proc.returncode == 0,
