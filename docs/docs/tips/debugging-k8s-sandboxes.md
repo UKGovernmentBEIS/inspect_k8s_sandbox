@@ -1,16 +1,16 @@
 # Debugging K8s Sandboxes
 
-This section explains features of [Inspect](https://inspect.ai-safety-institute.org.uk/)
-and [k9s](https://k9scli.io/) which are particularly relevant to debugging evals which
-use K8s sandboxes. Please see the dedicated docs pages of each for more information.
+This section explains features of [Inspect](https://inspect.aisi.org.uk/) and
+[k9s](https://k9scli.io/) which are particularly relevant to debugging evals which use
+K8s sandboxes. Please see the dedicated docs pages of each for more information.
 
 ## View Inspect's `TRACE`-level logs { #trace-log-level }
 
 Useful sandbox-related messages like Helm installs/uninstalls, Pod operations (`exec()`
 executions including the result, `read_file()`, `write_file()`) etc. are logged at the
 `TRACE` log level. See the [Inspect tracing
-docs](https://inspect.ai-safety-institute.org.uk/tracing.html) for more information on
-where these are stored and how to read them.
+docs](https://inspect.aisi.org.uk/tracing.html) for more information on where these are
+stored and how to read them.
 
 Example (additional fields removed for brevity):
 
