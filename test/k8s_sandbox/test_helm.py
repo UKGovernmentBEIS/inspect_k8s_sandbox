@@ -47,7 +47,7 @@ async def test_helm_install_error(
 
 
 async def test_cancelling_install_uninstalls():
-    release = Release(__file__)
+    release = Release(__file__, None, ValuesSource.none())
     with patch("k8s_sandbox._helm.uninstall", wraps=uninstall) as spy:
         task = asyncio.create_task(release.install())
         await asyncio.sleep(0.5)
