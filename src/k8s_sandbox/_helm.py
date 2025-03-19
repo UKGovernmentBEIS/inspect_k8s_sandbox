@@ -26,7 +26,7 @@ MAX_INSTALL_ATTEMPTS = 3
 INSTALL_RETRY_DELAY_SECONDS = 5
 INSPECT_HELM_TIMEOUT = "INSPECT_HELM_TIMEOUT"
 HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
-    "https://k8s-sandbox.ai-safety-institute.org.uk/tips/troubleshooting/"
+    "https://k8s-sandbox.aisi.org.uk/tips/troubleshooting/"
     "#helm-context-deadline-exceeded"
 )
 
@@ -85,26 +85,37 @@ class Release:
         return uuid().lower()[:8]
 
     async def install(self) -> None:
-        async with _install_semaphore():
-            with self._values_source.values_file() as values:
-                with inspect_trace_action(
-                    "K8s install Helm chart",
-                    chart=self._chart_path,
-                    release=self.release_name,
-                    values=values,
-                    namespace=self._namespace,
-                    task=self.task_name,
-                ):
-                    attempt = 1
-                    while True:
-                        try:
-                            await self._install(values, upgrade=attempt > 1)
-                            break
-                        except _ResourceQuotaModifiedError:
-                            if attempt >= MAX_INSTALL_ATTEMPTS:
-                                raise
-                            attempt += 1
-                            await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
+        try:
+            async with _install_semaphore():
+                with self._values_source.values_file() as values:
+                    with inspect_trace_action(
+                        "K8s install Helm chart",
+                        chart=self._chart_path,
+                        release=self.release_name,
+                        values=values,
+                        namespace=self._namespace,
+                        task=self.task_name,
+                    ):
+                        attempt = 1
+                        while True:
+                            try:
+                                await self._install(values, upgrade=attempt > 1)
+                                break
+                            except _ResourceQuotaModifiedError:
+                                if attempt >= MAX_INSTALL_ATTEMPTS:
+                                    raise
+                                attempt += 1
+                                await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
+        except asyncio.CancelledError:
+            # When an eval is cancelled (either by user or by an error), the timing of
+            # uninstall operations can be interleaved with existing `helm install`
+            # processes. Uninstall the release now that we know the install process has
+            # terminated.
+            log_trace(
+                "Helm install was cancelled; uninstalling.", release=self.release_name
+            )
+            await self.uninstall(quiet=True)
+            raise
 
     async def uninstall(self, quiet: bool) -> None:
         await uninstall(self.release_name, self._namespace, quiet)
@@ -295,13 +306,27 @@ def _raise_runtime_error(
 async def _run_subprocess(
     cmd: str, args: list[str], capture_output: bool
 ) -> ExecResult[str]:
-    proc = await asyncio.create_subprocess_exec(
-        cmd,
-        *args,
-        stdout=asyncio.subprocess.PIPE if capture_output else None,
-        stderr=asyncio.subprocess.PIPE if capture_output else None,
-    )
-    stdout, stderr = await proc.communicate()
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            cmd,
+            *args,
+            stdout=asyncio.subprocess.PIPE if capture_output else None,
+            stderr=asyncio.subprocess.PIPE if capture_output else None,
+        )
+        stdout, stderr = await proc.communicate()
+    except asyncio.CancelledError:
+        try:
+            proc.terminate()
+            # Use communicate() over wait() to avoid potential deadlock
+            # https://docs.python.org/3/library/asyncio-subprocess.html#asyncio.subprocess.Process.wait
+            await proc.communicate()
+        # Task may have been cancelled before proc was assigned.
+        except UnboundLocalError:
+            pass
+        # Process may have already naturally terminated.
+        except ProcessLookupError:
+            pass
+        raise
     return ExecResult(
         success=proc.returncode == 0,
         returncode=proc.returncode or 1,

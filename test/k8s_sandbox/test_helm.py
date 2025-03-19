@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 from unittest.mock import patch
@@ -11,8 +12,10 @@ from k8s_sandbox._helm import (
     Release,
     ValuesSource,
     _run_subprocess,
+    get_all_release_names,
     uninstall,
 )
+from k8s_sandbox._kubernetes_api import get_current_context_namespace
 
 
 @pytest.fixture
@@ -41,6 +44,22 @@ async def test_helm_install_error(
     assert spy.call_count == 1
     assert "not found" in str(excinfo.value)
     assert "not found" in log_err.text
+
+
+async def test_cancelling_install_uninstalls():
+    release = Release(__file__)
+    with patch("k8s_sandbox._helm.uninstall", wraps=uninstall) as spy:
+        task = asyncio.create_task(release.install())
+        await asyncio.sleep(0.5)
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert spy.call_count == 1
+    assert release.release_name not in await get_all_release_names(
+        get_current_context_namespace()
+    )
 
 
 async def test_helm_uninstall_does_not_error_for_release_not_found(

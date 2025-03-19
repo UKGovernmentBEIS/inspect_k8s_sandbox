@@ -96,8 +96,7 @@ Consider using the recommended [Rewrap](https://stkb.github.io/Rewrap/) extensio
 ### Package Structure and API Visibility
 
 The Python packages, modules and members follow a similar API visibility naming
-convention to that used in the [inspect_ai](https://inspect.ai-safety-institute.org.uk/)
-package.
+convention to that used in the [inspect_ai](https://inspect.aisi.org.uk/) package.
 
 Public API members (e.g. classes, functions, constants) are exported in the package's
 `__init__.py` file. Members are exported rather than modules (i.e. .py files) to avoid
