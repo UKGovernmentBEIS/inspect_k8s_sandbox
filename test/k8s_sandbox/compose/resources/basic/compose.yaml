@@ -1,0 +1,46 @@
+services:
+  default:
+    image: 123456789.dkr.ecr.eu-west-2.amazonaws.com/agent-environment:1.0.0
+    working_dir: /root
+    deploy:
+      resources:
+        limits:
+          memory: 2gb
+          cpus: 1
+        reservations:
+          memory: 1gb
+          cpus: 0.5
+    init: true
+    volumes:
+      - shared-volume:/mnt/shared-volume
+      - volume_with_underscore:/mnt/volume_with_underscore
+    environment:
+      VICTIM_HOSTNAME: victim
+  victim:
+    image: 123456789.dkr.ecr.eu-west-2.amazonaws.com/victim:1.0.0
+    expose:
+      - 3003
+    user: 1000:1000
+    deploy:
+      resources:
+        limits:
+          memory: 2gb
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    init: true
+  ghidra:
+    image: 123456789.dkr.ecr.eu-west-2.amazonaws.com/ghidra:1.0.0
+    user: "1000"
+    mem_limit: 2g
+    init: true
+    volumes:
+      - shared-volume:/mnt/shared-volume
+volumes:
+  shared-volume:
+  volume_with_underscore:
+x-inspect_k8s_sandbox:
+  allow_domains:
+    - "google.com"

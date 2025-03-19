@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
-from k8s_sandbox._helm import Release
+from k8s_sandbox._helm import Release, StaticValuesSource
 from k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
 
 
@@ -15,7 +15,8 @@ async def install_sandbox_environments(
         if values_filename
         else None
     )
-    release = Release(task_name=task_name, values_path=values_path)
+    values_source = StaticValuesSource(values_path)
+    release = Release(task_name=task_name, chart_path=None, values_source=values_source)
     try:
         await release.install()
         pods = await release.get_sandbox_pods()
