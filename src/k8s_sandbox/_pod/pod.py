@@ -94,7 +94,7 @@ class Pod:
 
     async def read_file(self, src: Path, dst: IO[bytes]) -> None:
         """
-        Copy a file from the pod (src) to the a file-like object (dst) on the client.
+        Copy a file from the pod (src) to a file-like object (dst) on the client.
 
         The file-like object will not be seeked before or after the read. The file-like
         object must be opened for writing in binary mode.

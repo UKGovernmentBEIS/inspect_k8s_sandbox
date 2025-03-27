@@ -427,4 +427,4 @@ brew install norwoodj/tap/helm-docs
 helm-docs ./resources/helm/agent-env
 ```
 
-This is done automatically by the a pre-commit hook.
+This is done automatically by a pre-commit hook.
