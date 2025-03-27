@@ -10,7 +10,7 @@ from rich.table import Table
 
 from k8s_sandbox._helm import Release, get_all_release_names
 from k8s_sandbox._helm import uninstall as helm_uninstall
-from k8s_sandbox._kubernetes_api import get_current_context_namespace
+from k8s_sandbox._kubernetes_api import get_current_context_name, get_default_namespace
 
 
 class HelmReleaseManager:
@@ -105,12 +105,15 @@ async def uninstall_unmanaged_release(release_name: str) -> None:
     """
     Uninstall a Helm release which is not managed by a HelmReleaseManager.
 
+    Only the current Kubernetes context (as defined by the kubeconfig file) is
+    considered.
+
     Args:
       release_name (str): The name of the release to uninstall (e.g. "lsphdyup").
     """
     _print_do_not_interrupt()
-    namespace = get_current_context_namespace()
-    await helm_uninstall(release_name, namespace, quiet=False)
+    namespace = get_default_namespace(context_name=None)
+    await helm_uninstall(release_name, namespace, context_name=None, quiet=False)
 
 
 async def uninstall_all_unmanaged_releases():
@@ -127,10 +130,13 @@ async def uninstall_all_unmanaged_releases():
             table.add_row(f"[red]{release}[/red]")
         print(table)
 
-    namespace = get_current_context_namespace()
-    releases = await get_all_release_names(namespace)
+    namespace = get_default_namespace(context_name=None)
+    releases = await get_all_release_names(namespace, context_name=None)
     if len(releases) == 0:
-        print(f"No Inspect sandbox releases found in '{namespace}' namespace.")
+        print(
+            f"No Inspect sandbox releases found in '{namespace}' namespace in your "
+            f"current Kubernetes context '{get_current_context_name()}'."
+        )
         return
     _print_table(releases)
     if not Confirm.ask(

@@ -16,7 +16,12 @@ async def install_sandbox_environments(
         else None
     )
     values_source = StaticValuesSource(values_path)
-    release = Release(task_name=task_name, chart_path=None, values_source=values_source)
+    release = Release(
+        task_name=task_name,
+        chart_path=None,
+        values_source=values_source,
+        context_name=None,
+    )
     try:
         await release.install()
         pods = await release.get_sandbox_pods()
