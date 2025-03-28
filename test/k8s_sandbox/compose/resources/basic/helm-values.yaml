@@ -1,0 +1,55 @@
+services:
+  default:
+    image: 123456789.dkr.ecr.eu-west-2.amazonaws.com/agent-environment:1.0.0
+    workingDir: /root
+    dnsRecord: true
+    env:
+    - name: VICTIM_HOSTNAME
+      value: victim
+    volumes:
+    - shared-volume:/mnt/shared-volume
+    - volume-with-underscore:/mnt/volume_with_underscore
+    resources:
+      limits:
+        cpu: 1
+        memory: 2Gi
+      requests:
+        cpu: 0.5
+        memory: 1Gi
+  victim:
+    image: 123456789.dkr.ecr.eu-west-2.amazonaws.com/victim:1.0.0
+    dnsRecord: true
+    readinessProbe:
+      exec:
+        command:
+        - curl
+        - -f
+        - http://localhost:8080/health
+      periodSeconds: 30
+      timeoutSeconds: 10
+      failureThreshold: 4
+    resources:
+      limits:
+        memory: 2Gi
+      requests:
+        memory: 2Gi
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+  ghidra:
+    image: 123456789.dkr.ecr.eu-west-2.amazonaws.com/ghidra:1.0.0
+    dnsRecord: true
+    volumes:
+    - shared-volume:/mnt/shared-volume
+    resources:
+      limits:
+        memory: 2Gi
+      requests:
+        memory: 2Gi
+    securityContext:
+      runAsUser: 1000
+volumes:
+  shared-volume: {}
+  volume-with-underscore: {}
+allowDomains:
+- google.com

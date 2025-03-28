@@ -12,7 +12,12 @@ from inspect_ai.util import (
 )
 from pydantic import BaseModel
 
-from k8s_sandbox._helm import Release
+from k8s_sandbox._compose.compose import ComposeValuesSource, is_docker_compose_file
+from k8s_sandbox._helm import (
+    Release,
+    StaticValuesSource,
+    ValuesSource,
+)
 from k8s_sandbox._logger import (
     format_log_message,
     inspect_trace_action,
@@ -38,6 +43,9 @@ class K8sSandboxEnvironment(SandboxEnvironment):
 
     @classmethod
     def config_files(cls) -> list[str]:
+        # compose.yaml files are not automatically used; they must be explicitly
+        # specified as the values file. To reduce risk of a user accidentally using a
+        # compose.yaml file over a (e.g. misnamed) helm-values.yaml file.
         return ["values.yaml", "helm-values.yaml"]
 
     @classmethod
@@ -235,6 +243,32 @@ class K8sError(Exception):
 def _create_release(
     task_name: str, config: SandboxEnvironmentConfigType | None
 ) -> Release:
+    release_config = _resolve_release_config(config)
+    values_source = _create_values_source(release_config)
+    return Release(task_name, release_config.chart, values_source)
+
+
+class _ReleaseConfig(BaseModel, frozen=True):
+    chart: Path | None
+    values: Path | None
+
+
+def _create_values_source(release_config: _ReleaseConfig) -> ValuesSource:
+    if release_config.values and is_docker_compose_file(release_config.values):
+        if release_config.chart is not None:
+            raise ValueError(
+                "Automatic conversion from compose.yaml to helm-values.yaml is only "
+                "supported when using the built-in Helm chart."
+            )
+        return ComposeValuesSource(release_config.values)
+    return StaticValuesSource(release_config.values)
+
+
+def _resolve_release_config(
+    config: SandboxEnvironmentConfigType | None,
+) -> _ReleaseConfig:
+    """Consolidates the many options configuration methods into a _ReleaseConfig."""
+
     def validate_values_file(values: Path | None) -> None:
         if values is not None and not values.is_file():
             raise FileNotFoundError(f"Helm values file not found: '{values}'.")
@@ -247,15 +281,17 @@ def _create_release(
             )
 
     if config is None:
-        return Release(task_name)
+        return _ReleaseConfig(chart=None, values=None)
     if isinstance(config, K8sSandboxEnvironmentConfig):
         chart = Path(config.chart).resolve() if config.chart else None
         validate_chart_dir(chart)
         values = config.values.resolve() if config.values else None
         validate_values_file(values)
-        return Release(task_name, chart_path=chart, values_path=values)
+        return _ReleaseConfig(chart=chart, values=values)
     if isinstance(config, str):
         values = Path(config).resolve()
         validate_values_file(values)
-        return Release(task_name, values_path=values)
-    raise TypeError(f"Invalid config type: {type(config)}.")
+        return _ReleaseConfig(chart=None, values=values)
+    raise TypeError(
+        f"Invalid 'SandboxEnvironmentConfigType | None' type: {type(config)}."
+    )

@@ -2,13 +2,13 @@
 
 ![pkg icon](assets/icon-dark.png){: style="height:80px;float:left;margin-right:20px;"}
 The `k8s_sandbox` Python package provides a Kubernetes (K8s) sandbox environment for
-[inspect_ai](https://inspect.ai-safety-institute.org.uk/).
+[inspect_ai](https://inspect.aisi.org.uk/).
 
 <br>
 Learn more about what sandbox environments are for from the [Inspect docs
-site](https://inspect.ai-safety-institute.org.uk/tools.html#sandboxing). At a high
-level, this package lets you run Docker containers which your agents interact with
-within a Kubernetes cluster instead of locally (e.g. using Docker Compose).
+site](https://inspect.aisi.org.uk/tools.html#sandboxing). At a high level, this package
+lets you run Docker containers which your agents interact with within a Kubernetes
+cluster instead of locally (e.g. using Docker Compose).
 
 The Inspect process itself still runs on your local machine.
 
