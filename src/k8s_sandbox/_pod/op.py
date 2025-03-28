@@ -27,6 +27,8 @@ class PodInfo:
 
     name: str
     namespace: str
+    context_name: str | None
+    """The name of the kubeconfig context. If None, use the current context."""
     default_container_name: str
 
 
@@ -46,7 +48,7 @@ class PodOperation(ABC):
     def create_websocket_client_for_exec(
         self, **kwargs
     ) -> Generator[WSClient, None, None]:
-        client = k8s_client()
+        client = k8s_client(self._pod.context_name)
         # Note: ApiException is intentionally not caught; it should fail the eval.
         ws_client = stream(
             client.connect_get_namespaced_pod_exec,

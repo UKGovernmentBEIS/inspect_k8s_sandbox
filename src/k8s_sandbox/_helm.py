@@ -13,10 +13,7 @@ from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
 from shortuuid import uuid
 
-from k8s_sandbox._kubernetes_api import (
-    get_current_context_namespace,
-    k8s_client,
-)
+from k8s_sandbox._kubernetes_api import get_default_namespace, k8s_client
 from k8s_sandbox._logger import format_log_message, inspect_trace_action, log_trace
 from k8s_sandbox._pod import Pod
 
@@ -72,12 +69,17 @@ class Release:
     """A release of a Helm chart."""
 
     def __init__(
-        self, task_name: str, chart_path: Path | None, values_source: ValuesSource
+        self,
+        task_name: str,
+        chart_path: Path | None,
+        values_source: ValuesSource,
+        context_name: str | None,
     ) -> None:
         self.task_name = task_name
         self._chart_path = chart_path or DEFAULT_CHART
         self._values_source = values_source
-        self._namespace = get_current_context_namespace()
+        self._context_name = context_name
+        self._namespace = get_default_namespace(context_name)
         # The release name is used in pod names too, so limit it to 8 chars.
         self.release_name = self._generate_release_name()
 
@@ -118,10 +120,10 @@ class Release:
             raise
 
     async def uninstall(self, quiet: bool) -> None:
-        await uninstall(self.release_name, self._namespace, quiet)
+        await uninstall(self.release_name, self._namespace, self._context_name, quiet)
 
     async def get_sandbox_pods(self) -> dict[str, Pod]:
-        client = k8s_client()
+        client = k8s_client(self._context_name)
         loop = asyncio.get_running_loop()
         try:
             pods = await loop.run_in_executor(
@@ -145,7 +147,10 @@ class Release:
             if service_name is not None:
                 default_container_name = pod.spec.containers[0].name
                 sandboxes[service_name] = Pod(
-                    pod.metadata.name, self._namespace, default_container_name
+                    pod.metadata.name,
+                    self._namespace,
+                    self._context_name,
+                    default_container_name,
                 )
         return sandboxes
 
@@ -173,6 +178,7 @@ class Release:
                 "--labels",
                 "inspectSandbox=true",
             ]
+            + _kubeconfig_context_args(self._context_name)
             + values_args,
             capture_output=True,
         )
@@ -209,7 +215,9 @@ class Release:
         )
 
 
-async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
+async def uninstall(
+    release_name: str, namespace: str, context_name: str | None, quiet: bool
+) -> None:
     """
     Uninstall a Helm release by name.
 
@@ -220,6 +228,8 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
     Args:
         release_name: The name of the Helm release to uninstall (e.g. abcdefgh).
         namespace: The Kubernetes namespace in which the release is installed.
+        context_name: The kubeconfig context in which to run the `helm uninstall`
+          command. If None, the current context is used.
         quiet: If False, allow the output of the `helm uninstall` command to be written
           to this process's stdout/stderr. If True, suppress the output.
     """
@@ -251,7 +261,8 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
                     "--wait",
                     "--timeout",
                     f"{_get_timeout()}s",
-                ],
+                ]
+                + _kubeconfig_context_args(context_name),
                 capture_output=True,
             )
             # A helm uninstall failure with "release not found" implies that the release
@@ -274,7 +285,7 @@ async def uninstall(release_name: str, namespace: str, quiet: bool) -> None:
                 )
 
 
-async def get_all_release_names(namespace: str) -> list[str]:
+async def get_all_release_names(namespace: str, context_name: str | None) -> list[str]:
     result = await _run_subprocess(
         "helm",
         [
@@ -286,7 +297,8 @@ async def get_all_release_names(namespace: str) -> list[str]:
             "inspectSandbox=true",
             "--max",
             "0",
-        ],
+        ]
+        + _kubeconfig_context_args(context_name),
         capture_output=True,
     )
     return result.stdout.splitlines()
@@ -365,3 +377,10 @@ def _get_environ_int(name: str, default: int) -> int:
         return default
     except ValueError as e:
         raise ValueError(f"{name} must be an int: '{os.environ[name]}'.") from e
+
+
+def _kubeconfig_context_args(context_name: str | None) -> list[str]:
+    """Formats --kube-context arguments suitable for passing to a `helm` subprocess."""
+    if context_name is None:
+        return []
+    return ["--kube-context", context_name]

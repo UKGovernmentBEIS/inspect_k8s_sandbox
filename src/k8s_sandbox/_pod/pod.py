@@ -15,8 +15,14 @@ T = TypeVar("T")
 
 
 class Pod:
-    def __init__(self, name: str, namespace: str, default_container_name: str) -> None:
-        self.info = PodInfo(name, namespace, default_container_name)
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        context_name: str | None,
+        default_container_name: str,
+    ) -> None:
+        self.info = PodInfo(name, namespace, context_name, default_container_name)
 
     async def exec(
         self,

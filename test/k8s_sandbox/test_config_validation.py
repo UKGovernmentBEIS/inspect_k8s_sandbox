@@ -27,6 +27,13 @@ async def test_invalid_chart() -> None:
         )
 
 
+async def test_invalid_kubeconfig_context_name() -> None:
+    with pytest.raises(ValueError):
+        await K8sSandboxEnvironment.sample_init(
+            __file__, K8sSandboxEnvironmentConfig(context="invalid-context"), {}
+        )
+
+
 async def test_invalid_config_type() -> None:
     class MyModel(BaseModel, frozen=True):
         pass
@@ -37,7 +44,7 @@ async def test_invalid_config_type() -> None:
 
 def test_can_serialize_and_deserialize_config() -> None:
     original = K8sSandboxEnvironmentConfig(
-        chart="my-chart", values=Path("my-values.yaml")
+        chart="my-chart", values=Path("my-values.yaml"), context="my-context"
     )
 
     as_json = original.model_dump()
