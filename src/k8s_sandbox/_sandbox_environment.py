@@ -18,6 +18,7 @@ from k8s_sandbox._helm import (
     StaticValuesSource,
     ValuesSource,
 )
+from k8s_sandbox._kubernetes_api import validate_context_name
 from k8s_sandbox._logger import (
     format_log_message,
     inspect_trace_action,
@@ -228,6 +229,8 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     # In future, charts from Helm repositories may be supported, hence str over Path.
     chart: str | None = None
     values: Path | None = None
+    context: str | None = None
+    """The kubeconfig context name (e.g. if you have multiple clusters)."""
 
 
 class K8sError(Exception):
@@ -245,12 +248,15 @@ def _create_release(
 ) -> Release:
     release_config = _resolve_release_config(config)
     values_source = _create_values_source(release_config)
-    return Release(task_name, release_config.chart, values_source)
+    return Release(
+        task_name, release_config.chart, values_source, release_config.context
+    )
 
 
 class _ReleaseConfig(BaseModel, frozen=True):
     chart: Path | None
     values: Path | None
+    context: str | None
 
 
 def _create_values_source(release_config: _ReleaseConfig) -> ValuesSource:
@@ -280,18 +286,26 @@ def _resolve_release_config(
                 "charts from local directories are supported."
             )
 
+    def validate_context(context: str | None) -> None:
+        # Note: There is a race condition between validating the context name and
+        # actually using it because the kubeconfig file could change on disk. Validate
+        # it nonetheless to fail fast if possible.
+        if context is not None:
+            validate_context_name(context)
+
     if config is None:
-        return _ReleaseConfig(chart=None, values=None)
+        return _ReleaseConfig(chart=None, values=None, context=None)
     if isinstance(config, K8sSandboxEnvironmentConfig):
         chart = Path(config.chart).resolve() if config.chart else None
         validate_chart_dir(chart)
         values = config.values.resolve() if config.values else None
         validate_values_file(values)
-        return _ReleaseConfig(chart=chart, values=values)
+        validate_context(config.context)
+        return _ReleaseConfig(chart=chart, values=values, context=config.context)
     if isinstance(config, str):
         values = Path(config).resolve()
         validate_values_file(values)
-        return _ReleaseConfig(chart=None, values=values)
+        return _ReleaseConfig(chart=None, values=values, context=None)
     raise TypeError(
         f"Invalid 'SandboxEnvironmentConfigType | None' type: {type(config)}."
     )

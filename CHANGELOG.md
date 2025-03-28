@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add support for specifying a kubeconfig context name in K8sSandboxEnvironmentConfig.
 - Add automatic translation of Docker Compose files to Helm values files.
 - Handle cancellation of evals (either manually or due to an error) such that Helm releases are uninstalled.
 - Increase default Helm install timeout from 5 to 10 minutes.

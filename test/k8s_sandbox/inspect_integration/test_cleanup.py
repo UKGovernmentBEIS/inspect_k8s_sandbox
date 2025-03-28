@@ -6,7 +6,7 @@ from inspect_ai import Task
 from inspect_ai.model import Model
 
 from k8s_sandbox._helm import uninstall
-from k8s_sandbox._kubernetes_api import get_current_context_namespace
+from k8s_sandbox._kubernetes_api import get_default_namespace
 from k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
 from test.k8s_sandbox.inspect_integration.testing_utils.mock_model import (
     MockToolCallModel,
@@ -51,7 +51,7 @@ def test_without_cleanup(model: Model, task: Task) -> None:
             run_and_verify_inspect_eval(task=task, model=model, sandbox_cleanup=False)
 
     assert spy.call_count == 0
-    asyncio.run(uninstall(release, get_current_context_namespace(), quiet=False))
+    asyncio.run(uninstall(release, get_default_namespace(None), None, quiet=False))
 
 
 def test_cli_cleanup_all_gets_user_confirmation(model: Model, task: Task) -> None:
@@ -70,4 +70,4 @@ def test_cli_cleanup_all_gets_user_confirmation(model: Model, task: Task) -> Non
 
     assert "Are you sure you want to uninstall ALL" in confirm.call_args.args[0]
     assert spy.call_count == 0
-    asyncio.run(uninstall(release, get_current_context_namespace(), quiet=False))
+    asyncio.run(uninstall(release, get_default_namespace(None), None, quiet=False))
