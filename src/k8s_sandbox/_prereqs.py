@@ -6,9 +6,8 @@ from semver import Version
 
 logger = logging.getLogger(__name__)
 
-# This was picked as it is over 2 years old. It may be possible that older versions
-# work but would require testing.
-MINIMUM_HELM_VERSION = "3.10.0"
+# The `--ignore-not-found` flag was added in Helm 3.13.0 (September 2023).
+MINIMUM_HELM_VERSION = "3.13.0"
 
 
 async def validate_prereqs() -> None:

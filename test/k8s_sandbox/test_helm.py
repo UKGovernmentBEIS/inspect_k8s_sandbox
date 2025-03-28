@@ -117,11 +117,15 @@ async def test_invalid_helm_timeout(
 
 async def test_helm_install_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
+    release = Release(__file__, None, ValuesSource.none(), None)
 
     with pytest.raises(RuntimeError) as excinfo:
-        await Release(__file__, None, ValuesSource.none(), None).install()
+        await release.install()
 
     # Verify that we detect the install timeout and add our own message.
     assert "The configured timeout value was 1s. Please see the docs" in str(
         excinfo.value
     )
+    # The release probably won't have been installed given the short timeout, but clean
+    # up just in case.
+    await release.uninstall(quiet=True)

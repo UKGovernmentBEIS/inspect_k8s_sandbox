@@ -233,20 +233,6 @@ async def uninstall(
         quiet: If False, allow the output of the `helm uninstall` command to be written
           to this process's stdout/stderr. If True, suppress the output.
     """
-
-    def _is_release_not_found_error(stderr: str) -> bool:
-        # The consequence of a false positive is to discard a useful error message, so
-        # err on the side of strictness.
-        return (
-            re.match(
-                rf"^Error: uninstall: Release not loaded: {release_name}: release: not "
-                "found$",
-                stderr,
-                re.IGNORECASE,
-            )
-            is not None
-        )
-
     async with _uninstall_semaphore():
         with inspect_trace_action(
             "K8s uninstall Helm chart", release=release_name, namespace=namespace
@@ -261,20 +247,20 @@ async def uninstall(
                     "--wait",
                     "--timeout",
                     f"{_get_timeout()}s",
+                    # A helm uninstall failure with "release not found" implies that the
+                    # release was never successfully installed or has already been
+                    # uninstalled. When a helm release fails to install (or the user
+                    # cancels the eval), this uninstall function will still be called,
+                    # so these errors are common and result in error desensitisation.
+                    "--ignore-not-found",
                 ]
                 + _kubeconfig_context_args(context_name),
                 capture_output=True,
             )
-            # A helm uninstall failure with "release not found" implies that the release
-            # was never successfully installed or has already been uninstalled.
-            # When a helm release fails to install (or the user cancels the eval), this
-            # uninstall function will still be called, so these errors are common and
-            # result in error desensitisation.
-            is_release_not_found_error = _is_release_not_found_error(result.stderr)
-            if not quiet and not is_release_not_found_error:
+            if not quiet:
                 sys.stdout.write(result.stdout)
                 sys.stderr.write(result.stderr)
-            if not result.success and not is_release_not_found_error:
+            if not result.success:
                 _raise_runtime_error(
                     "Helm uninstall failed.",
                     release=release_name,
