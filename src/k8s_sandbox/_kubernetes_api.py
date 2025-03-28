@@ -120,7 +120,7 @@ class _Config:
                 return context
         raise ValueError(
             f"Could not find a context named '{context_name}' in the kubeconfig file. "
-            f"Available contexts: {self.contexts}."
+            f"Available contexts: {[ctx['name'] for ctx in self.contexts]}."
         )
 
 
