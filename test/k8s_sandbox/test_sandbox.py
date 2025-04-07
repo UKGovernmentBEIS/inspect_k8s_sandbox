@@ -744,6 +744,10 @@ async def test_can_get_sandbox_connection(sandbox: K8sSandboxEnvironment) -> Non
     assert re.match(
         r"^^kubectl exec -it \S+ -n \S+ -c \S+ -- bash -l$", result.command
     ), result
+    assert result.vscode_command is not None
+    assert result.vscode_command[0] == "remote-containers.attachToK8sContainer"
+    assert "name" in result.vscode_command[1]
+    assert "namespace" in result.vscode_command[1]
 
 
 async def test_can_get_sandbox_connection_with_specified_context() -> None:
@@ -762,3 +766,4 @@ async def test_can_get_sandbox_connection_with_specified_context() -> None:
         r"^^kubectl exec -it \S+ -n \S+ -c \S+ --context \S+ -- bash -l$",
         result.command,
     ), result
+    # The attachToK8sContainer command does not support passing in a context name.

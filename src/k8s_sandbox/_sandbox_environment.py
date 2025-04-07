@@ -207,8 +207,15 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         return SandboxConnection(
             type="k8s",
             command=shlex.join(kubectl_cmd),
-            # TODO: Can we use `remote-containers.attachToK8sContainer`?
-            vscode_command=None,
+            # Note that there is no facility to specify the kubeconfig context or the
+            # default container name.
+            vscode_command=[
+                "remote-containers.attachToK8sContainer",
+                {
+                    "name": pod.name,
+                    "namespace": pod.namespace,
+                },
+            ],
             container=pod.default_container_name,
         )
 
