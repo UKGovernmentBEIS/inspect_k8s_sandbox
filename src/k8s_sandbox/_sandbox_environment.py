@@ -1,3 +1,4 @@
+import shlex
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -6,6 +7,7 @@ from typing import Any, Generator, Literal, cast, overload
 from inspect_ai.util import (
     ExecResult,
     OutputLimitExceededError,
+    SandboxConnection,
     SandboxEnvironment,
     SandboxEnvironmentConfigType,
     sandboxenv,
@@ -186,6 +188,29 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 return (
                     temp_file.read() if not text else temp_file.read().decode("utf-8")
                 )
+
+    async def connection(self) -> SandboxConnection:
+        pod = self._pod.info
+        kubectl_cmd = [
+            "kubectl",
+            "exec",
+            "-it",
+            pod.name,
+            "-n",
+            pod.namespace,
+            "-c",
+            pod.default_container_name,
+        ]
+        if pod.context_name is not None:
+            kubectl_cmd.extend(["--context", pod.context_name])
+        kubectl_cmd.extend(["--", "bash", "-l"])
+        return SandboxConnection(
+            type="k8s",
+            command=shlex.join(kubectl_cmd),
+            # TODO: Can we use `remote-containers.attachToK8sContainer`?
+            vscode_command=None,
+            container=pod.default_container_name,
+        )
 
     @contextmanager
     def _log_op(

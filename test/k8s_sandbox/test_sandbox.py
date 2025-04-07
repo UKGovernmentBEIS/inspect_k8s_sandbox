@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from textwrap import dedent
 from typing import AsyncGenerator
 from unittest.mock import patch
@@ -10,6 +11,7 @@ from inspect_ai.util import OutputLimitExceededError, SandboxEnvironmentLimits
 from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
+from k8s_sandbox._kubernetes_api import get_current_context_name
 from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
 from test.k8s_sandbox.utils import install_sandbox_environments
 
@@ -730,3 +732,33 @@ async def test_sandbox_with_minimal_tools(
 
     assert exec_result.stdout.strip() == "/"
     assert read_result == "Hello, World!"
+
+
+### SandboxConnection
+
+
+async def test_can_get_sandbox_connection(sandbox: K8sSandboxEnvironment) -> None:
+    result = await sandbox.connection()
+
+    # kubectl exec -it agent-env-dwg883nv-default-0 -n default -c default -- bash -l
+    assert re.match(
+        r"^^kubectl exec -it \S+ -n \S+ -c \S+ -- bash -l$", result.command
+    ), result
+
+
+async def test_can_get_sandbox_connection_with_specified_context() -> None:
+    current_context_name = get_current_context_name()
+
+    # Specify an explicit kubeconfig context name when installing the sandbox.
+    async with install_sandbox_environments(
+        __file__, "values.yaml", current_context_name
+    ) as envs:
+        sandbox = envs["default"]
+        result = await sandbox.connection()
+
+    # kubectl exec -it agent-env-dwg883nv-default-0 -n default -c default
+    # --context minikube -- bash -l
+    assert re.match(
+        r"^^kubectl exec -it \S+ -n \S+ -c \S+ --context \S+ -- bash -l$",
+        result.command,
+    ), result
