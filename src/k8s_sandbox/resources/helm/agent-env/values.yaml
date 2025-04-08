@@ -79,6 +79,8 @@ services:
     tolerations: []
     # -- Node selector settings for the Pod.
     nodeSelector: {}
+    # -- Ports that are exposed for all protocols (TCP, UDP, etc.) to the outside world.
+    externalIngressPorts: []
   # nginx:
   #   runtimeClassName: gvisor
   #   image: "nginx"

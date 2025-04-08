@@ -1,0 +1,12 @@
+services:
+  default:
+    image: "nginx"
+    externalIngressPorts:
+      - 2222
+  other:
+    image: "nginx"
+    externalIngressPorts:
+      - 80
+      - 8080
+  none:
+    image: "nginx"
