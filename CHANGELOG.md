@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add `services.externalIngressPorts` to Helm chart to allow certain services to be accessible from outside the sandbox e.g. for connecting over SSH.
 - Add `SandboxConnection` support for human agent baselining and connecting to a sandbox for debugging.
 - Add support for specifying a kubeconfig context name in K8sSandboxEnvironmentConfig.
 - Add automatic translation of Docker Compose files to Helm values files.

@@ -189,6 +189,47 @@ def test_cluster_default_magic_string(
     )
 
 
+def test_external_ingress(chart_dir: Path, test_resources_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "external-ingress-values.yaml"
+    )
+
+    cnps = _get_documents(documents, "CiliumNetworkPolicy")
+    expected_ingress_default = yaml.safe_load("""
+  - fromEntities:
+    - all
+    toPorts:
+    - ports:
+      - port: '2222'
+        protocol: ANY
+""")
+    actual_default_ingress = next(
+        cnp["spec"]["ingress"]
+        for cnp in cnps
+        if "default-external-ingress" in cnp["metadata"]["name"]
+    )
+    assert actual_default_ingress == expected_ingress_default
+
+    expected_ingress_other = yaml.safe_load("""
+  - fromEntities:
+    - all
+    toPorts:
+    - ports:
+      - port: '80'
+        protocol: ANY
+      - port: '8080'
+        protocol: ANY
+""")
+    actual_other_ingress = next(
+        cnp["spec"]["ingress"]
+        for cnp in cnps
+        if "other-external-ingress" in cnp["metadata"]["name"]
+    )
+    assert actual_other_ingress == expected_ingress_other
+
+    assert "none-external-ingress" not in [cnp["metadata"]["name"] for cnp in cnps]
+
+
 def _run_helm_template(
     chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
 ) -> list[dict[str, Any]]:

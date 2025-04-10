@@ -1,6 +1,6 @@
 # agent-env
 
-![Version: 0.11.0](https://img.shields.io/badge/Version-0.11.0-informational?style=flat-square)
+![Version: 0.12.0](https://img.shields.io/badge/Version-0.12.0-informational?style=flat-square)
 
 ## Values
 
@@ -21,6 +21,7 @@
 | services.default.command | list | `["tail","-f","/dev/null"]` | The container's entrypoint command. |
 | services.default.dnsRecord | bool | false | Whether to create a DNS record which will resolve to this service from within the agent environment, using the service name as the domain (e.g. default). |
 | services.default.env | list | `[]` | Environment variables that will be set in the container. |
+| services.default.externalIngressPorts | list | `[]` | Ports that are exposed for all protocols (TCP, UDP, etc.) to the outside world. |
 | services.default.image | string | `"python:3.12-bookworm"` | The container's image name. |
 | services.default.imagePullPolicy | string | `nil` | The container's image pull policy. |
 | services.default.livenessProbe | object | `{}` | A probe which is used to determine when to restart a container. |

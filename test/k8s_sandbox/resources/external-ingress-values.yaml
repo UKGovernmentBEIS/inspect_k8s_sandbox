@@ -1,0 +1,18 @@
+services:
+  default:
+    image: "nginx:1.27.0"
+    command: null
+    externalIngressPorts:
+      - 80
+    readinessProbe:
+      tcpSocket:
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"

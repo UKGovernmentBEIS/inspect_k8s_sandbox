@@ -384,6 +384,30 @@ annotations:
 
 This may be useful for determining which task a Pod belongs to.
 
+## Exposing services externally
+
+By default, ingress is only allowed from within the sandbox (i.e. within the Helm
+release). Should you require ingress from outside this (e.g. for human SSH access):
+
+```yaml
+services:
+  default:
+    externalIngressPorts:
+      - 2222
+```
+
+This will create an additional Cilium Network Policy to allow ingress on the specified
+ports over any protocol from all entities (see [Cilium
+docs](https://docs.cilium.io/en/stable/security/policy/language/#entities-based) for
+meaning of "all" entities).
+
+
+!!! warning
+
+    This is not required for typical automated evals. It is only required should you
+    need to allow ingress from outside the sandbox. Please consider the security
+    implications.
+
 ## Render chart without installing
 
 ```sh

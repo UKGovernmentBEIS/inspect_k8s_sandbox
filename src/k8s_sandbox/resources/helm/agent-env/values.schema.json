@@ -129,6 +129,12 @@
             },
             "nodeSelector": {
               "type": "object"
+            },
+            "externalIngressPorts": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
             }
           },
           "required": [
