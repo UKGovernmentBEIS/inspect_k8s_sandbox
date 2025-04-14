@@ -369,6 +369,51 @@ additionalResources:
       password: my-password
 ```
 
+
+You can also use Helm templating in `additionalResources`.
+
+```yaml
+additionalResources:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: '{{ template "agentEnv.fullname" $ }}-secret'
+    type: Opaque
+    data:
+      password: my-password
+```
+
+For more complex resources which are not valid standalone YAML, you can use a string
+block. The following example creates a Cilium Network Policy which allows ingress from
+all entities to the default service on port 2222.
+
+```yaml
+additionalResources:
+- |
+  apiVersion: cilium.io/v2
+  kind: CiliumNetworkPolicy
+  metadata:
+    name: {{ template "agentEnv.fullname" $ }}-sandbox-default-external-ingress
+    annotations:
+      {{- toYaml $.Values.annotations | nindent 6 }}
+  spec:
+    description: |
+      Allow external ingress from all entities to the default service on port 2222.
+    endpointSelector:
+      matchLabels:
+        io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
+        {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
+        inspect/service: default
+    ingress:
+      - fromEntities:
+        - all
+        toPorts:
+        - ports:
+          - port: "2222"
+            protocol: TCP
+
+```
+
 ## Annotations
 
 You can pass arbitrary annotations to the Helm chart using the top-level `annotations`
@@ -383,30 +428,6 @@ annotations:
 ```
 
 This may be useful for determining which task a Pod belongs to.
-
-## Exposing services externally
-
-By default, ingress is only allowed from within the sandbox (i.e. within the Helm
-release). Should you require ingress from outside this (e.g. for human SSH access):
-
-```yaml
-services:
-  default:
-    externalIngressPorts:
-      - 2222
-```
-
-This will create an additional Cilium Network Policy to allow ingress on the specified
-ports over any protocol from all entities (see [Cilium
-docs](https://docs.cilium.io/en/stable/security/policy/language/#entities-based) for
-meaning of "all" entities).
-
-
-!!! warning
-
-    This is not required for typical automated evals. It is only required should you
-    need to allow ingress from outside the sandbox. Please consider the security
-    implications.
 
 ## Render chart without installing
 

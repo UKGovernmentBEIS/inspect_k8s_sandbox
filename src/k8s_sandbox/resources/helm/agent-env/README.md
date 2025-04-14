@@ -6,7 +6,7 @@
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| additionalResources | list | `[]` | A list of additional resources to deploy within the agent environment. |
+| additionalResources | list | `[]` | A list of additional resources to deploy within the agent environment. They're passed through the Helm template engine. String values are passed through the template engine then converted to YAML. |
 | allowCIDR | list | Empty list (no additional CIDR ranges compared to default policies) | A list of CIDR ranges (e.g. 1.1.1.1/32) that pods within the agent environment are allowed to access. |
 | allowDomains | list | Empty list (no internet access) | A list of fully qualified domain names that pods within the agent environment are allowed to access. |
 | allowEntities | list | Empty list (no additional entities compared to default policies) | A list of Cilium entities (e.g. "world") that pods within the agent environment are allowed to access. |
@@ -21,7 +21,6 @@
 | services.default.command | list | `["tail","-f","/dev/null"]` | The container's entrypoint command. |
 | services.default.dnsRecord | bool | false | Whether to create a DNS record which will resolve to this service from within the agent environment, using the service name as the domain (e.g. default). |
 | services.default.env | list | `[]` | Environment variables that will be set in the container. |
-| services.default.externalIngressPorts | list | `[]` | Ports that are exposed for all protocols (TCP, UDP, etc.) to the outside world. |
 | services.default.image | string | `"python:3.12-bookworm"` | The container's image name. |
 | services.default.imagePullPolicy | string | `nil` | The container's image pull policy. |
 | services.default.livenessProbe | object | `{}` | A probe which is used to determine when to restart a container. |

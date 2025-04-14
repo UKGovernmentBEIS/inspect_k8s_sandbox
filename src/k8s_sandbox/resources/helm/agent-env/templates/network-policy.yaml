@@ -115,31 +115,3 @@ spec:
           io.kubernetes.pod.namespace: {{ .Release.Namespace }}
           {{- include "agentEnv.selectorLabels" $ | nindent 10 }}
 {{- end }}
-{{- range $name, $service := .Values.services }}
-{{- if $service.externalIngressPorts }}
----
-apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
-metadata:
-  name: {{ template "agentEnv.fullname" $ }}-sandbox-{{ $name }}-external-ingress
-  annotations:
-    {{- toYaml $.Values.annotations | nindent 4 }}
-spec:
-  description: |
-    Allow external ingress from all entities to the "{{ $name }}" service.
-  endpointSelector:
-    matchLabels:
-      io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
-      {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
-      inspect/service: {{ $name }}
-  ingress:
-    - fromEntities:
-      - all
-      toPorts:
-      - ports:
-      {{- range $port := $service.externalIngressPorts }}
-        - port: "{{ $port }}"
-          protocol: ANY
-      {{- end }}
-{{- end }}
-{{- end }}

@@ -1,0 +1,11 @@
+additionalResources:
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: '{{ template "agentEnv.fullname" $ }}-object-templated-secret'
+    labels:
+      app.kubernetes.io/name: agent-env
+      app.kubernetes.io/instance: "{{ .Release.Name }}"
+  type: Opaque
+  data:
+    password: mypassword
