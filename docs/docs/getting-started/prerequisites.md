@@ -29,6 +29,7 @@ containers which you'd like `K8sSandboxEnvironment` to directly interact with (i
 * `mkdir`
 * `timeout`
 * `base64`
+* `runuser`
 
 ## Cluster requirements
 

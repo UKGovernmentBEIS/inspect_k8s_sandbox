@@ -132,10 +132,6 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         # (they should only use it if potential unreliablity exists in their runtime)."
         timeout_retry: bool = True,
     ) -> ExecResult[str]:
-        if user is not None:
-            raise NotImplementedError(
-                "The user parameter for exec() is not yet supported."
-            )
         log_kwargs = dict(cmd=cmd, stdin=input, cwd=cwd, env=env, timeout=timeout)
         # Do not log these at error level or re-raise as enriched K8sError.
         expected_exceptions = (
@@ -146,7 +142,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         )
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
-            result = await self._pod.exec(cmd, input, cwd, env, timeout)
+            result = await self._pod.exec(cmd, input, cwd, env, user, timeout)
             log_trace(f"Completed: {op}.", **(log_kwargs | {"result": result}))
             return result
 

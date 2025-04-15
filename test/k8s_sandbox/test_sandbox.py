@@ -228,6 +228,71 @@ async def test_exec_env_requiring_quotes(sandbox: K8sSandboxEnvironment) -> None
     assert result.stdout.strip() == "b'\"a r"
 
 
+@pytest.mark.parametrize(
+    "cmd",
+    [["whoami"], ["bash", "-c", "echo $USER"], ["bash", "-c", "whoami"]],
+)
+async def test_exec_user(sandbox: K8sSandboxEnvironment, cmd: list[str]) -> None:
+    # The nobody user is available in the default python:3.12-bookworm image.
+    result = await sandbox.exec(cmd, user="nobody")
+
+    assert result.success
+    assert result.stdout.strip() == "nobody"
+
+
+async def test_exec_user_when_specified_user_does_not_exist(
+    sandbox: K8sSandboxEnvironment,
+) -> None:
+    with pytest.raises(K8sError) as excinfo:
+        await sandbox.exec(["whoami"], user="foo")
+
+    error_msg = str(excinfo.value.__cause__)
+    assert (
+        "The user parameter 'foo' provided to exec() does not appear to exist in the "
+        "container" in error_msg
+    )
+    assert "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user" in error_msg
+
+
+async def test_exec_user_when_not_running_as_root(
+    sandbox_non_root: K8sSandboxEnvironment,
+) -> None:
+    with pytest.raises(K8sError) as excinfo:
+        await sandbox_non_root.exec(["whoami"], user="nobody")
+
+    error_msg = str(excinfo.value.__cause__)
+    assert (
+        "When a user parameter ('nobody') is provided to exec(), the container must be "
+        "running as root" in error_msg
+    )
+    assert "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user" in error_msg
+
+
+async def test_exec_user_when_runuser_not_installed(
+    sandbox_busybox: K8sSandboxEnvironment,
+) -> None:
+    with pytest.raises(K8sError) as excinfo:
+        await sandbox_busybox.exec(["whoami"], user="foo")
+
+    error_msg = str(excinfo.value.__cause__)
+    assert (
+        "When a user parameter ('foo') is provided to exec(), the runuser binary "
+        "must be installed in the container"
+    ) in error_msg
+    assert "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user" in error_msg
+
+
+async def test_exec_does_not_raise_error_if_command_happens_to_use_runuser(
+    sandbox: K8sSandboxEnvironment,
+) -> None:
+    # If an LLM happens to generate a command that uses `runuser`, we don't want to
+    # raise an error.
+    result = await sandbox.exec(["bash", "-c", "runuser -u foo -- whoami"])
+
+    assert not result.success
+    assert "runuser: user foo does not exist" in result.stderr
+
+
 @pytest.mark.parametrize("cmd", [["bash", "-c", "sleep 10"], ["sleep", "10"]])
 async def test_exec_timeout(
     sandbox: K8sSandboxEnvironment, cmd: list[str], log_err: LogCaptureFixture

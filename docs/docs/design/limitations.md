@@ -167,11 +167,28 @@ The `k8s_sandbox` package will not retry the remote command execution when any o
 and that the command did not at least start executing. This will result in that sample
 of the eval failing.
 
-## The `user` parameter to `exec()` is not supported
+## Must run as root to use the `user` parameter in `exec()` { #exec-user }
 
-In Kubernetes, a container runs as a single user. If you need to run commands as
-different users, you may have to run the container as root and use a tool like `runuser`
-to run commands as different users.
+In Kubernetes, a container runs as a single user. The user can be specified in the
+`values.yaml` file. For example, if using the [built-in Helm
+chart](../helm//built-in-chart.md):
+
+```yaml
+services:
+  my-service:
+    image: alpine
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+```
+
+Therefore, executing commands as a different user to the one which the container was
+started with is **not recommended**. Generally, specifying users in tool definitions can
+result in undesirable coupling between your tools and sandbox.
+
+That said, if you need to run commands as different users, the `user` parameter to
+`exec()` is supported. However, you must run the container as root and ensure that
+`runuser` is installed in the container.
 
 ## Images are not automatically built, tagged or pushed
 

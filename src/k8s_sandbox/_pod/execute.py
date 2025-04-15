@@ -9,11 +9,13 @@ from inspect_ai.util import SandboxEnvironmentLimits as limits
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
 from k8s_sandbox._pod.buffer import LimitedBuffer
+from k8s_sandbox._pod.error import ExecutableNotFoundError
 from k8s_sandbox._pod.get_returncode import get_returncode
 from k8s_sandbox._pod.op import PodOperation
 
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
+EXEC_USER_URL = "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
 
 
 class ExecuteOperation(PodOperation):
@@ -23,26 +25,41 @@ class ExecuteOperation(PodOperation):
         stdin: str | bytes | None,
         cwd: str | None,
         env: dict[str, str],
+        user: str | None,
         timeout: int | None,
     ) -> ExecResult[str]:
         shell_script = self._build_shell_script(cmd, stdin, cwd, env, timeout)
-        with self._interactive_shell() as ws_client:
+        with self._interactive_shell(user) as ws_client:
             # Write the script to the shell's stdin rather than passing it as a command
             # argument (-c) to better support potentially long commands.
             ws_client.write_stdin(shell_script)
-            result = self._handle_shell_output(ws_client, timeout)
+            result = self._handle_shell_output(ws_client, user, timeout)
         return result
 
     @contextmanager
-    def _interactive_shell(self) -> Generator[WSClient, None, None]:
-        yield from self.create_websocket_client_for_exec(
-            command=["/bin/sh"],
-            stderr=True,
-            stdin=True,
-            stdout=True,
-            # Leave stdout and stderr as binary. Has no effect on stdin.
-            binary=True,
-        )
+    def _interactive_shell(self, user: str | None) -> Generator[WSClient, None, None]:
+        command = ["/bin/sh"]
+        if user is not None:
+            command = ["runuser", "-u", user] + command
+        try:
+            yield from self.create_websocket_client_for_exec(
+                command=command,
+                stderr=True,
+                stdin=True,
+                stdout=True,
+                # Leave stdout and stderr as binary. Has no effect on stdin.
+                binary=True,
+            )
+        # Raised if /bin/sh or runuser cannot be found in the Pod (not if a
+        # user-supplied) command cannot be found.
+        except ExecutableNotFoundError as e:
+            if 'error finding executable "runuser"' in str(e):
+                raise RuntimeError(
+                    f"When a user parameter ('{user}') is provided to exec(), the "
+                    f"runuser binary must be installed in the container. Docs: "
+                    f"{EXEC_USER_URL}"
+                ) from e
+            raise
 
     def _build_shell_script(
         self,
@@ -97,7 +114,7 @@ class ExecuteOperation(PodOperation):
         return f"timeout -k 5s {timeout}s "
 
     def _handle_shell_output(
-        self, ws_client: WSClient, timeout: int | None
+        self, ws_client: WSClient, user: str | None, timeout: int | None
     ) -> ExecResult[str]:
         def stream_output() -> ExecResult[str]:
             stdout = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
@@ -139,7 +156,23 @@ class ExecuteOperation(PodOperation):
         # PermissionError for exit code 126 and stderr containing "permission denied".
         if result.returncode == 126 and "permission denied" in result.stderr.casefold():
             raise PermissionError(f"Permission denied executing command. {result}")
+        # Only parse runuser errors if the user parameter was set. Don't raise errors if
+        # the user-supplied command happened to use `runuser` itself.
+        if result.returncode != 0 and user is not None:
+            self._check_for_runuser_error(result.stderr, user)
         return result
+
+    def _check_for_runuser_error(self, stderr: str, user: str) -> None:
+        if re.search(r"runuser: user \S+ does not exist", stderr, re.IGNORECASE):
+            raise RuntimeError(
+                f"The user parameter '{user}' provided to exec() does "
+                f"not appear to exist in the container. Docs: {EXEC_USER_URL}\n{stderr}"
+            )
+        if "runuser: may not be used by non-root users" in stderr.casefold():
+            raise RuntimeError(
+                f"When a user parameter ('{user}') is provided to exec(), the "
+                f"container must be running as root. Docs: {EXEC_USER_URL}\n{stderr}"
+            )
 
     def _filter_sentinel_and_returncode(self, frame: bytes) -> tuple[bytes, int | None]:
         # We don't support returning binary data from an exec() command and are expected
