@@ -132,10 +132,6 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         # (they should only use it if potential unreliablity exists in their runtime)."
         timeout_retry: bool = True,
     ) -> ExecResult[str]:
-        if user is not None:
-            raise NotImplementedError(
-                "The user parameter for exec() is not yet supported."
-            )
         log_kwargs = dict(cmd=cmd, stdin=input, cwd=cwd, env=env, timeout=timeout)
         # Do not log these at error level or re-raise as enriched K8sError.
         expected_exceptions = (
@@ -146,7 +142,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         )
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
-            result = await self._pod.exec(cmd, input, cwd, env, timeout)
+            result = await self._pod.exec(cmd, input, cwd, env, user, timeout)
             log_trace(f"Completed: {op}.", **(log_kwargs | {"result": result}))
             return result
 
@@ -189,34 +185,12 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                     temp_file.read() if not text else temp_file.read().decode("utf-8")
                 )
 
-    async def connection(self) -> SandboxConnection:
-        pod = self._pod.info
-        kubectl_cmd = [
-            "kubectl",
-            "exec",
-            "-it",
-            pod.name,
-            "-n",
-            pod.namespace,
-            "-c",
-            pod.default_container_name,
-        ]
-        if pod.context_name is not None:
-            kubectl_cmd.extend(["--context", pod.context_name])
-        kubectl_cmd.extend(["--", "bash", "-l"])
+    async def connection(self, *, user: str | None = None) -> SandboxConnection:
         return SandboxConnection(
             type="k8s",
-            command=shlex.join(kubectl_cmd),
-            # Note that there is no facility to specify the kubeconfig context or the
-            # default container name.
-            vscode_command=[
-                "remote-containers.attachToK8sContainer",
-                {
-                    "name": pod.name,
-                    "namespace": pod.namespace,
-                },
-            ],
-            container=pod.default_container_name,
+            command=self._get_kubectl_connection_command(user),
+            vscode_command=self._get_vscode_connection_command(user),
+            container=self._pod.info.default_container_name,
         )
 
     @contextmanager
@@ -253,6 +227,42 @@ class K8sSandboxEnvironment(SandboxEnvironment):
     @classmethod
     def config_deserialize(cls, config: dict[str, Any]) -> BaseModel:
         return K8sSandboxEnvironmentConfig(**config)
+
+    def _get_kubectl_connection_command(self, user: str | None) -> str:
+        kubectl_cmd = [
+            "kubectl",
+            "exec",
+            "-it",
+            self._pod.info.name,
+            "-n",
+            self._pod.info.namespace,
+            "-c",
+            self._pod.info.default_container_name,
+        ]
+        if self._pod.info.context_name is not None:
+            kubectl_cmd.extend(["--context", self._pod.info.context_name])
+        kubectl_cmd.append("--")
+        if user is not None:
+            kubectl_cmd.extend(["su", "-s", "/bin/bash", "-l", user])
+        else:
+            kubectl_cmd.extend(["bash", "-l"])
+        return shlex.join(kubectl_cmd)
+
+    def _get_vscode_connection_command(self, user: str | None) -> list | None:
+        # Do not return a command for options which aren't supported.
+        if self._pod.info.context_name is not None:
+            return None
+        if user is not None:
+            return None
+        # Note that there is no facility to specify the default container name - the
+        # user will be prompted to select one (usually "default").
+        return [
+            "remote-containers.attachToK8sContainer",
+            {
+                "name": self._pod.info.name,
+                "namespace": self._pod.info.namespace,
+            },
+        ]
 
 
 class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):

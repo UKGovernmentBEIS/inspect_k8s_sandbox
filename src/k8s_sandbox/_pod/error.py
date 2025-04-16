@@ -5,7 +5,7 @@ from k8s_sandbox._logger import format_log_message
 
 class PodError(Exception):
     """
-    A generic error raised when interacting with a pod.
+    A generic error raised when interacting with a Pod.
 
     This will typically cause the eval to fail.
     """
@@ -15,6 +15,16 @@ class PodError(Exception):
 
 
 class GetReturncodeError(Exception):
-    """The return code of a pod operation could not be retrieved."""
+    """The return code of a Pod operation could not be retrieved."""
+
+    pass
+
+
+class ExecutableNotFoundError(Exception):
+    """The executable could not be found in the container.
+
+    This is **not** raised as a result of user-supplied commands not being found. It is
+    typically raised when /bin/sh or runuser cannot be found in the container.
+    """
 
     pass

@@ -28,8 +28,8 @@ async def non_root(
 
 async def test_self_check_k8s_default_root(root: SandboxEnvironment) -> None:
     known_failures = [
-        # The user parameter is not supported in K8sSandboxEnvironment.
-        "test_exec_as_user",
+        # Running as a nonexistent user results in an exception being raised (by design)
+        # whereas the test expects an ExecResult to be returned without an exception.
         "test_exec_as_nonexistent_user",
         # Root can read from files after `chmod -r`.
         "test_read_file_not_allowed",
@@ -43,9 +43,11 @@ async def test_self_check_k8s_default_root(root: SandboxEnvironment) -> None:
 
 async def test_self_check_k8s_non_root(non_root: SandboxEnvironment) -> None:
     known_failures = [
-        # The user parameter is not supported in K8sSandboxEnvironment.
-        "test_exec_as_user",
+        # Running as a nonexistent user results in an exception being raised (by design)
+        # whereas the test expects an ExecResult to be returned without an exception.
         "test_exec_as_nonexistent_user",
+        # In K8s, the container must be running as root to exec as a different user.
+        "test_exec_as_user",
     ]
 
     return await _run_self_check(non_root, known_failures)
