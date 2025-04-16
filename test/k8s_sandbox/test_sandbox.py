@@ -807,8 +807,8 @@ async def test_can_get_sandbox_connection(sandbox: K8sSandboxEnvironment) -> Non
 
     # kubectl exec -it agent-env-dwg883nv-default-0 -n default -c default -- bash -l
     assert re.match(
-        r"^^kubectl exec -it \S+ -n \S+ -c \S+ -- bash -l$", result.command
-    ), result
+        r"^kubectl exec -it \S+ -n \S+ -c \S+ -- bash -l$", result.command
+    ), result.command
     assert result.vscode_command is not None
     assert result.vscode_command[0] == "remote-containers.attachToK8sContainer"
     assert "name" in result.vscode_command[1]
@@ -828,7 +828,23 @@ async def test_can_get_sandbox_connection_with_specified_context() -> None:
     # kubectl exec -it agent-env-dwg883nv-default-0 -n default -c default
     # --context minikube -- bash -l
     assert re.match(
-        r"^^kubectl exec -it \S+ -n \S+ -c \S+ --context \S+ -- bash -l$",
+        r"^kubectl exec -it \S+ -n \S+ -c \S+ --context \S+ -- bash -l$",
         result.command,
-    ), result
-    # The attachToK8sContainer command does not support passing in a context name.
+    ), result.command
+    # The attachToK8sContainer command does not support passing in a context name, so
+    # we don't return any VS Code command.
+    assert result.vscode_command is None
+
+
+async def test_can_get_sandbox_connection_with_specified_user(
+    sandbox: K8sSandboxEnvironment,
+) -> None:
+    result = await sandbox.connection(user="agent")
+
+    assert re.match(
+        r"^kubectl exec -it \S+ -n \S+ -c default -- su -s /bin/bash -l agent$",
+        result.command,
+    ), result.command
+    # The attachToK8sContainer command does not support passing in a user name, so
+    # we don't return any VS Code command.
+    assert result.vscode_command is None
