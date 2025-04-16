@@ -1,7 +1,7 @@
 import yaml
 from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient  # type: ignore
 
-from k8s_sandbox._pod.error import GetReturncodeError
+from k8s_sandbox._pod.error import ExecutableNotFoundError, GetReturncodeError
 
 
 def get_returncode(ws_client: WSClient) -> int:
@@ -29,6 +29,8 @@ def get_returncode(ws_client: WSClient) -> int:
     for cause in loaded["details"]["causes"]:
         if cause.get("reason") == "ExitCode":
             return int(cause["message"])
+    if "error finding executable" in loaded["message"]:
+        raise ExecutableNotFoundError(loaded["message"])
     raise GetReturncodeError(
         "Failed to get returncode from k8s error channel because `status`!='Success' "
         "and there was no entry in `details.causes` with `reason`=='ExitCode'. "

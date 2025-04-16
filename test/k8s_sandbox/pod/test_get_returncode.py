@@ -4,6 +4,7 @@ import pytest
 import yaml
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
+from k8s_sandbox._pod.error import ExecutableNotFoundError
 from k8s_sandbox._pod.get_returncode import (
     GetReturncodeError,
     get_returncode,
@@ -120,3 +121,20 @@ def test_get_returncode_when_response_is_open(mock_response: WSClient) -> None:
 
     with pytest.raises(AssertionError):
         get_returncode(mock_response)
+
+
+def test_get_returncode_raises_executable_not_found(mock_response: WSClient) -> None:
+    msg = 'error executing command in container: failed to exec in container: failed to start exec "bc86b29519acde856dd5802268e326143c0b41d7a833a0a8396a02e9a2f6a13d": OCI runtime exec failed: executing processes for container: executing command "runuser -u foo /bin/sh" in sandbox: error finding executable "runuser" in PATH [/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin]: no such file or directory: unknown'  # noqa: E501
+    mock_response.read_channel.return_value = yaml.dump(
+        {
+            "status": "Failure",
+            "message": msg,
+            "reason": "InternalError",
+            "details": {"causes": [{"message": msg}]},
+        }
+    )
+
+    with pytest.raises(ExecutableNotFoundError) as e:
+        get_returncode(mock_response)
+
+    assert 'error finding executable "runuser"' in str(e.value)

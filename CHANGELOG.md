@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Support optional `user` parameter on `K8sSandboxEnvironment.connection()` (`SandboxConnection`).
+- Support `user` parameter on `K8sSandboxEnvironment.exec()` (only when container is running as root and `runuser` is installed).
+- Support `user` parameter on `K8sSandboxEnvironment.connection()` (returns `SandboxConnection`).
 - Add `SandboxConnection` support for human agent baselining and connecting to a sandbox for debugging.
 - Add support for specifying a kubeconfig context name in K8sSandboxEnvironmentConfig.
 - Add automatic translation of Docker Compose files to Helm values files.
