@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Enhanced `additionalResources` to support full Helm templating.
 - Support `user` parameter on `K8sSandboxEnvironment.exec()` (only when container is running as root and `runuser` is installed).
 - Support `user` parameter on `K8sSandboxEnvironment.connection()` (returns `SandboxConnection`).
 - Add `SandboxConnection` support for human agent baselining and connecting to a sandbox for debugging.

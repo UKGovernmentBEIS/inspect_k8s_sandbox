@@ -40,6 +40,45 @@ def test_additional_resources(chart_dir: Path, test_resources_dir: Path) -> None
     assert secrets[1]["metadata"]["name"] == "my-second-secret"
 
 
+def test_templated_additional_resources_inline(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        test_resources_dir / "additional-resources-template-inline-values.yaml",
+    )
+
+    secrets = _get_documents(documents, "Secret")
+    assert len(secrets) == 1
+    assert (
+        secrets[0]["metadata"]["name"] == "agent-env-my-release-object-templated-secret"
+    )
+    assert (
+        secrets[0]["metadata"]["labels"]["app.kubernetes.io/instance"] == "my-release"
+    )
+
+
+def test_templated_additional_resources_block(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        test_resources_dir / "additional-resources-template-block-values.yaml",
+    )
+
+    cnps = _get_documents(documents, "CiliumNetworkPolicy")
+    target = "agent-env-my-release-sandbox-default-external-ingress"
+    custom_policy = next(
+        (cnp for cnp in cnps if cnp["metadata"]["name"] == target), None
+    )
+    assert custom_policy is not None
+
+    # Verify selector labels were rendered
+    selector_labels = custom_policy["spec"]["endpointSelector"]["matchLabels"]
+    assert selector_labels["app.kubernetes.io/name"] == "agent-env"
+    assert selector_labels["app.kubernetes.io/instance"] == "my-release"
+
+
 def test_multiple_ports(chart_dir: Path, test_resources_dir: Path) -> None:
     documents = _run_helm_template(
         chart_dir, test_resources_dir / "multiple-ports-values.yaml"

@@ -1,12 +1,12 @@
 # agent-env
 
-![Version: 0.11.0](https://img.shields.io/badge/Version-0.11.0-informational?style=flat-square)
+![Version: 0.12.0](https://img.shields.io/badge/Version-0.12.0-informational?style=flat-square)
 
 ## Values
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| additionalResources | list | `[]` | A list of additional resources to deploy within the agent environment. |
+| additionalResources | list | `[]` | A list of additional resources to deploy within the agent environment. They're passed through the Helm template engine. String values are passed through the template engine then converted to YAML. |
 | allowCIDR | list | Empty list (no additional CIDR ranges compared to default policies) | A list of CIDR ranges (e.g. 1.1.1.1/32) that pods within the agent environment are allowed to access. |
 | allowDomains | list | Empty list (no internet access) | A list of fully qualified domain names that pods within the agent environment are allowed to access. |
 | allowEntities | list | Empty list (no additional entities compared to default policies) | A list of Cilium entities (e.g. "world") that pods within the agent environment are allowed to access. |

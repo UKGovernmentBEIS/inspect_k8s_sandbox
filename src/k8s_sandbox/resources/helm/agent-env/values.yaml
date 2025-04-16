@@ -120,7 +120,9 @@ services:
 # field. The actual volume name will include the release name.
 volumes: {}
 #   shared-volume:
-# -- A list of additional resources to deploy within the agent environment.
+# -- A list of additional resources to deploy within the agent environment. They're
+# passed through the Helm template engine. String values are passed through the
+# template engine then converted to YAML.
 additionalResources: []
 # -- A dict of annotations to apply to resources within the agent environment.
 annotations: {}
