@@ -4,7 +4,7 @@ from typing import Callable
 import pytest
 import yaml
 
-from k8s_sandbox._compose.converter import (
+from k8s_sandbox.compose._converter import (
     ComposeConverterError,
     convert_compose_to_helm_values,
 )
