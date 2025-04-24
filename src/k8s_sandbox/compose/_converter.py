@@ -37,7 +37,7 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
     install.
 
     Returns:
-        A dictionary representing the Helm values.
+        A dictionary representing the generated Helm values.
     """
     compose = yaml.safe_load(compose_file.read_text())
     _validate_compose(compose, compose_file)
@@ -78,7 +78,7 @@ def _validate_compose(compose: dict[str, Any], compose_file: Path) -> None:
 def _convert_services(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
     result: dict[str, Any] = dict()
     for service_name, service_value in src.items():
-        service_converter = ServiceConverter(service_name, service_value, compose_file)
+        service_converter = _ServiceConverter(service_name, service_value, compose_file)
         result[service_name] = service_converter.convert()
     return result
 
@@ -114,7 +114,7 @@ def _convert_extensions(
     return result
 
 
-class ServiceConverter:
+class _ServiceConverter:
     """
     Converts a Docker Compose service to a service for the built-in Helm chart.
 

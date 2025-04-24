@@ -5,8 +5,8 @@ from typing import Generator
 
 import yaml
 
-from k8s_sandbox._compose.converter import convert_compose_to_helm_values
 from k8s_sandbox._helm import ValuesSource
+from k8s_sandbox.compose._converter import convert_compose_to_helm_values
 
 
 class ComposeValuesSource(ValuesSource):
@@ -25,6 +25,13 @@ class ComposeValuesSource(ValuesSource):
 
 
 def is_docker_compose_file(file: Path) -> bool:
-    """Infers whether a file is a Docker Compose file."""
-    # Also true for `docker-compose.yaml`.
+    """Infers whether a file is a Docker Compose file based on the filename.
+
+    This errs on the side of false negatives to avoid automatic conversion of files
+    which may not be Docker Compose files.
+
+    Returns:
+        True if the file name _ends_ in `compose.yaml` or `compose.yml`, False
+        otherwise.
+    """
     return file.name.endswith("compose.yaml") or file.name.endswith("compose.yml")

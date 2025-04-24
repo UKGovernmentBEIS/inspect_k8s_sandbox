@@ -14,7 +14,6 @@ from inspect_ai.util import (
 )
 from pydantic import BaseModel
 
-from k8s_sandbox._compose.compose import ComposeValuesSource, is_docker_compose_file
 from k8s_sandbox._helm import (
     Release,
     StaticValuesSource,
@@ -34,6 +33,7 @@ from k8s_sandbox._manager import (
 )
 from k8s_sandbox._pod import Pod
 from k8s_sandbox._prereqs import validate_prereqs
+from k8s_sandbox.compose._compose import ComposeValuesSource, is_docker_compose_file
 
 
 @sandboxenv(name="k8s")
