@@ -12,7 +12,11 @@ from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._kubernetes_api import get_current_context_name
-from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
+from k8s_sandbox._sandbox_environment import (
+    K8sError,
+    K8sSandboxEnvironment,
+    K8sSandboxEnvironmentConfig,
+)
 from test.k8s_sandbox.utils import install_sandbox_environments
 
 # Mark all tests in this module as requiring a Kubernetes cluster.
@@ -21,7 +25,15 @@ pytestmark = pytest.mark.req_k8s
 
 @pytest_asyncio.fixture(scope="module")
 async def sandboxes() -> AsyncGenerator[dict[str, K8sSandboxEnvironment], None]:
-    async with install_sandbox_environments(__file__, "values.yaml") as envs:
+    async with install_sandbox_environments(
+        __file__,
+        "values.yaml",
+        configs={
+            "ubuntu-with-default-user": K8sSandboxEnvironmentConfig(
+                default_user="ubuntu"
+            )
+        },
+    ) as envs:
         yield envs
 
 
@@ -48,6 +60,13 @@ async def sandbox_busybox(
     sandboxes: dict[str, K8sSandboxEnvironment],
 ) -> K8sSandboxEnvironment:
     return sandboxes["busybox"]
+
+
+@pytest_asyncio.fixture(scope="module")
+async def sandbox_with_default_user(
+    sandboxes: dict[str, K8sSandboxEnvironment],
+) -> K8sSandboxEnvironment:
+    return sandboxes["ubuntu-with-default-user"]
 
 
 @pytest.fixture
@@ -522,6 +541,22 @@ async def test_api_timeout_is_not_triggered_by_long_running_commands(
     assert result.returncode == 0
 
 
+async def test_exec_with_default_user(
+    sandbox_with_default_user: K8sSandboxEnvironment,
+) -> None:
+    result = await sandbox_with_default_user.exec(["whoami"])
+    assert result.success
+    assert result.stdout == "ubuntu\n"
+
+
+async def test_exec_with_default_user_can_use_root(
+    sandbox_with_default_user: K8sSandboxEnvironment,
+) -> None:
+    result = await sandbox_with_default_user.exec(["whoami"], user="root")
+    assert result.success
+    assert result.stdout == "root\n"
+
+
 ### #write_file() ###
 
 
@@ -843,6 +878,21 @@ async def test_can_get_sandbox_connection_with_specified_user(
 
     assert re.match(
         r"^kubectl exec -it \S+ -n \S+ -c default -- su -s /bin/bash -l agent$",
+        result.command,
+    ), result.command
+    # The attachToK8sContainer command does not support passing in a user name, so
+    # we don't return any VS Code command.
+    assert result.vscode_command is None
+
+
+async def test_can_get_sandbox_connection_with_default_user(
+    sandbox_with_default_user: K8sSandboxEnvironment,
+) -> None:
+    result = await sandbox_with_default_user.connection()
+
+    assert re.match(
+        r"^kubectl exec -it \S+ -n \S+ -c ubuntu-with-default-user -- "
+        r"su -s /bin/bash -l ubuntu$",
         result.command,
     ), result.command
     # The attachToK8sContainer command does not support passing in a user name, so
