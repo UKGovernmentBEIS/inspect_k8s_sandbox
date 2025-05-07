@@ -12,7 +12,11 @@ from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._kubernetes_api import get_current_context_name
-from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
+from k8s_sandbox._sandbox_environment import (
+    K8sError,
+    K8sSandboxEnvironment,
+    K8sSandboxEnvironmentConfig,
+)
 from test.k8s_sandbox.utils import install_sandbox_environments
 
 # Mark all tests in this module as requiring a Kubernetes cluster.
@@ -22,7 +26,13 @@ pytestmark = pytest.mark.req_k8s
 @pytest_asyncio.fixture(scope="module")
 async def sandboxes() -> AsyncGenerator[dict[str, K8sSandboxEnvironment], None]:
     async with install_sandbox_environments(
-        __file__, "values.yaml", default_users={"ubuntu-with-default-user": "ubuntu"}
+        __file__,
+        "values.yaml",
+        configs={
+            "ubuntu-with-default-user": K8sSandboxEnvironmentConfig(
+                default_user="ubuntu"
+            )
+        },
     ) as envs:
         yield envs
 

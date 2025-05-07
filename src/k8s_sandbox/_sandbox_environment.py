@@ -49,10 +49,10 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
 
 
 class _K8sSandboxConfig(BaseModel, frozen=True):
-  chart: Path | None
-  values: Path | None
-  context: str | None
-  default_user: str | None
+    chart: Path | None
+    values: Path | None
+    context: str | None
+    default_user: str | None
 
 
 @sandboxenv(name="k8s")
@@ -107,7 +107,9 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         config: SandboxEnvironmentConfigType | None,
         metadata: dict[str, str],
     ) -> dict[str, SandboxEnvironment]:
-        async def get_sandboxes(release: Release, config: _K8sSandboxConfig) -> dict[str, SandboxEnvironment]:
+        async def get_sandboxes(
+            release: Release, config: _K8sSandboxConfig
+        ) -> dict[str, SandboxEnvironment]:
             pods = await release.get_sandbox_pods()
             sandbox_envs: dict[str, SandboxEnvironment] = {}
             for key, pod in pods.items():
@@ -166,7 +168,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             PermissionError,
             OutputLimitExceededError,
         )
-        if (user is None):
+        if user is None:
             user = self._config.default_user
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
@@ -214,7 +216,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 )
 
     async def connection(self, *, user: str | None = None) -> SandboxConnection:
-        if (user is None):
+        if user is None:
             user = self._config.default_user
         return SandboxConnection(
             type="k8s",
@@ -305,13 +307,9 @@ class K8sError(Exception):
         super().__init__(format_log_message(message, **kwargs))
 
 
-def _create_release(
-    task_name: str, config: _K8sSandboxConfig
-) -> Release:
+def _create_release(task_name: str, config: _K8sSandboxConfig) -> Release:
     values_source = _create_values_source(config)
-    return Release(
-        task_name, config.chart, values_source, config.context
-    )
+    return Release(task_name, config.chart, values_source, config.context)
 
 
 def _create_values_source(config: _K8sSandboxConfig) -> ValuesSource:
@@ -349,7 +347,9 @@ def _resolve_k8s_sandbox_config(
             validate_context_name(context)
 
     if config is None:
-        return _K8sSandboxConfig(chart=None, values=None, context=None, default_user=None)
+        return _K8sSandboxConfig(
+            chart=None, values=None, context=None, default_user=None
+        )
     if isinstance(config, K8sSandboxEnvironmentConfig):
         chart = Path(config.chart).resolve() if config.chart else None
         validate_chart_dir(chart)
@@ -357,11 +357,18 @@ def _resolve_k8s_sandbox_config(
         validate_values_file(values)
         validate_context(config.context)
         default_user = config.default_user
-        return _K8sSandboxConfig(chart=chart, values=values, context=config.context, default_user=default_user)
+        return _K8sSandboxConfig(
+            chart=chart,
+            values=values,
+            context=config.context,
+            default_user=default_user,
+        )
     if isinstance(config, str):
         values = Path(config).resolve()
         validate_values_file(values)
-        return _K8sSandboxConfig(chart=None, values=values, context=None, default_user=None)
+        return _K8sSandboxConfig(
+            chart=None, values=values, context=None, default_user=None
+        )
     raise TypeError(
         f"Invalid 'SandboxEnvironmentConfigType | None' type: {type(config)}."
     )
