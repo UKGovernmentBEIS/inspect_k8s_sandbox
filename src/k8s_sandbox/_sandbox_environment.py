@@ -14,7 +14,6 @@ from inspect_ai.util import (
 )
 from pydantic import BaseModel
 
-from k8s_sandbox._sandbox_environment import K8sSandboxEnvironmentConfig
 from k8s_sandbox._helm import (
     Release,
     StaticValuesSource,
@@ -35,6 +34,18 @@ from k8s_sandbox._manager import (
 from k8s_sandbox._pod import Pod
 from k8s_sandbox._prereqs import validate_prereqs
 from k8s_sandbox.compose._compose import ComposeValuesSource, is_docker_compose_file
+
+
+class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
+  """A config Pydantic model for the K8s sandbox environment."""
+
+  # In future, charts from Helm repositories may be supported, hence str over Path.
+  chart: str | None = None
+  values: Path | None = None
+  context: str | None = None
+  """The kubeconfig context name (e.g. if you have multiple clusters)."""
+  default_user: str | None = None
+  """The default user to run commands as in the container."""
 
 
 @sandboxenv(name="k8s")
@@ -269,18 +280,6 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 "namespace": self._pod.info.namespace,
             },
         ]
-
-
-class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
-    """A config Pydantic model for the K8s sandbox environment."""
-
-    # In future, charts from Helm repositories may be supported, hence str over Path.
-    chart: str | None = None
-    values: Path | None = None
-    context: str | None = None
-    """The kubeconfig context name (e.g. if you have multiple clusters)."""
-    default_user: str | None = None
-    """The default user to run commands as in the container."""
 
 
 class K8sError(Exception):
