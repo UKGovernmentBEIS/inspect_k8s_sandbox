@@ -14,6 +14,7 @@ from inspect_ai.util import (
 )
 from pydantic import BaseModel
 
+from k8s_sandbox._sandbox_environment import K8sSandboxEnvironmentConfig
 from k8s_sandbox._helm import (
     Release,
     StaticValuesSource,
@@ -40,9 +41,10 @@ from k8s_sandbox.compose._compose import ComposeValuesSource, is_docker_compose_
 class K8sSandboxEnvironment(SandboxEnvironment):
     """An Inspect sandbox environment for a Kubernetes (k8s) cluster."""
 
-    def __init__(self, release: Release, pod: Pod):
+    def __init__(self, release: Release, pod: Pod, config: K8sSandboxEnvironmentConfig | None = None):
         self.release = release
         self._pod = pod
+        self._config = config
 
     @classmethod
     def config_files(cls) -> list[str]:
@@ -86,7 +88,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             pods = await release.get_sandbox_pods()
             sandbox_envs: dict[str, SandboxEnvironment] = {}
             for key, pod in pods.items():
-                sandbox_envs[key] = cls(release, pod)
+                sandbox_envs[key] = cls(release, pod, config)
             log_trace(f"Available sandboxes: {list(sandbox_envs.keys())}")
             return sandbox_envs
 
@@ -140,6 +142,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             PermissionError,
             OutputLimitExceededError,
         )
+        if user is None and self._config is not None and self._config.default_user is not None:
+            user = self._config.default_user
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
             result = await self._pod.exec(cmd, input, cwd, env, user, timeout)
@@ -186,6 +190,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 )
 
     async def connection(self, *, user: str | None = None) -> SandboxConnection:
+        if user is None and self._config is not None and self._config.default_user is not None:
+          user = self._config.default_user
         return SandboxConnection(
             type="k8s",
             command=self._get_kubectl_connection_command(user),
@@ -273,6 +279,8 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     values: Path | None = None
     context: str | None = None
     """The kubeconfig context name (e.g. if you have multiple clusters)."""
+    default_user: str | None = None
+    """The default user to run commands as in the container."""
 
 
 class K8sError(Exception):
