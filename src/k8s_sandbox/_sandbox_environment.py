@@ -37,22 +37,27 @@ from k8s_sandbox.compose._compose import ComposeValuesSource, is_docker_compose_
 
 
 class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
-  """A config Pydantic model for the K8s sandbox environment."""
+    """A config Pydantic model for the K8s sandbox environment."""
 
-  # In future, charts from Helm repositories may be supported, hence str over Path.
-  chart: str | None = None
-  values: Path | None = None
-  context: str | None = None
-  """The kubeconfig context name (e.g. if you have multiple clusters)."""
-  default_user: str | None = None
-  """The default user to run commands as in the container."""
+    # In future, charts from Helm repositories may be supported, hence str over Path.
+    chart: str | None = None
+    values: Path | None = None
+    context: str | None = None
+    """The kubeconfig context name (e.g. if you have multiple clusters)."""
+    default_user: str | None = None
+    """The default user to run commands as in the container."""
 
 
 @sandboxenv(name="k8s")
 class K8sSandboxEnvironment(SandboxEnvironment):
     """An Inspect sandbox environment for a Kubernetes (k8s) cluster."""
 
-    def __init__(self, release: Release, pod: Pod, config: K8sSandboxEnvironmentConfig | None = None):
+    def __init__(
+        self,
+        release: Release,
+        pod: Pod,
+        config: K8sSandboxEnvironmentConfig | None = None,
+    ):
         self.release = release
         self._pod = pod
         self._config = config
@@ -153,7 +158,11 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             PermissionError,
             OutputLimitExceededError,
         )
-        if user is None and self._config is not None and self._config.default_user is not None:
+        if (
+            user is None
+            and self._config is not None
+            and self._config.default_user is not None
+        ):
             user = self._config.default_user
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
@@ -201,8 +210,12 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 )
 
     async def connection(self, *, user: str | None = None) -> SandboxConnection:
-        if user is None and self._config is not None and self._config.default_user is not None:
-          user = self._config.default_user
+        if (
+            user is None
+            and self._config is not None
+            and self._config.default_user is not None
+        ):
+            user = self._config.default_user
         return SandboxConnection(
             type="k8s",
             command=self._get_kubectl_connection_command(user),
