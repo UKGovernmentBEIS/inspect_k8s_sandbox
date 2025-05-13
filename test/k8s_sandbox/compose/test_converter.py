@@ -421,6 +421,18 @@ services:
     assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "1Gi"
 
 
+def test_converts_fractional_mem_limit(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    mem_limit: 0.5G
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"]["limits"]["memory"] == "0.5Gi"
+
+
 def test_converts_mem_limit_and_applies_to_requests(
     tmp_compose: TmpComposeFixture,
 ) -> None:

@@ -331,7 +331,7 @@ class _ServiceConverter:
 
         # Despite not being documented, Docker Compose allows uppercase units.
         match = re.match(
-            r"^(?P<value>\d+)(?P<unit>gb?|mb?|kb?|b)$", value, re.IGNORECASE
+            r"^(?P<value>\d+(?:\.\d+)?)(?P<unit>gb?|mb?|kb?|b)$", value, re.IGNORECASE
         )
         if not match:
             raise ComposeConverterError(
