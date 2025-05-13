@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import shlex
 import tempfile
 from contextlib import contextmanager
@@ -40,9 +42,10 @@ from k8s_sandbox.compose._compose import ComposeValuesSource, is_docker_compose_
 class K8sSandboxEnvironment(SandboxEnvironment):
     """An Inspect sandbox environment for a Kubernetes (k8s) cluster."""
 
-    def __init__(self, release: Release, pod: Pod):
+    def __init__(self, release: Release, pod: Pod, config: _ResolvedConfig):
         self.release = release
         self._pod = pod
+        self._config = config
 
     @classmethod
     def config_files(cls) -> list[str]:
@@ -82,11 +85,13 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         config: SandboxEnvironmentConfigType | None,
         metadata: dict[str, str],
     ) -> dict[str, SandboxEnvironment]:
-        async def get_sandboxes(release: Release) -> dict[str, SandboxEnvironment]:
+        async def get_sandboxes(
+            release: Release, config: _ResolvedConfig
+        ) -> dict[str, SandboxEnvironment]:
             pods = await release.get_sandbox_pods()
             sandbox_envs: dict[str, SandboxEnvironment] = {}
             for key, pod in pods.items():
-                sandbox_envs[key] = cls(release, pod)
+                sandbox_envs[key] = cls(release, pod, config)
             log_trace(f"Available sandboxes: {list(sandbox_envs.keys())}")
             return sandbox_envs
 
@@ -99,9 +104,10 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 return {"default": default, **sandboxes}
             return sandboxes
 
-        release = _create_release(task_name, config)
+        resolved_config = _validate_and_resolve_k8s_sandbox_config(config)
+        release = _create_release(task_name, resolved_config)
         await HelmReleaseManager.get_instance().install(release)
-        return reorder_default_first(await get_sandboxes(release))
+        return reorder_default_first(await get_sandboxes(release, resolved_config))
 
     @classmethod
     async def sample_cleanup(
@@ -140,6 +146,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             PermissionError,
             OutputLimitExceededError,
         )
+        if user is None:
+            user = self._config.default_user
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
             result = await self._pod.exec(cmd, input, cwd, env, user, timeout)
@@ -186,6 +194,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 )
 
     async def connection(self, *, user: str | None = None) -> SandboxConnection:
+        if user is None:
+            user = self._config.default_user
         return SandboxConnection(
             type="k8s",
             command=self._get_kubectl_connection_command(user),
@@ -266,13 +276,15 @@ class K8sSandboxEnvironment(SandboxEnvironment):
 
 
 class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
-    """A config Pydantic model for the K8s sandbox environment."""
+    """A user-supplied configuration Pydantic model for the K8s sandbox environment."""
 
     # In future, charts from Helm repositories may be supported, hence str over Path.
     chart: str | None = None
     values: Path | None = None
     context: str | None = None
     """The kubeconfig context name (e.g. if you have multiple clusters)."""
+    default_user: str | None = None
+    """The default user to run commands as in the container."""
 
 
 class K8sError(Exception):
@@ -285,37 +297,35 @@ class K8sError(Exception):
         super().__init__(format_log_message(message, **kwargs))
 
 
-def _create_release(
-    task_name: str, config: SandboxEnvironmentConfigType | None
-) -> Release:
-    release_config = _resolve_release_config(config)
-    values_source = _create_values_source(release_config)
-    return Release(
-        task_name, release_config.chart, values_source, release_config.context
-    )
+def _create_release(task_name: str, config: _ResolvedConfig) -> Release:
+    values_source = _create_values_source(config)
+    return Release(task_name, config.chart, values_source, config.context)
 
 
-class _ReleaseConfig(BaseModel, frozen=True):
+class _ResolvedConfig(BaseModel, frozen=True):
+    """An internal model which consolidates options into their canonical form."""
+
     chart: Path | None
     values: Path | None
     context: str | None
+    default_user: str | None
 
 
-def _create_values_source(release_config: _ReleaseConfig) -> ValuesSource:
-    if release_config.values and is_docker_compose_file(release_config.values):
-        if release_config.chart is not None:
+def _create_values_source(config: _ResolvedConfig) -> ValuesSource:
+    if config.values and is_docker_compose_file(config.values):
+        if config.chart is not None:
             raise ValueError(
                 "Automatic conversion from compose.yaml to helm-values.yaml is only "
                 "supported when using the built-in Helm chart."
             )
-        return ComposeValuesSource(release_config.values)
-    return StaticValuesSource(release_config.values)
+        return ComposeValuesSource(config.values)
+    return StaticValuesSource(config.values)
 
 
-def _resolve_release_config(
+def _validate_and_resolve_k8s_sandbox_config(
     config: SandboxEnvironmentConfigType | None,
-) -> _ReleaseConfig:
-    """Consolidates the many options configuration methods into a _ReleaseConfig."""
+) -> _ResolvedConfig:
+    """Validate and consolidate the user-supplied config into a _ReleaseConfig."""
 
     def validate_values_file(values: Path | None) -> None:
         if values is not None and not values.is_file():
@@ -336,18 +346,26 @@ def _resolve_release_config(
             validate_context_name(context)
 
     if config is None:
-        return _ReleaseConfig(chart=None, values=None, context=None)
+        return _ResolvedConfig(chart=None, values=None, context=None, default_user=None)
     if isinstance(config, K8sSandboxEnvironmentConfig):
         chart = Path(config.chart).resolve() if config.chart else None
         validate_chart_dir(chart)
         values = config.values.resolve() if config.values else None
         validate_values_file(values)
         validate_context(config.context)
-        return _ReleaseConfig(chart=chart, values=values, context=config.context)
+        default_user = config.default_user
+        return _ResolvedConfig(
+            chart=chart,
+            values=values,
+            context=config.context,
+            default_user=default_user,
+        )
     if isinstance(config, str):
         values = Path(config).resolve()
         validate_values_file(values)
-        return _ReleaseConfig(chart=None, values=values, context=None)
+        return _ResolvedConfig(
+            chart=None, values=values, context=None, default_user=None
+        )
     raise TypeError(
         f"Invalid 'SandboxEnvironmentConfigType | None' type: {type(config)}."
     )
