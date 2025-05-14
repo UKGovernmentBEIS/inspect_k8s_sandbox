@@ -113,12 +113,11 @@ from a variety of sources:
       - "*.rubygems.org"
     ```
 
-    !!! bug
+    !!! note
 
-        We're investigating occasional issues with the `allowDomains` feature where
-        some network requests which ought to be allowed are blocked. It is yet unclear
-        whether this is as a result of our service-based DNS resolution setup or whether
-        we're putting Cilium under too much load.
+        An entry of e.g. `aisi.org` won't allow access to the subdomain of
+        `www.aisi.org`. Either also include `www.aisi.org`, or if you want to provide
+        access to all subdomains, use a wildcard: `*.aisi.org`.
 
 2. Populate the `allowCIDR` list with one or more [CIDR
 ranges](https://docs.cilium.io/en/stable/security/policy/language/#cidr-based). These
