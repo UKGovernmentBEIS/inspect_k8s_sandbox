@@ -357,7 +357,7 @@ def _validate_and_resolve_k8s_sandbox_config(
             chart=chart,
             values=values,
             context=config.context,
-            default_user=(config.default_user),
+            default_user=config.default_user,
         )
     if isinstance(config, str):
         values = Path(config).resolve()
