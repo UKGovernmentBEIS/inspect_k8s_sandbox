@@ -353,12 +353,11 @@ def _validate_and_resolve_k8s_sandbox_config(
         values = config.values.resolve() if config.values else None
         validate_values_file(values)
         validate_context(config.context)
-        default_user = config.default_user
         return _ResolvedConfig(
-            chart=chart,
-            values=values,
-            context=config.context,
-            default_user=default_user,
+          chart=chart,
+          values=values,
+          context=config.context,
+          default_user=(config.default_user),
         )
     if isinstance(config, str):
         values = Path(config).resolve()
