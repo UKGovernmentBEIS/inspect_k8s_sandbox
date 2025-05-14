@@ -12,11 +12,7 @@ from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._kubernetes_api import get_current_context_name
-from k8s_sandbox._sandbox_environment import (
-    K8sError,
-    K8sSandboxEnvironment,
-    K8sSandboxEnvironmentConfig,
-)
+from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
 from test.k8s_sandbox.utils import install_sandbox_environments
 
 # Mark all tests in this module as requiring a Kubernetes cluster.
@@ -25,15 +21,7 @@ pytestmark = pytest.mark.req_k8s
 
 @pytest_asyncio.fixture(scope="module")
 async def sandboxes() -> AsyncGenerator[dict[str, K8sSandboxEnvironment], None]:
-    async with install_sandbox_environments(
-        __file__,
-        "values.yaml",
-        configs={
-            "ubuntu-with-default-user": K8sSandboxEnvironmentConfig(
-                default_user="ubuntu"
-            )
-        },
-    ) as envs:
+    async with install_sandbox_environments(__file__, "values.yaml") as envs:
         yield envs
 
 
@@ -63,10 +51,11 @@ async def sandbox_busybox(
 
 
 @pytest_asyncio.fixture(scope="module")
-async def sandbox_with_default_user(
-    sandboxes: dict[str, K8sSandboxEnvironment],
-) -> K8sSandboxEnvironment:
-    return sandboxes["ubuntu-with-default-user"]
+async def sandbox_with_default_user() -> AsyncGenerator[K8sSandboxEnvironment, None]:
+    async with install_sandbox_environments(
+        __file__, "default-user-values.yaml", default_user="ubuntu"
+    ) as envs:
+        yield envs["default"]
 
 
 @pytest.fixture
@@ -893,7 +882,7 @@ async def test_can_get_sandbox_connection_with_default_user(
     result = await sandbox_with_default_user.connection()
 
     assert re.match(
-        r"^kubectl exec -it \S+ -n \S+ -c ubuntu-with-default-user -- "
+        r"^kubectl exec -it \S+ -n \S+ -c default -- "
         r"su -s /bin/bash -l ubuntu$",
         result.command,
     ), result.command
