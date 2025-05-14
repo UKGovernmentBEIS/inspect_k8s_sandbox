@@ -113,13 +113,6 @@ from a variety of sources:
       - "*.rubygems.org"
     ```
 
-    !!! bug
-
-        We're investigating occasional issues with the `allowDomains` feature where
-        some network requests which ought to be allowed are blocked. It is yet unclear
-        whether this is as a result of our service-based DNS resolution setup or whether
-        we're putting Cilium under too much load.
-
 2. Populate the `allowCIDR` list with one or more [CIDR
 ranges](https://docs.cilium.io/en/stable/security/policy/language/#cidr-based). These
 are translated to `toCIDRs` entries in the Cilium Network Policy:
