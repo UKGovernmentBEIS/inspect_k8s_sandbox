@@ -1,0 +1,13 @@
+services:
+  default:
+    # The user will be root by default.
+    image: "ubuntu:24.04"
+    command: ["tail", "-f", "/dev/null"]
+    workingDir: "/home/ubuntu"
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
