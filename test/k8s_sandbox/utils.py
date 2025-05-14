@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, cast
+from typing import AsyncGenerator
 
 from inspect_ai.util import SandboxEnvironmentConfigType
 
