@@ -284,7 +284,7 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     context: str | None = None
     """The kubeconfig context name (e.g. if you have multiple clusters)."""
     default_user: str | None = None
-    """The default user to run commands as in the container."""
+    """The user to run commands as in the container if user is not specified."""
 
 
 class K8sError(Exception):
@@ -303,7 +303,7 @@ def _create_release(task_name: str, config: _ResolvedConfig) -> Release:
 
 
 class _ResolvedConfig(BaseModel, frozen=True):
-    """An internal model which consolidates options into their canonical form."""
+    """An internal model which consolidates configuration options."""
 
     chart: Path | None
     values: Path | None
