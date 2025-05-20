@@ -683,6 +683,79 @@ services:
     )
 
 
+def test_converts_network_mode_bridge(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: bridge
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["allowDomains"] == ["*"]
+
+
+def test_converts_network_mode_none(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: none
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert "allowDomains" not in result
+
+
+def test_converts_multiple_network_mode_bridge(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: bridge
+  my-other-service:
+    image: my-image
+    network_mode: bridge
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["allowDomains"] == ["*"]
+
+
+def test_do_not_convert_mix_of_network_modes(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: bridge
+  my-other-service:
+    image: my-image
+    network_mode: none
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Mixed network modes are not supported." in str(exc_info.value)
+
+
+def test_do_not_convert_unsupported_network_mode(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: bridge
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported network mode:" in str(exc_info.value)
+
+
 ### Volume elements
 
 
@@ -765,3 +838,63 @@ x-inspect_k8s_sandbox:
         convert_compose_to_helm_values(compose_path)
 
     assert "Unsupported key(s) in 'x-inspect_k8s_sandbox'" in str(exc_info.value)
+
+
+### Network elements
+
+
+def test_converts_networks(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    networks:
+        - my-network    
+networks:
+    my-network:
+        driver: bridge
+        internal: true
+    """)
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["networks"] == ["my-network"]
+    assert result["networks"]["my-network"] is not None
+    assert result["networks"]["my-network"]["driver"] == "k8s"
+
+
+def test_fails_on_unsupported_network_driver(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    networks:
+        - my-network    
+networks:
+    my-network:
+        driver: host
+        internal: true
+    """)
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported network driver" in str(exc_info.value)
+
+
+def test_fails_on_non_internal_network(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    networks:
+        - my-network    
+networks:
+    my-network:
+        driver: bridge
+    """)
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported network internal value" in str(exc_info.value)
