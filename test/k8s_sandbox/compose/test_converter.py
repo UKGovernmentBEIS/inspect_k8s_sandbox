@@ -742,7 +742,9 @@ services:
     assert "Mixed network modes are not supported." in str(exc_info.value)
 
 
-def test_do_not_convert_unsupported_network_mode(tmp_compose: TmpComposeFixture) -> None:
+def test_do_not_convert_unsupported_network_mode(
+    tmp_compose: TmpComposeFixture,
+) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
@@ -756,7 +758,9 @@ services:
     assert "Unsupported network mode:" in str(exc_info.value)
 
 
-def test_converts_hostname_if_identical_to_service_name(tmp_compose: TmpComposeFixture) -> None:
+def test_converts_hostname_if_identical_to_service_name(
+    tmp_compose: TmpComposeFixture,
+) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
@@ -766,10 +770,12 @@ services:
 
     result = convert_compose_to_helm_values(compose_path)
 
-    assert result["services"]["my-service"]["dnsRecord"] == True
+    assert result["services"]["my-service"]["dnsRecord"]
 
 
-def test_do_not_convert_hostname_if_not_identical_to_service_name(tmp_compose: TmpComposeFixture) -> None:
+def test_do_not_convert_hostname_if_not_identical_to_service_name(
+    tmp_compose: TmpComposeFixture,
+) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
@@ -876,7 +882,7 @@ services:
   my-service:
     image: my-image
     networks:
-        - my-network    
+        - my-network
 networks:
     my-network:
         driver: bridge
@@ -896,7 +902,7 @@ services:
   my-service:
     image: my-image
     networks:
-        - my-network    
+        - my-network
 networks:
     my-network:
         driver: host
@@ -915,7 +921,7 @@ services:
   my-service:
     image: my-image
     networks:
-        - my-network    
+        - my-network
 networks:
     my-network:
         driver: bridge

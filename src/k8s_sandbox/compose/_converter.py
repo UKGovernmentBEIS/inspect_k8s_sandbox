@@ -92,8 +92,8 @@ def _convert_network_mode(src: dict[str, Any], compose_file: Path) -> dict[str, 
             result["allowDomains"] = ["*"]
         else:
             raise ComposeConverterError(
-                f"Unsupported network mode: '{network_mode}'. Only 'bridge' and 'none' are "
-                f"supported. Compose file: '{compose_file}'."
+                f"Unsupported network mode: '{network_mode}'. Only 'bridge' and 'none' "
+                f"are supported. Compose file: '{compose_file}'."
             )
     return result
 
@@ -132,8 +132,8 @@ def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
                 f"Unsupported network driver: '{driver}'. Only 'bridge' is "
                 f"supported. Compose file: '{compose_file}'."
             )
-        internal = network_value.pop("internal", None)
-        if internal != True:
+        internal = network_value.pop("internal", False)
+        if not internal:
             raise ComposeConverterError(
                 f"Unsupported network internal value: '{internal}'. Only "
                 f"'internal: true' is supported. Compose file: '{compose_file}'."
