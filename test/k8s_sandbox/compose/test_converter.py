@@ -677,7 +677,9 @@ services:
     result = convert_compose_to_helm_values(compose_path)
 
     assert "my-service" in result["services"]
+    assert "x-local" not in result["services"]["my-service"]
     assert "my-service-2" in result["services"]
+    assert "x-local" not in result["services"]["my-service-2"]
 
 
 def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None:
