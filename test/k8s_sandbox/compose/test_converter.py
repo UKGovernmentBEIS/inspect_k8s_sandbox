@@ -663,6 +663,19 @@ services:
     assert "my-service" in result["services"]
 
 
+def test_ignores_x_local_key(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-local: true
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert "my-service" in result["services"]
+
+
 def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
