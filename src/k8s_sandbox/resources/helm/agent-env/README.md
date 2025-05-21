@@ -13,6 +13,7 @@
 | annotations | object | `{}` | A dict of annotations to apply to resources within the agent environment. |
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
 | imagePullSecrets | list | `[]` | References to pre-existing secrets that contain registry credentials. |
+| labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |
 | networks | object | `{}` | Defines network names that can be attached to services in order to specify subsets of services that can communicate with one another. |
 | services | object | see [values.yaml](./values.yaml) | A collection of services to deploy within the agent environment. A service can connect to another service using DNS, e.g. `http://nginx:80`. |
 | services.default | object | see [values.yaml](./values.yaml) | The default service, this is required for the agent environment to function. |

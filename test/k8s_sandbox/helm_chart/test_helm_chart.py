@@ -161,6 +161,29 @@ def test_annotations(chart_dir: Path, test_resources_dir: Path) -> None:
         assert deployment["metadata"]["annotations"]["myValue"] == attr_value
 
 
+def test_labels(chart_dir: Path, test_resources_dir: Path) -> None:
+    attr_value = "test-label"
+
+    documents = _run_helm_template(
+        chart_dir,
+        test_resources_dir / "volumes-values.yaml",
+        f"labels.myValue={attr_value}",
+    )
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        assert stateful_set["metadata"]["labels"]["myValue"] == attr_value
+        template = stateful_set["spec"]["template"]
+        assert template["metadata"]["labels"]["myValue"] == attr_value
+    for network_policy in _get_documents(documents, "NetworkPolicy"):
+        assert network_policy["metadata"]["labels"]["myValue"] == attr_value
+    for pvc in _get_documents(documents, "PersistentVolumeClaim"):
+        assert pvc["metadata"]["labels"]["myValue"] == attr_value
+    for service in _get_documents(documents, "Service"):
+        assert service["metadata"]["labels"]["myValue"] == attr_value
+    for deployment in _get_documents(documents, "Deployment"):
+        assert deployment["metadata"]["labels"]["myValue"] == attr_value
+
+
 def test_resource_requests_and_limits(
     chart_dir: Path, test_resources_dir: Path
 ) -> None:

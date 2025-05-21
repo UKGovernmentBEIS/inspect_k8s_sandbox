@@ -5,6 +5,8 @@ metadata:
   name: "{{ template "agentEnv.fullname" $ -}}-{{ $name }}"
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
+  labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
 spec:
   {{- if and $volume $volume.spec }}
   {{- toYaml $volume.spec | nindent 2 }}

@@ -10,6 +10,8 @@ the built-in `agent-env` chart.
   by Inspect.
 * Accept a top-level `annotations` object in its values schema (will typically include
   `annotations.inspectTaskName`). Apply these annotations to Pods and other resources.
+* Accept a top-level `labels` object in its values schema. Apply these labels to Pods
+  and other resources.
 * In the metadata section of each Pod, set the `app.kubernetes.io/instance` label to the
   name of the Helm release i.e. `.Release.Name`. This is an 8 character string supplied
   by the `k8s_sandbox` package. This is used by the `k8s_sandbox` package for
@@ -31,6 +33,7 @@ kind: Pod
 metadata:
   name: my-custom-chart-pod-{{ .Release.Name }}
   labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
     app.kubernetes.io/name: {{ .Chart.Name }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     inspect/service: default
