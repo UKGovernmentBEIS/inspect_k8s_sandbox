@@ -756,6 +756,33 @@ services:
     assert "Unsupported network mode:" in str(exc_info.value)
 
 
+def test_converts_hostname_if_identical_to_service_name(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    hostname: my-service
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["dnsRecord"] == True
+
+
+def test_do_not_convert_hostname_if_not_identical_to_service_name(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    hostname: other-hostname
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported hostname" in str(exc_info.value)
+
+
 ### Volume elements
 
 

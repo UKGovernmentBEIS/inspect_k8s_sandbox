@@ -217,6 +217,13 @@ class _ServiceConverter:
             src, "user", result, "securityContext", self._user_to_security_context
         )
         _transform(src, "networks", result, "networks")
+        if hostname := src.pop("hostname", None):
+            if hostname != self._name:
+                raise ComposeConverterError(
+                    f"Unsupported hostname: '{hostname}'. Only the service name is "
+                    f"supported. {self.context}"
+                )
+            result["dnsRecord"] = True
         if src.pop("expose", None) is not None:
             # Log at info level because this does not affect the service.
             logger.info(
