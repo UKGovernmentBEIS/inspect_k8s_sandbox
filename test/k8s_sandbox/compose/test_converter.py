@@ -83,7 +83,7 @@ def test_rejects_unsupported_top_level_elements(tmp_compose: TmpComposeFixture) 
 services:
     my-service:
         image: my-image
-networks: {}
+secrets: {}
 """)
 
     with pytest.raises(ComposeConverterError) as exc_info:
