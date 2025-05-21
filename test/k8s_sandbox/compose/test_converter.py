@@ -749,7 +749,7 @@ def test_do_not_convert_unsupported_network_mode(
 services:
   my-service:
     image: my-image
-    network_mode: bridge
+    network_mode: host
 """)
 
     with pytest.raises(ComposeConverterError) as exc_info:
