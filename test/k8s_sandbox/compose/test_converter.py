@@ -669,11 +669,15 @@ services:
   my-service:
     image: my-image
     x-local: true
+  my-service-2:
+    image: my-image
+    x-local: false
 """)
 
     result = convert_compose_to_helm_values(compose_path)
 
     assert "my-service" in result["services"]
+    assert "my-service-2" in result["services"]
 
 
 def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None:
