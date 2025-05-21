@@ -413,19 +413,20 @@ additionalResources:
 
 ```
 
-## Annotations
+## Annotations and labels
 
-You can pass arbitrary annotations to the Helm chart using the top-level `annotations`
-key in the `values.yaml` file. These will be added as annotations to the Pods, PVCs and
-network policies.
-
-The `k8s_sandbox` package automatically includes the Inspect task name as an annotation.
+You can pass arbitrary annotations and labels to the Helm chart using the top-level
+`annotations` and `labels` keys in the `values.yaml` file. These will be added as
+annotations and labels to the Pods, PVCs and network policies.
 
 ```yaml
 annotations:
   my-annotation: my-value
+labels:
+  my-label: my-value
 ```
 
+The `k8s_sandbox` package automatically includes the Inspect task name as an annotation.
 This may be useful for determining which task a Pod belongs to.
 
 ## Render chart without installing

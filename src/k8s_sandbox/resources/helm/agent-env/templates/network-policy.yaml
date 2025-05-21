@@ -4,6 +4,8 @@ metadata:
   name: {{ template "agentEnv.fullname" $ -}}-sandbox-egress
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
+  labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
 spec:
   description: |
     Allow egress to:
@@ -61,6 +63,8 @@ metadata:
   name: {{ template "agentEnv.fullname" $ -}}-sandbox-default-deny-ingress
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
+  labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
 spec:
   description: Default deny ingress. Allow other policies to be more specific.
   endpointSelector:
@@ -78,6 +82,8 @@ metadata:
   name: {{ template "agentEnv.fullname" $ }}-sandbox-{{ $networkName }}-ingress
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
+  labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
 spec:
   description: |
     Allow ingress from all Pods in the same agent sandbox which are also on the
@@ -102,6 +108,8 @@ metadata:
   name: {{ template "agentEnv.fullname" $ }}-sandbox-ingress
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
+  labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
 spec:
   description: |
     Allow ingress from all Pods in the same agent sandbox.
