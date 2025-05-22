@@ -89,7 +89,7 @@ def _convert_network_mode(src: dict[str, Any], compose_file: Path) -> dict[str, 
     network_mode = network_modes.pop()
     if network_mode is not None and network_mode != "none":
         if network_mode == "bridge":
-            result["allowDomains"] = ["*"]
+            result["allowEntities"] = ["world"]
         else:
             raise ComposeConverterError(
                 f"Unsupported network mode: '{network_mode}'. Only 'bridge' and 'none' "

@@ -693,7 +693,7 @@ services:
 
     result = convert_compose_to_helm_values(compose_path)
 
-    assert result["allowDomains"] == ["*"]
+    assert result["allowEntities"] == ["world"]
 
 
 def test_converts_network_mode_none(tmp_compose: TmpComposeFixture) -> None:
@@ -706,7 +706,7 @@ services:
 
     result = convert_compose_to_helm_values(compose_path)
 
-    assert "allowDomains" not in result
+    assert "allowEntities" not in result
 
 
 def test_converts_multiple_network_mode_bridge(tmp_compose: TmpComposeFixture) -> None:
@@ -722,7 +722,7 @@ services:
 
     result = convert_compose_to_helm_values(compose_path)
 
-    assert result["allowDomains"] == ["*"]
+    assert result["allowEntities"] == ["world"]
 
 
 def test_do_not_convert_mix_of_network_modes(tmp_compose: TmpComposeFixture) -> None:
