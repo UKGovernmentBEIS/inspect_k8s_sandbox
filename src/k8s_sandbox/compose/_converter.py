@@ -21,7 +21,9 @@ class ComposeConverterError(Exception):
     pass
 
 
-def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
+def convert_compose_to_helm_values(
+    compose_file: Path, ignore_build: bool = False
+) -> dict[str, Any]:
     """Convert a Docker Compose file to Helm values.
 
     The resulting Helm values file is suitable for the built-in Helm chart.
@@ -47,7 +49,9 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
         raise ComposeConverterError(
             f"The 'services' key is required. Compose file: '{compose_file}'."
         )
-    result["services"] = _convert_services(services, compose_file)
+    result["services"] = _convert_services(
+        services, compose_file, ignore_build=ignore_build
+    )
     if volumes := compose.pop("volumes", None):
         result["volumes"] = _convert_volumes(volumes, compose_file)
     if networks := compose.pop("networks", None):
@@ -77,10 +81,14 @@ def _validate_compose(compose: dict[str, Any], compose_file: Path) -> None:
         )
 
 
-def _convert_services(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
+def _convert_services(
+    src: dict[str, Any], compose_file: Path, ignore_build: bool = False
+) -> dict[str, Any]:
     result: dict[str, Any] = dict()
     for service_name, service_value in src.items():
-        service_converter = _ServiceConverter(service_name, service_value, compose_file)
+        service_converter = _ServiceConverter(
+            service_name, service_value, compose_file, ignore_build=ignore_build
+        )
         result[service_name] = service_converter.convert()
     return result
 
@@ -155,10 +163,17 @@ class _ServiceConverter:
     The src_service dict will be mutated during conversion.
     """
 
-    def __init__(self, name: str, src_service: dict[str, Any], compose_file: Path):
+    def __init__(
+        self,
+        name: str,
+        src_service: dict[str, Any],
+        compose_file: Path,
+        ignore_build: bool = False,
+    ):
         self._name = name
         self._src_service = src_service
         self._compose_file = compose_file
+        self._ignore_build = ignore_build
 
     def convert(self) -> dict[str, Any]:
         return self._convert_service(self._src_service)
@@ -169,6 +184,9 @@ class _ServiceConverter:
         return f"Service: '{self._name}'; Compose file: '{self._compose_file}'."
 
     def _convert_service(self, src: dict[str, Any]) -> dict[str, Any]:
+        if self._ignore_build:
+            src.pop("build", None)
+
         result: dict[str, Any] = dict()
         # Ordered as per built-in Helm chart values.yaml documentation.
         _transform(src, "runtime", result, "runtimeClassName")

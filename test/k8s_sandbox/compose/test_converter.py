@@ -1,5 +1,8 @@
+from __future__ import annotations
+
+import contextlib
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import pytest
 import yaml
@@ -8,6 +11,9 @@ from k8s_sandbox.compose._converter import (
     ComposeConverterError,
     convert_compose_to_helm_values,
 )
+
+if TYPE_CHECKING:
+    from _pytest.python_api import RaisesContext
 
 TmpComposeFixture = Callable[[str], Path]
 
@@ -682,7 +688,27 @@ services:
     assert "x-local" not in result["services"]["my-service-2"]
 
 
-def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None:
+@pytest.mark.parametrize(
+    ("ignore_build", "expected_error"),
+    [
+        (
+            False,
+            pytest.raises(
+                ComposeConverterError,
+                match=(
+                    "Unsupported key\\(s\\) in 'service': {'build'}. Service: "
+                    "'my-service'; Compose file: '/"
+                ),
+            ),
+        ),
+        (True, None),
+    ],
+)
+def test_rejects_unsupported_service_key(
+    tmp_compose: TmpComposeFixture,
+    ignore_build: bool,
+    expected_error: RaisesContext | None,  # type: ignore[reportUnknownReturnType]
+) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
@@ -691,15 +717,8 @@ services:
       context: .
 """)
 
-    with pytest.raises(ComposeConverterError) as exc_info:
-        convert_compose_to_helm_values(compose_path)
-
-    # Verify that the error message includes the service name, invalid keys and the
-    # compose file path.
-    assert (
-        "Unsupported key(s) in 'service': {'build'}. Service: 'my-service'; Compose "
-        "file: '/" in str(exc_info.value)
-    )
+    with expected_error or contextlib.nullcontext():
+        convert_compose_to_helm_values(compose_path, ignore_build=ignore_build)
 
 
 def test_converts_hostname_if_identical_to_service_name(
