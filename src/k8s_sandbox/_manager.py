@@ -116,7 +116,7 @@ async def uninstall_unmanaged_release(release_name: str) -> None:
     await helm_uninstall(release_name, namespace, context_name=None, quiet=False)
 
 
-async def uninstall_all_unmanaged_releases():
+async def uninstall_all_unmanaged_releases() -> None:
     def _print_table(releases: list[str]) -> None:
         print("Releases to be uninstalled:")
         table = Table(
