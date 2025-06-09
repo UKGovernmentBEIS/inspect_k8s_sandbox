@@ -146,7 +146,10 @@ async def uninstall_all_unmanaged_releases() -> None:
     ):
         print("Cancelled.")
         return
-    tasks = [helm_uninstall(release, namespace, quiet=False) for release in releases]
+    tasks = [
+        helm_uninstall(release, namespace, context_name=None, quiet=False)
+        for release in releases
+    ]
     await asyncio.gather(*tasks, return_exceptions=True)
     print("Complete.")
 
