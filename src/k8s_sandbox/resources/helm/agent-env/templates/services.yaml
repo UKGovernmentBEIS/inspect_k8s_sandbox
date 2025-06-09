@@ -4,7 +4,6 @@ kind: StatefulSet
 metadata:
   name: {{ template "agentEnv.fullname" $ -}}-{{ $name }}
   labels:
-    {{- toYaml $.Values.labels | nindent 4 }}
     {{- include "agentEnv.labels" $ | nindent 4 }}
     inspect/service: {{ $name }}
   annotations:
@@ -19,7 +18,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- toYaml $.Values.labels | nindent 8 }}
+        {{- include "agentEnv.labelsFromValues" $ | nindent 8 }}
         {{- include "agentEnv.selectorLabels" $ | nindent 8 }}
         {{- if $service.networks }}
         {{- range $service.networks }}
