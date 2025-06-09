@@ -174,6 +174,14 @@ class _ServiceConverter:
             # is almost always used in Compose and we don't have an alternative
             # suggestion to offer to users.
             logger.info(f"Ignoring 'init' key: not supported in K8s. {self.context}")
+        # x-local is an Inspect-specific key to indicate that an image should not be
+        # pulled. https://inspect.aisi.org.uk/sandboxing.html#task-configuration
+        # If it is set to anything but "true", silently ignore it.
+        if src.pop("x-local", None) == "true":
+            logger.warning(
+                f"Ignoring `x-local: true`: not supported in K8s. All images must be "
+                f"available for pulling from a container registry. {self.context}"
+            )
         if src:
             raise ComposeConverterError(
                 f"Unsupported key(s) in 'service': {set(src)}. {self.context}"
