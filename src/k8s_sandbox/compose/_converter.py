@@ -47,7 +47,6 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
         raise ComposeConverterError(
             f"The 'services' key is required. Compose file: '{compose_file}'."
         )
-    result.update(_convert_network_mode(services, compose_file))
     result["services"] = _convert_services(services, compose_file)
     if volumes := compose.pop("volumes", None):
         result["volumes"] = _convert_volumes(volumes, compose_file)
@@ -76,26 +75,6 @@ def _validate_compose(compose: dict[str, Any], compose_file: Path) -> None:
             f"The provided Docker Compose file failed validation against the Compose "
             f"schema: {e.message}. Compose file: '{compose_file}'."
         )
-
-
-def _convert_network_mode(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
-    result: dict[str, Any] = dict()
-    network_modes = {svc.pop("network_mode", None) for svc in src.values()}
-    if len(network_modes) > 1:
-        raise ComposeConverterError(
-            f"Mixed network modes are not supported. Found: {network_modes}. "
-            f"Compose file: '{compose_file}'."
-        )
-    network_mode = network_modes.pop()
-    if network_mode is not None and network_mode != "none":
-        if network_mode == "bridge":
-            result["allowEntities"] = ["world"]
-        else:
-            raise ComposeConverterError(
-                f"Unsupported network mode: '{network_mode}'. Only 'bridge' and 'none' "
-                f"are supported. Compose file: '{compose_file}'."
-            )
-    return result
 
 
 def _convert_services(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
