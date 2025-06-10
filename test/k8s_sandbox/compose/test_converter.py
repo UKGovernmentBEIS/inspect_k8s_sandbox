@@ -698,7 +698,7 @@ services:
     assert result["services"]["my-service"]["dnsRecord"]
 
 
-def test_do_not_convert_hostname_if_not_identical_to_service_name(
+def test_rejects_hostname_if_not_identical_to_service_name(
     tmp_compose: TmpComposeFixture,
 ) -> None:
     compose_path = tmp_compose("""
@@ -818,10 +818,10 @@ networks:
 
     assert result["services"]["my-service"]["networks"] == ["my-network"]
     assert result["networks"]["my-network"] is not None
-    assert result["networks"]["my-network"]["driver"] == "k8s"
+    assert result["networks"]["my-network"] == {}
 
 
-def test_fails_on_unsupported_network_driver(tmp_compose: TmpComposeFixture) -> None:
+def test_rejects_unsupported_network_driver(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
@@ -840,7 +840,7 @@ networks:
     assert "Unsupported network driver" in str(exc_info.value)
 
 
-def test_fails_on_non_internal_network(tmp_compose: TmpComposeFixture) -> None:
+def test_rejects_non_internal_network(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:

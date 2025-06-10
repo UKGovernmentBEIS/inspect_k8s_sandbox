@@ -112,7 +112,7 @@ def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
                 f"supported. Compose file: '{compose_file}'."
             )
         internal = network_value.pop("internal", False)
-        if not internal:
+        if internal is not True:
             raise ComposeConverterError(
                 f"Unsupported network internal value: '{internal}'. Only "
                 f"'internal: true' is supported. Compose file: '{compose_file}'."
@@ -122,9 +122,7 @@ def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
                 f"Unsupported key(s) in network '{network_name}': "
                 f"{set(network_value)}. Compose file: '{compose_file}'."
             )
-        result[network_name] = {
-            "driver": "k8s",
-        }
+        result[network_name] = {}
     return result
 
 
@@ -202,7 +200,6 @@ class _ServiceConverter:
                     f"Unsupported hostname: '{hostname}'. Only the service name is "
                     f"supported. {self.context}"
                 )
-            result["dnsRecord"] = True
         if src.pop("expose", None) is not None:
             # Log at info level because this does not affect the service.
             logger.info(
