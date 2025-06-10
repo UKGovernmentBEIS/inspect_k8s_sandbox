@@ -45,7 +45,6 @@ reasons:
    discourage use of Docker which lacks security features of Kubernetes)
  * To be more expressive about which services should get a DNS entry
  * To support more powerful readiness and liveness probes
- * To make use of the "network" functionality in the built-in Helm chart
 
 ## Internet Access
 

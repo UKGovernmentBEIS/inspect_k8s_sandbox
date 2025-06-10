@@ -50,6 +50,8 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
     result["services"] = _convert_services(services, compose_file)
     if volumes := compose.pop("volumes", None):
         result["volumes"] = _convert_volumes(volumes, compose_file)
+    if networks := compose.pop("networks", None):
+        result["networks"] = _convert_networks(networks, compose_file)
     # The 'x-inspect_k8s_sandbox' key is used to add additional configuration to
     # Docker Compose files for use in Helm values.
     if extensions := compose.pop("x-inspect_k8s_sandbox", None):
@@ -92,6 +94,35 @@ def _convert_volumes(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
                 f"volume values is not supported. Compose file: '{compose_file}'."
             )
         result[_make_volume_name_k8s_compliant(volume_name)] = {}
+    return result
+
+
+def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
+    result: dict[str, Any] = dict()
+    for network_name, network_value in src.items():
+        if not isinstance(network_value, dict):
+            raise ComposeConverterError(
+                f"Invalid network value: '{network_value}'. Expected dict. "
+                f"Compose file: '{compose_file}'."
+            )
+        driver = network_value.pop("driver", None)
+        if driver != "bridge":
+            raise ComposeConverterError(
+                f"Unsupported network driver: '{driver}'. Only 'bridge' is "
+                f"supported. Compose file: '{compose_file}'."
+            )
+        internal = network_value.pop("internal", False)
+        if internal is not True:
+            raise ComposeConverterError(
+                f"Unsupported network internal value: '{internal}'. Only "
+                f"'internal: true' is supported. Compose file: '{compose_file}'."
+            )
+        if network_value:
+            raise ComposeConverterError(
+                f"Unsupported key(s) in network '{network_name}': "
+                f"{set(network_value)}. Compose file: '{compose_file}'."
+            )
+        result[network_name] = {}
     return result
 
 
@@ -162,6 +193,13 @@ class _ServiceConverter:
         _transform(
             src, "user", result, "securityContext", self._user_to_security_context
         )
+        _transform(src, "networks", result, "networks")
+        if hostname := src.pop("hostname", None):
+            if hostname != self._name:
+                raise ComposeConverterError(
+                    f"Unsupported hostname: '{hostname}'. Only the service name is "
+                    f"supported. {self.context}"
+                )
         if src.pop("expose", None) is not None:
             # Log at info level because this does not affect the service.
             logger.info(
