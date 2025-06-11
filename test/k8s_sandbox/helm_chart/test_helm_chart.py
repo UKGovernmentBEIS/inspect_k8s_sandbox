@@ -161,34 +161,40 @@ def test_annotations(chart_dir: Path, test_resources_dir: Path) -> None:
         assert deployment["metadata"]["annotations"]["myValue"] == attr_value
 
 
-def test_labels(chart_dir: Path, test_resources_dir: Path) -> None:
-    label_value_1 = "test-label-1"
-    label_value_2 = "test-label-2"
-
+@pytest.mark.parametrize(
+    "labels",
+    [
+        pytest.param({}, id="no-labels"),
+        pytest.param({"myLabel": "test-label"}, id="one-label"),
+        pytest.param(
+            {"myLabel": "test-label", "myOtherLabel": "test-other-label"},
+            id="two-labels",
+        ),
+    ],
+)
+def test_labels(
+    chart_dir: Path, test_resources_dir: Path, labels: dict[str, str]
+) -> None:
+    set_str = ",".join(f"labels.{key}={value}" for key, value in labels.items())
     documents = _run_helm_template(
         chart_dir,
         test_resources_dir / "volumes-values.yaml",
-        f"labels.myValue1={label_value_1},labels.myValue2={label_value_2}",
+        set_str,
     )
 
-    for stateful_set in _get_documents(documents, "StatefulSet"):
-        assert stateful_set["metadata"]["labels"]["myValue1"] == label_value_1
-        assert stateful_set["metadata"]["labels"]["myValue2"] == label_value_2
-        template = stateful_set["spec"]["template"]
-        assert template["metadata"]["labels"]["myValue1"] == label_value_1
-        assert template["metadata"]["labels"]["myValue2"] == label_value_2
-    for network_policy in _get_documents(documents, "NetworkPolicy"):
-        assert network_policy["metadata"]["labels"]["myValue1"] == label_value_1
-        assert network_policy["metadata"]["labels"]["myValue2"] == label_value_2
-    for pvc in _get_documents(documents, "PersistentVolumeClaim"):
-        assert pvc["metadata"]["labels"]["myValue1"] == label_value_1
-        assert pvc["metadata"]["labels"]["myValue2"] == label_value_2
-    for service in _get_documents(documents, "Service"):
-        assert service["metadata"]["labels"]["myValue1"] == label_value_1
-        assert service["metadata"]["labels"]["myValue2"] == label_value_2
-    for deployment in _get_documents(documents, "Deployment"):
-        assert deployment["metadata"]["labels"]["myValue1"] == label_value_1
-        assert deployment["metadata"]["labels"]["myValue2"] == label_value_2
+    for key, value in labels.items():
+        for stateful_set in _get_documents(documents, "StatefulSet"):
+            assert stateful_set["metadata"]["labels"][key] == value
+            template = stateful_set["spec"]["template"]
+            assert template["metadata"]["labels"][key] == value
+        for network_policy in _get_documents(documents, "NetworkPolicy"):
+            assert network_policy["metadata"]["labels"][key] == value
+        for pvc in _get_documents(documents, "PersistentVolumeClaim"):
+            assert pvc["metadata"]["labels"][key] == value
+        for service in _get_documents(documents, "Service"):
+            assert service["metadata"]["labels"][key] == value
+        for deployment in _get_documents(documents, "Deployment"):
+            assert deployment["metadata"]["labels"][key] == value
 
 
 def test_resource_requests_and_limits(
