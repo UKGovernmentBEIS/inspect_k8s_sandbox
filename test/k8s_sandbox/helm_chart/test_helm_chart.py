@@ -162,26 +162,33 @@ def test_annotations(chart_dir: Path, test_resources_dir: Path) -> None:
 
 
 def test_labels(chart_dir: Path, test_resources_dir: Path) -> None:
-    label_value = "test-label"
+    label_value_1 = "test-label-1"
+    label_value_2 = "test-label-2"
 
     documents = _run_helm_template(
         chart_dir,
         test_resources_dir / "volumes-values.yaml",
-        f"labels.myValue={label_value}",
+        f"labels.myValue1={label_value_1},labels.myValue2={label_value_2}",
     )
 
     for stateful_set in _get_documents(documents, "StatefulSet"):
-        assert stateful_set["metadata"]["labels"]["myValue"] == label_value
+        assert stateful_set["metadata"]["labels"]["myValue1"] == label_value_1
+        assert stateful_set["metadata"]["labels"]["myValue2"] == label_value_2
         template = stateful_set["spec"]["template"]
-        assert template["metadata"]["labels"]["myValue"] == label_value
+        assert template["metadata"]["labels"]["myValue1"] == label_value_1
+        assert template["metadata"]["labels"]["myValue2"] == label_value_2
     for network_policy in _get_documents(documents, "NetworkPolicy"):
-        assert network_policy["metadata"]["labels"]["myValue"] == label_value
+        assert network_policy["metadata"]["labels"]["myValue1"] == label_value_1
+        assert network_policy["metadata"]["labels"]["myValue2"] == label_value_2
     for pvc in _get_documents(documents, "PersistentVolumeClaim"):
-        assert pvc["metadata"]["labels"]["myValue"] == label_value
+        assert pvc["metadata"]["labels"]["myValue1"] == label_value_1
+        assert pvc["metadata"]["labels"]["myValue2"] == label_value_2
     for service in _get_documents(documents, "Service"):
-        assert service["metadata"]["labels"]["myValue"] == label_value
+        assert service["metadata"]["labels"]["myValue1"] == label_value_1
+        assert service["metadata"]["labels"]["myValue2"] == label_value_2
     for deployment in _get_documents(documents, "Deployment"):
-        assert deployment["metadata"]["labels"]["myValue"] == label_value
+        assert deployment["metadata"]["labels"]["myValue1"] == label_value_1
+        assert deployment["metadata"]["labels"]["myValue2"] == label_value_2
 
 
 def test_resource_requests_and_limits(
