@@ -21,9 +21,7 @@ class ComposeConverterError(Exception):
     pass
 
 
-def convert_compose_to_helm_values(
-    compose_file: Path, ignore_build: bool = False
-) -> dict[str, Any]:
+def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
     """Convert a Docker Compose file to Helm values.
 
     The resulting Helm values file is suitable for the built-in Helm chart.
@@ -49,9 +47,7 @@ def convert_compose_to_helm_values(
         raise ComposeConverterError(
             f"The 'services' key is required. Compose file: '{compose_file}'."
         )
-    result["services"] = _convert_services(
-        services, compose_file, ignore_build=ignore_build
-    )
+    result["services"] = _convert_services(services, compose_file)
     if volumes := compose.pop("volumes", None):
         result["volumes"] = _convert_volumes(volumes, compose_file)
     if networks := compose.pop("networks", None):
@@ -81,14 +77,10 @@ def _validate_compose(compose: dict[str, Any], compose_file: Path) -> None:
         )
 
 
-def _convert_services(
-    src: dict[str, Any], compose_file: Path, ignore_build: bool = False
-) -> dict[str, Any]:
+def _convert_services(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
     result: dict[str, Any] = dict()
     for service_name, service_value in src.items():
-        service_converter = _ServiceConverter(
-            service_name, service_value, compose_file, ignore_build=ignore_build
-        )
+        service_converter = _ServiceConverter(service_name, service_value, compose_file)
         result[service_name] = service_converter.convert()
     return result
 
@@ -163,17 +155,10 @@ class _ServiceConverter:
     The src_service dict will be mutated during conversion.
     """
 
-    def __init__(
-        self,
-        name: str,
-        src_service: dict[str, Any],
-        compose_file: Path,
-        ignore_build: bool = False,
-    ):
+    def __init__(self, name: str, src_service: dict[str, Any], compose_file: Path):
         self._name = name
         self._src_service = src_service
         self._compose_file = compose_file
-        self._ignore_build = ignore_build
 
     def convert(self) -> dict[str, Any]:
         return self._convert_service(self._src_service)
@@ -184,9 +169,6 @@ class _ServiceConverter:
         return f"Service: '{self._name}'; Compose file: '{self._compose_file}'."
 
     def _convert_service(self, src: dict[str, Any]) -> dict[str, Any]:
-        if self._ignore_build:
-            src.pop("build", None)
-
         result: dict[str, Any] = dict()
         # Ordered as per built-in Helm chart values.yaml documentation.
         _transform(src, "runtime", result, "runtimeClassName")
@@ -230,13 +212,22 @@ class _ServiceConverter:
             # is almost always used in Compose and we don't have an alternative
             # suggestion to offer to users.
             logger.info(f"Ignoring 'init' key: not supported in K8s. {self.context}")
+
+        has_x_local = src.pop("x-local", None) == "true"
+        has_build = src.pop("build", None) is not None
         # x-local is an Inspect-specific key to indicate that an image should not be
         # pulled. https://inspect.aisi.org.uk/sandboxing.html#task-configuration
         # If it is set to anything but "true", silently ignore it.
-        if src.pop("x-local", None) == "true":
+        if has_x_local or has_build:
+            ignored: list[str] = []
+            if has_x_local:
+                ignored.append("`x-local: true`")
+            if has_build:
+                ignored.append("`build`")
             logger.warning(
-                f"Ignoring `x-local: true`: not supported in K8s. All images must be "
-                f"available for pulling from a container registry. {self.context}"
+                f"Ignoring {' and '.join(ignored)}: not supported in K8s. All images "
+                f"must be available for pulling from a container registry. "
+                f"{self.context}"
             )
         if src:
             raise ComposeConverterError(
