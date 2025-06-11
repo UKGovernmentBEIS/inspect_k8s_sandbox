@@ -34,12 +34,22 @@ Create chart name and version as used by the chart label.
 Common labels
 */}}
 {{- define "agentEnv.labels" -}}
+{{- include "agentEnv.labelsFromValues" . }}
 helm.sh/chart: {{ include "agentEnv.chart" . }}
 {{ include "agentEnv.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
+{{/*
+Labels from values
+*/}}
+{{- define "agentEnv.labelsFromValues" -}}
+{{- range $key, $value := $.Values.labels -}}
+{{ $key }}: {{ quote $value }}
+{{- end }}
 {{- end -}}
 
 {{/*

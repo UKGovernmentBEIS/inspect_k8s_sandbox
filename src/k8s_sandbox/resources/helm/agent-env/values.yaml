@@ -127,3 +127,5 @@ additionalResources: []
 # -- A dict of annotations to apply to resources within the agent environment.
 annotations: {}
   # inspectTaskName: "task-name"
+# -- A dict of labels to apply to resources within the agent environment.
+labels: {}

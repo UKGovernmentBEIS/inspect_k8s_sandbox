@@ -168,6 +168,9 @@
     },
     "annotations": {
       "type": "object"
+    },
+    "labels": {
+      "type": "object"
     }
   },
   "required": [

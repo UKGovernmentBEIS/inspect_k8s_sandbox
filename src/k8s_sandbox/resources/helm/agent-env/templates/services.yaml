@@ -18,6 +18,7 @@ spec:
   template:
     metadata:
       labels:
+        {{- include "agentEnv.labelsFromValues" $ | nindent 8 }}
         {{- include "agentEnv.selectorLabels" $ | nindent 8 }}
         {{- if $service.networks }}
         {{- range $service.networks }}
@@ -163,6 +164,8 @@ metadata:
   name: {{ template "agentEnv.fullname" $ -}}-{{ $name }}
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
+  labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
 spec:
   # Make this a headless service: other pods in this agent-env may connect directly to
   # the pod on all ports. This enables the use of tools like `nc` on any port or `ping`
