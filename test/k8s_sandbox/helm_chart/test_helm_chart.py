@@ -182,19 +182,18 @@ def test_labels(
         set_str,
     )
 
-    for key, value in labels.items():
-        for stateful_set in _get_documents(documents, "StatefulSet"):
-            assert stateful_set["metadata"]["labels"][key] == value
-            template = stateful_set["spec"]["template"]
-            assert template["metadata"]["labels"][key] == value
-        for network_policy in _get_documents(documents, "NetworkPolicy"):
-            assert network_policy["metadata"]["labels"][key] == value
-        for pvc in _get_documents(documents, "PersistentVolumeClaim"):
-            assert pvc["metadata"]["labels"][key] == value
-        for service in _get_documents(documents, "Service"):
-            assert service["metadata"]["labels"][key] == value
-        for deployment in _get_documents(documents, "Deployment"):
-            assert deployment["metadata"]["labels"][key] == value
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        assert labels.items() <= stateful_set["metadata"]["labels"].items()
+        template = stateful_set["spec"]["template"]
+        assert labels.items() <= template["metadata"]["labels"].items()
+    for network_policy in _get_documents(documents, "NetworkPolicy"):
+        assert labels.items() <= network_policy["metadata"]["labels"].items()
+    for pvc in _get_documents(documents, "PersistentVolumeClaim"):
+        assert labels.items() <= pvc["metadata"]["labels"].items()
+    for service in _get_documents(documents, "Service"):
+        assert labels.items() <= service["metadata"]["labels"].items()
+    for deployment in _get_documents(documents, "Deployment"):
+        assert labels.items() <= deployment["metadata"]["labels"].items()
 
 
 def test_resource_requests_and_limits(
