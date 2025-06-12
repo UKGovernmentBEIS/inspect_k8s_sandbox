@@ -161,27 +161,43 @@ def test_annotations(chart_dir: Path, test_resources_dir: Path) -> None:
         assert deployment["metadata"]["annotations"]["myValue"] == attr_value
 
 
-def test_labels(chart_dir: Path, test_resources_dir: Path) -> None:
-    label_value = "test-label"
-
+@pytest.mark.parametrize(
+    "labels",
+    [
+        pytest.param({}, id="no-labels"),
+        pytest.param({"myLabel": "test-label"}, id="one-label"),
+        pytest.param(
+            {"myLabel": "test-label", "myOtherLabel": "test-other-label"},
+            id="two-labels",
+        ),
+        pytest.param(
+            {"labelWithColon": "a: b"},
+            id="label-with-colon",
+        ),
+    ],
+)
+def test_labels(
+    chart_dir: Path, test_resources_dir: Path, labels: dict[str, str]
+) -> None:
+    set_str = ",".join(f"labels.{key}={value}" for key, value in labels.items())
     documents = _run_helm_template(
         chart_dir,
         test_resources_dir / "volumes-values.yaml",
-        f"labels.myValue={label_value}",
+        set_str,
     )
 
     for stateful_set in _get_documents(documents, "StatefulSet"):
-        assert stateful_set["metadata"]["labels"]["myValue"] == label_value
+        assert labels.items() <= stateful_set["metadata"]["labels"].items()
         template = stateful_set["spec"]["template"]
-        assert template["metadata"]["labels"]["myValue"] == label_value
+        assert labels.items() <= template["metadata"]["labels"].items()
     for network_policy in _get_documents(documents, "NetworkPolicy"):
-        assert network_policy["metadata"]["labels"]["myValue"] == label_value
+        assert labels.items() <= network_policy["metadata"]["labels"].items()
     for pvc in _get_documents(documents, "PersistentVolumeClaim"):
-        assert pvc["metadata"]["labels"]["myValue"] == label_value
+        assert labels.items() <= pvc["metadata"]["labels"].items()
     for service in _get_documents(documents, "Service"):
-        assert service["metadata"]["labels"]["myValue"] == label_value
+        assert labels.items() <= service["metadata"]["labels"].items()
     for deployment in _get_documents(documents, "Deployment"):
-        assert deployment["metadata"]["labels"]["myValue"] == label_value
+        assert labels.items() <= deployment["metadata"]["labels"].items()
 
 
 def test_resource_requests_and_limits(

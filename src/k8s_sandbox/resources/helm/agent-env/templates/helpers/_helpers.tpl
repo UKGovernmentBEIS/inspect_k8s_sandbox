@@ -34,7 +34,7 @@ Create chart name and version as used by the chart label.
 Common labels
 */}}
 {{- define "agentEnv.labels" -}}
-{{- include "agentEnv.labelsFromValues" . }}
+{{- include "agentEnv.labelsFromValues" . -}}
 helm.sh/chart: {{ include "agentEnv.chart" . }}
 {{ include "agentEnv.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
@@ -49,7 +49,7 @@ Labels from values
 {{- define "agentEnv.labelsFromValues" -}}
 {{- range $key, $value := $.Values.labels -}}
 {{ $key }}: {{ quote $value }}
-{{- end }}
+{{ end -}}
 {{- end -}}
 
 {{/*
