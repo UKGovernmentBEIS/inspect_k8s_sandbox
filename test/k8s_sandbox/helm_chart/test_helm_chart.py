@@ -170,6 +170,10 @@ def test_annotations(chart_dir: Path, test_resources_dir: Path) -> None:
             {"myLabel": "test-label", "myOtherLabel": "test-other-label"},
             id="two-labels",
         ),
+        pytest.param(
+            {"labelWithColon": "a: b"},
+            id="label-with-colon",
+        ),
     ],
 )
 def test_labels(
