@@ -1,5 +1,6 @@
+import logging
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import pytest
 import yaml
@@ -663,23 +664,49 @@ services:
     assert "my-service" in result["services"]
 
 
-def test_ignores_x_local_key(tmp_compose: TmpComposeFixture) -> None:
-    compose_path = tmp_compose("""
-services:
-  my-service:
-    image: my-image
-    x-local: true
-  my-service-2:
-    image: my-image
-    x-local: false
-""")
+@pytest.mark.parametrize(
+    ("properties", "expected_warning"),
+    [
+        ({"x-local": "true"}, "`x-local: true`"),
+        ({"build": {"context": "."}}, "`build`"),
+        ({"x-local": "true", "build": {"context": "."}}, "`x-local: true` and `build`"),
+    ],
+)
+def test_ignores_and_warns_build_keys(
+    caplog: pytest.LogCaptureFixture,
+    tmp_compose: TmpComposeFixture,
+    properties: dict[str, Any],
+    expected_warning: str,
+) -> None:
+    compose_path = tmp_compose(
+        yaml.safe_dump(
+            {
+                "services": {
+                    "my-service": {
+                        "image": "my-image",
+                        **properties,
+                    },
+                    "my-service-2": {
+                        "image": "my-image",
+                        **properties,
+                    },
+                }
+            }
+        )
+    )
 
-    result = convert_compose_to_helm_values(compose_path)
+    with caplog.at_level(logging.WARNING):
+        result = convert_compose_to_helm_values(compose_path)
 
-    assert "my-service" in result["services"]
-    assert "x-local" not in result["services"]["my-service"]
-    assert "my-service-2" in result["services"]
-    assert "x-local" not in result["services"]["my-service-2"]
+    expected_ignored = {*properties}
+    for service_name in "my-service", "my-service-2":
+        assert service_name in result["services"]
+        bad_keys = expected_ignored.intersection(result["services"][service_name])
+        assert len(bad_keys) == 0
+
+    assert len(caplog.records) == len(result["services"])
+    for record in caplog.records:
+        assert expected_warning in record.message
 
 
 def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None:
@@ -687,8 +714,7 @@ def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None
 services:
   my-service:
     image: my-image
-    build:
-      context: .
+    network_mode: none
 """)
 
     with pytest.raises(ComposeConverterError) as exc_info:
@@ -697,8 +723,8 @@ services:
     # Verify that the error message includes the service name, invalid keys and the
     # compose file path.
     assert (
-        "Unsupported key(s) in 'service': {'build'}. Service: 'my-service'; Compose "
-        "file: '/" in str(exc_info.value)
+        "Unsupported key(s) in 'service': {'network_mode'}. Service: 'my-service'; "
+        "Compose file: '/" in str(exc_info.value)
     )
 
 
