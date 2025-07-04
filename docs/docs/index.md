@@ -15,7 +15,7 @@ The Inspect process itself still runs on your local machine.
 ## Why use Kubernetes over Docker Compose?
 
 * **Scalability**: A typical Kubernetes cluster is distributed across multiple nodes,
-  allowing you to deploy may containers at once and run your evals at a much larger
+  allowing you to deploy many containers at once and run your evals at a much larger
   scale.
 * **Security**: Leverage [Cilium](https://cilium.io/) Network Policies to provide
   fine-grained internet access control. Use [gVisor](https://gvisor.dev/)[^1] to run

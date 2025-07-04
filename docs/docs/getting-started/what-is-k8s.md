@@ -1,7 +1,7 @@
 # What is K8s?
 
 This is a very high level overview of the aspects of Kubernetes (a.k.a. K8s) which are
-particularly salient to the running Inspect evals.
+particularly salient to the running of Inspect evals.
 
 Kubernetes is a _container_ orchestration platform. Containers are typically Docker
 containers.
