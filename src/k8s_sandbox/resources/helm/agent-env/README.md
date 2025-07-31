@@ -11,6 +11,8 @@
 | allowDomains | list | Empty list (no internet access) | A list of fully qualified domain names that pods within the agent environment are allowed to access. |
 | allowEntities | list | Empty list (no additional entities compared to default policies) | A list of Cilium entities (e.g. "world") that pods within the agent environment are allowed to access. |
 | annotations | object | `{}` | A dict of annotations to apply to resources within the agent environment. |
+| corednsCommand | list | `["/coredns","-conf","/etc/coredns/Corefile"]` | The command to use for the coredns container. |
+| corednsImage | string | `"coredns/coredns:1.8.3"` | The image to use for the coredns container. |
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
 | imagePullSecrets | list | `[]` | References to pre-existing secrets that contain registry credentials. |
 | labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |

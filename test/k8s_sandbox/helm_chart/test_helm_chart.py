@@ -267,6 +267,66 @@ def test_cluster_default_magic_string(
     )
 
 
+@pytest.mark.parametrize(
+    ("overrides", "expected_coredns_image", "expected_coredns_command"),
+    [
+        (
+            {
+                "image": "public.ecr.aws/eks-distro/coredns/coredns:v1.8.3-eks-1-20-22",
+                "command": ["/special-dns-command", "special-dns-arg"],
+            },
+            "public.ecr.aws/eks-distro/coredns/coredns:v1.8.3-eks-1-20-22",
+            ["/special-dns-command", "special-dns-arg"],
+        ),
+        (
+            {
+                "image": "public.ecr.aws/eks-distro/coredns/coredns:v1.8.3-eks-1-20-22",
+            },
+            "public.ecr.aws/eks-distro/coredns/coredns:v1.8.3-eks-1-20-22",
+            ["/coredns", "-conf", "/etc/coredns/Corefile"],
+        ),
+        (
+            {
+                "command": ["/special-dns-command"],
+            },
+            "coredns/coredns:1.8.3",
+            ["/special-dns-command"],
+        ),
+    ],
+)
+def test_coredns_container(
+    chart_dir: Path,
+    overrides: dict[str, Any],
+    expected_coredns_image: str,
+    expected_coredns_command: list[str],
+) -> None:
+    set_str_parts: list[str] = []
+    if "image" in overrides:
+        set_str_parts.append(f"corednsImage={overrides['image']}")
+    if "command" in overrides:
+        set_str_parts.extend(
+            [
+                f"corednsCommand[{idx_cmd}]={cmd}"
+                for idx_cmd, cmd in enumerate(overrides["command"])
+            ]
+        )
+    documents = _run_helm_template(chart_dir, set_str=",".join(set_str_parts))
+
+    stateful_sets = _get_documents(documents, "StatefulSet")
+    assert len(stateful_sets) == 1
+    corends_container = next(
+        (
+            container
+            for container in stateful_sets[0]["spec"]["template"]["spec"]["containers"]
+            if container["name"] == "coredns"
+        ),
+        None,
+    )
+    assert corends_container is not None
+    assert corends_container["image"] == expected_coredns_image
+    assert corends_container["command"] == expected_coredns_command
+
+
 def _run_helm_template(
     chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
 ) -> list[dict[str, Any]]:

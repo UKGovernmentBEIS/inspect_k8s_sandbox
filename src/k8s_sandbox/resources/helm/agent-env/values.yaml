@@ -24,6 +24,13 @@ imagePullSecrets: []
 # -- Defines network names that can be attached to services in order to specify subsets
 # of services that can communicate with one another.
 networks: {}
+# -- The image to use for the coredns container.
+corednsImage: "coredns/coredns:1.8.3"
+# -- The command to use for the coredns container.
+corednsCommand:
+  - /coredns
+  - -conf
+  - /etc/coredns/Corefile
 # -- A collection of services to deploy within the agent environment. A service can
 # connect to another service using DNS, e.g. `http://nginx:80`.
 # @default -- see [values.yaml](./values.yaml)
@@ -125,7 +132,8 @@ volumes: {}
 # template engine then converted to YAML.
 additionalResources: []
 # -- A dict of annotations to apply to resources within the agent environment.
-annotations: {}
+annotations:
+  {}
   # inspectTaskName: "task-name"
 # -- A dict of labels to apply to resources within the agent environment.
 labels: {}
