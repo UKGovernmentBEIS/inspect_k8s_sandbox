@@ -129,3 +129,35 @@ async def test_helm_install_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     # The release probably won't have been installed given the short timeout, but clean
     # up just in case.
     await release.uninstall(quiet=True)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_create_namespace"),
+    [
+        ("1", True),
+        ("true", True),
+        ("TRUE", True),
+        ("yes", True),
+        ("y", True),
+        ("0", False),
+        ("false", False),
+        ("", False),
+        (None, False),
+    ],
+)
+async def test_helm_create_namespace(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, expected_create_namespace: bool
+) -> None:
+    if value is None:
+        monkeypatch.delenv("INSPECT_HELM_CREATE_NAMESPACE", raising=False)
+    else:
+        monkeypatch.setenv("INSPECT_HELM_CREATE_NAMESPACE", value)
+
+    release = Release(__file__, None, ValuesSource.none(), None)
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        await release.install()
+
+    mock_run.assert_called_once()
+    assert (
+        "--create-namespace" in mock_run.call_args[0][1]
+    ) == expected_create_namespace

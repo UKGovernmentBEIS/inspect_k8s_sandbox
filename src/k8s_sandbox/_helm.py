@@ -165,18 +165,20 @@ class Release:
             + [
                 self.release_name,
                 str(self._chart_path),
-                "--namespace",
-                self._namespace,
+                f"--namespace={self._namespace}",
+                *(
+                    ["--create-namespace"]
+                    if os.getenv("INSPECT_HELM_CREATE_NAMESPACE", "false").lower()
+                    in {"1", "true", "yes", "y"}
+                    else []
+                ),
                 "--wait",
-                "--timeout",
-                f"{_get_timeout()}s",
-                "--set",
+                f"--timeout={_get_timeout()}s",
                 # Annotation do not have strict length reqs. Quoting/escaping
                 # handled by asyncio.create_subprocess_exec.
-                f"annotations.inspectTaskName={self.task_name}",
+                f"--set=annotations.inspectTaskName={self.task_name}",
                 # Include a label to identify releases created by Inspect.
-                "--labels",
-                "inspectSandbox=true",
+                "--labels=inspectSandbox=true",
             ]
             + _kubeconfig_context_args(self._context_name)
             + values_args,
