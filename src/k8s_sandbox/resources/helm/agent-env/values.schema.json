@@ -26,6 +26,15 @@
     "networks": {
       "type": "object"
     },
+    "corednsImage": {
+      "type": "string"
+    },
+    "corednsCommand": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "imagePullSecrets": {
       "type": "array",
       "items": {
@@ -163,7 +172,10 @@
     "additionalResources": {
       "type": "array",
       "items": {
-        "type": ["object", "string"]
+        "type": [
+          "object",
+          "string"
+        ]
       }
     },
     "annotations": {

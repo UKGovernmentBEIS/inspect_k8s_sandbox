@@ -103,11 +103,9 @@ spec:
           {{- toYaml . | nindent 10 }}
         {{- end }}
       - name: coredns
-        image: coredns/coredns:1.8.3
+        image: {{ quote $.Values.corednsImage }}
         command:
-          - /coredns
-          - -conf
-          - /etc/coredns/Corefile
+          {{- toYaml $.Values.corednsCommand | nindent 10 }}
         resources:
           requests:
             memory: "64Mi"
