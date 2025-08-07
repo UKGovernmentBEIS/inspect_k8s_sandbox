@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator, cast
+from typing import AsyncGenerator, Literal, cast
 
 from k8s_sandbox._sandbox_environment import (
     K8sSandboxEnvironment,
@@ -14,6 +14,7 @@ async def install_sandbox_environments(
     values_filename: str | None,
     context_name: str | None = None,
     default_user: str | None = None,
+    restarted_container_behavior: Literal["warn", "raise"] = "warn",
 ) -> AsyncGenerator[dict[str, K8sSandboxEnvironment], None]:
     values_path = (
         Path(__file__).parent / "resources" / values_filename
@@ -21,7 +22,10 @@ async def install_sandbox_environments(
         else None
     )
     config = K8sSandboxEnvironmentConfig(
-        values=values_path, context=context_name, default_user=default_user
+        values=values_path,
+        context=context_name,
+        default_user=default_user,
+        restarted_container_behavior=restarted_container_behavior,
     )
     try:
         envs = cast(

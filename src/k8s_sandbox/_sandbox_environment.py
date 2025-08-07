@@ -285,6 +285,7 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     """The kubeconfig context name (e.g. if you have multiple clusters)."""
     default_user: str | None = None
     """The user to run commands as in the container if user is not specified."""
+    restarted_container_behavior: Literal["warn", "raise"] = "warn"
 
 
 class K8sError(Exception):
@@ -299,7 +300,13 @@ class K8sError(Exception):
 
 def _create_release(task_name: str, config: _ResolvedConfig) -> Release:
     values_source = _create_values_source(config)
-    return Release(task_name, config.chart, values_source, config.context)
+    return Release(
+        task_name,
+        config.chart,
+        values_source,
+        config.context,
+        config.restarted_container_behavior,
+    )
 
 
 class _ResolvedConfig(BaseModel, frozen=True):
@@ -309,6 +316,7 @@ class _ResolvedConfig(BaseModel, frozen=True):
     values: Path | None
     context: str | None
     default_user: str | None
+    restarted_container_behavior: Literal["warn", "raise"]
 
 
 def _create_values_source(config: _ResolvedConfig) -> ValuesSource:
@@ -346,7 +354,13 @@ def _validate_and_resolve_k8s_sandbox_config(
             validate_context_name(context)
 
     if config is None:
-        return _ResolvedConfig(chart=None, values=None, context=None, default_user=None)
+        return _ResolvedConfig(
+            chart=None,
+            values=None,
+            context=None,
+            default_user=None,
+            restarted_container_behavior="warn",
+        )
     if isinstance(config, K8sSandboxEnvironmentConfig):
         chart = Path(config.chart).resolve() if config.chart else None
         validate_chart_dir(chart)
@@ -358,12 +372,17 @@ def _validate_and_resolve_k8s_sandbox_config(
             values=values,
             context=config.context,
             default_user=config.default_user,
+            restarted_container_behavior=config.restarted_container_behavior,
         )
     if isinstance(config, str):
         values = Path(config).resolve()
         validate_values_file(values)
         return _ResolvedConfig(
-            chart=None, values=values, context=None, default_user=None
+            chart=None,
+            values=values,
+            context=None,
+            default_user=None,
+            restarted_container_behavior="warn",
         )
     raise TypeError(
         f"Invalid 'SandboxEnvironmentConfigType | None' type: {type(config)}."
