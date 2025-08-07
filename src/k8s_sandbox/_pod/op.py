@@ -125,6 +125,7 @@ class PodOperation(ABC):
             )
             if self._pod.restarted_container_behavior == "warn":
                 logger.warning(message)
+                return
             else:
                 raise RuntimeError(message)
         if status.restart_count > self._pod.initial_restart_count:
