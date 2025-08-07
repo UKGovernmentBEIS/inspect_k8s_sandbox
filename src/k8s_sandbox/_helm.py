@@ -7,7 +7,7 @@ import re
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, AsyncContextManager, Generator, NoReturn, Protocol
+from typing import Any, AsyncContextManager, Generator, Literal, NoReturn, Protocol
 
 from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
@@ -74,6 +74,7 @@ class Release:
         chart_path: Path | None,
         values_source: ValuesSource,
         context_name: str | None,
+        restarted_container_behavior: Literal["warn", "raise"] = "warn",
     ) -> None:
         self.task_name = task_name
         self._chart_path = chart_path or DEFAULT_CHART
@@ -82,6 +83,7 @@ class Release:
         self._namespace = get_default_namespace(context_name)
         # The release name is used in pod names too, so limit it to 8 chars.
         self.release_name = self._generate_release_name()
+        self.restarted_container_behavior = restarted_container_behavior
 
     def _generate_release_name(self) -> str:
         return uuid().lower()[:8]
@@ -146,11 +148,22 @@ class Release:
             # These should not be considered to be a sandbox pod (as per our docs).
             if service_name is not None:
                 default_container_name = pod.spec.containers[0].name
+                default_container_restart_count = next(
+                    (
+                        container_status.restart_count
+                        for container_status in pod.status.container_statuses
+                        if container_status.name == default_container_name
+                    ),
+                    0,
+                )
                 sandboxes[service_name] = Pod(
                     pod.metadata.name,
                     self._namespace,
                     self._context_name,
                     default_container_name,
+                    pod.metadata.uid,
+                    default_container_restart_count,
+                    self.restarted_container_behavior,
                 )
         return sandboxes
 

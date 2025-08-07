@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -11,7 +12,7 @@ from inspect_ai.util import OutputLimitExceededError, SandboxEnvironmentLimits
 from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
-from k8s_sandbox._kubernetes_api import get_current_context_name
+from k8s_sandbox._kubernetes_api import get_current_context_name, k8s_client
 from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
 from test.k8s_sandbox.utils import install_sandbox_environments
 
@@ -67,6 +68,13 @@ def binary_data() -> bytes:
 def log_err(caplog: LogCaptureFixture) -> LogCaptureFixture:
     # Note: this will prevent lower level messages from being shown in pytest output.
     caplog.set_level(logging.ERROR)
+    return caplog
+
+
+@pytest.fixture
+def log_warning(caplog: LogCaptureFixture) -> LogCaptureFixture:
+    # Note: this will prevent lower level messages from being shown in pytest output.
+    caplog.set_level(logging.WARNING)
     return caplog
 
 
@@ -546,6 +554,51 @@ async def test_exec_with_default_user_can_use_root(
 
     assert result.success
     assert result.stdout == "root\n"
+
+
+async def _wait_for_restart(sandbox: K8sSandboxEnvironment, timeout=30):
+    """Block until any container has restartCount > 0."""
+    pod_info = sandbox._pod.info
+    client = k8s_client(pod_info.context_name)
+    deadline = asyncio.get_event_loop().time() + timeout
+    while True:
+        pod = client.read_namespaced_pod(
+            name=pod_info.name, namespace=pod_info.namespace
+        )
+        if any(cs.restart_count > 0 for cs in pod.status.container_statuses or []):
+            return
+        if asyncio.get_event_loop().time() > deadline:
+            raise TimeoutError("container did not restart in time")
+        await asyncio.sleep(0.2)
+
+
+async def test_exec_after_container_restart_warns(
+    sandbox: K8sSandboxEnvironment,
+    log_warning: LogCaptureFixture,
+) -> None:
+    await sandbox.exec(["kill", "1"])
+    await _wait_for_restart(sandbox)
+
+    await sandbox.exec(["ls"])
+
+    assert "has restarted" in log_warning.records[0].message
+
+
+async def test_exec_after_container_restart_raises(
+    log_err: LogCaptureFixture,
+) -> None:
+    async with install_sandbox_environments(
+        __file__, "values.yaml", restarted_container_behavior="raise"
+    ) as envs:
+        sandbox = envs["default"]
+        await sandbox.exec(["kill", "1"])
+        await _wait_for_restart(sandbox)
+
+        with pytest.raises(K8sError) as exc_info:
+            await sandbox.exec(["ls"])
+
+        assert "has restarted" in str(exc_info.value.__cause__)
+        assert "has restarted" in log_err.records[0].message
 
 
 ### #write_file() ###

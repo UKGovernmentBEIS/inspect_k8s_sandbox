@@ -1,7 +1,7 @@
 import logging
 from abc import ABC
 from dataclasses import dataclass
-from typing import Generator
+from typing import Generator, Literal
 
 from kubernetes.stream import stream  # type: ignore
 from kubernetes.stream.ws_client import WSClient  # type: ignore
@@ -30,6 +30,9 @@ class PodInfo:
     context_name: str | None
     """The name of the kubeconfig context. If None, use the current context."""
     default_container_name: str
+    uid: str
+    initial_restart_count: int
+    restarted_container_behavior: Literal["warn", "raise"]
 
 
 class PodOperation(ABC):
@@ -93,6 +96,52 @@ class PodOperation(ABC):
             PodOperation._failed_to_discard_duplicate_channel = True
             return
         ws_client._all = _IgnoredIO()
+
+    def _check_for_pod_restart(self):
+        client = k8s_client(self._pod.context_name)
+        pod = client.read_namespaced_pod(
+            name=self._pod.name, namespace=self._pod.namespace
+        )
+        if pod.metadata.uid != self._pod.uid:
+            message = (
+                f"Pod UID mismatch: expected {self._pod.uid}, got {pod.metadata.uid}"
+            )
+            if self._pod.restarted_container_behavior == "warn":
+                logger.warning(message)
+            else:
+                raise RuntimeError(message)
+        status = next(
+            (
+                container_status
+                for container_status in pod.status.container_statuses
+                if container_status.name == self._pod.default_container_name
+            ),
+            None,
+        )
+        if status is None:
+            message = (
+                f"Pod '{pod.metadata.name}' does not have a container named "
+                f"'{self._pod.default_container_name}'"
+            )
+            if self._pod.restarted_container_behavior == "warn":
+                logger.warning(message)
+            else:
+                raise RuntimeError(message)
+        if status.restart_count > self._pod.initial_restart_count:
+            last_reason = (
+                status.last_state.terminated.reason
+                if status.last_state.terminated
+                else "unknown"
+            )
+            message = (
+                f"Container '{status.name}' in pod '{pod.metadata.name}' has restarted "
+                f"{status.restart_count} time(s) (last reason: {last_reason}); "
+                "pod state is no longer guaranteed."
+            )
+            if self._pod.restarted_container_behavior == "warn":
+                logger.warning(message)
+            else:
+                raise RuntimeError(message)
 
 
 def raise_for_known_read_write_errors(stderr: str) -> None:

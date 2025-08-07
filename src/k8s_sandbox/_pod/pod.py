@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import IO, Callable, TypeVar
+from typing import IO, Callable, Literal, TypeVar
 
 from inspect_ai.util import ExecResult
 
@@ -21,8 +21,19 @@ class Pod:
         namespace: str,
         context_name: str | None,
         default_container_name: str,
+        uid: str,
+        initial_restart_count: int,
+        restarted_container_behavior: Literal["warn", "raise"],
     ) -> None:
-        self.info = PodInfo(name, namespace, context_name, default_container_name)
+        self.info = PodInfo(
+            name,
+            namespace,
+            context_name,
+            default_container_name,
+            uid,
+            initial_restart_count,
+            restarted_container_behavior,
+        )
 
     async def exec(
         self,
