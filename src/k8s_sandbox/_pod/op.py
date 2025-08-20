@@ -104,7 +104,8 @@ class PodOperation(ABC):
         )
         if pod.metadata.uid != self._pod.uid:
             message = (
-                f"Pod UID mismatch: expected {self._pod.uid}, got {pod.metadata.uid} for {pod.metadata.name}"
+                f"Pod UID mismatch: expected {self._pod.uid}, got {pod.metadata.uid} "
+                f"for {pod.metadata.name}"
             )
             if self._pod.restarted_container_behavior == "warn":
                 logger.warning(message)
