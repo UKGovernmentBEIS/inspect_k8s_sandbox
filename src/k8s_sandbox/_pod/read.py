@@ -17,6 +17,7 @@ from k8s_sandbox._pod.op import (
 
 class ReadFileOperation(PodOperation):
     def read_file(self, src: Path, dst: IO[bytes]) -> None:
+        self._check_for_pod_restart()
         with self._start_read_command(src) as ws_client:
             self._handle_stream_output(ws_client, dst)
 

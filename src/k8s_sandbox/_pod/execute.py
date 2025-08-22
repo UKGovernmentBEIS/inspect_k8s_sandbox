@@ -28,6 +28,7 @@ class ExecuteOperation(PodOperation):
         user: str | None,
         timeout: int | None,
     ) -> ExecResult[str]:
+        self._check_for_pod_restart()
         shell_script = self._build_shell_script(cmd, stdin, cwd, env, timeout)
         with self._interactive_shell(user) as ws_client:
             # Write the script to the shell's stdin rather than passing it as a command
