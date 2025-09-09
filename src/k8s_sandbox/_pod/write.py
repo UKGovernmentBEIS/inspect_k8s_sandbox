@@ -16,6 +16,7 @@ from k8s_sandbox._pod.op import (
 
 class WriteFileOperation(PodOperation):
     def write_file(self, src: IO[bytes], dst: Path) -> None:
+        self._check_for_pod_restart()
         file_size = self._get_file_size(src)
         with self._start_write_command(dst, file_size) as ws_client:
             self._write_data_to_stdin(ws_client, src)
