@@ -352,6 +352,38 @@ When no networks are specified all Pods within a Helm release can communicate wi
 other. If any networks are specified, any Pod which does not specify a network will not
 be able to communicate with any other Pod.
 
+
+## Ports
+
+By default all ports are open between services (provided they are on the same network)
+you may want to open only specific ports for certain evaluations (for example to test
+a model can hack a particular service to gain access to others). You may do this by
+specifying `ports` in the service definition.
+
+```yaml
+services:
+  default:
+    image: alpine:3.20
+    networks:
+      - challenge-network
+  target:
+    image: python:3.12-slim
+    # Start TCP listner on both ports so checks in the test can recognise an available service
+    command: ["sh","-c","python3 -m http.server \"8080\" --bind 0.0.0.0 & python3 -m http.server \"9090\" --bind 0.0.0.0 & wait"]
+    ports:
+    - protocol: TCP
+      port: 8080
+    networks:
+      - challenge-network
+networks:
+  challenge-network:
+    driver: bridge
+```
+
+From the default service port 8080 should be reachable but port 9090 should be inaccessable.
+
+If no ports are specified on the host it will allow ingress on any port
+
 ## Additional resources
 
 You can pass arbitrary Kubernetes resources to the Helm chart using the
