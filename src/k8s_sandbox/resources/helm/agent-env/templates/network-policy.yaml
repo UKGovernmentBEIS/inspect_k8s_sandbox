@@ -74,52 +74,74 @@ spec:
   ingress:
     - {}
 {{- if .Values.networks }}
-{{- range $networkName, $networkConfig := .Values.networks }}
+  {{- range $svcName, $svc := .Values.services }}
+    {{- if $svc.networks }}
+      {{- range $net := $svc.networks }}
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: {{ template "agentEnv.fullname" $ }}-sandbox-{{ $networkName }}-ingress
+  name: {{ template "agentEnv.fullname" $ }}-svc-{{ $svcName }}-{{ $net }}-ingress
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
   labels:
     {{- toYaml $.Values.labels | nindent 4 }}
 spec:
   description: |
-    Allow ingress from all Pods in the same agent sandbox which are also on the
-    "{{ $networkName }}" "network".
+    Allow ingress to workload "{{ $svcName }}" from same sandbox on network "{{ $net }}".
+    If ports are specified, only those ports are exposed; otherwise all ports are allowed.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
       {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
-      aisi.gov.uk/network-{{ $networkName }}: "true"
+      inspect/service: {{ $svcName }}
+      aisi.gov.uk/network-{{ $net }}: "true"
   ingress:
     - fromEndpoints:
       - matchLabels:
           io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
-          aisi.gov.uk/network-{{ $networkName }}: "true"
           {{- include "agentEnv.selectorLabels" $ | nindent 10 }}
-{{- end }}
+          aisi.gov.uk/network-{{ $net }}: "true"
+      {{- if $svc.ports }}
+      toPorts:
+        - ports:
+{{ include "agentEnv.servicePortsListFor" (dict "svc" $svc) | nindent 12 }}
+      {{- end }}
+      {{- end }}
+    {{- else }}
+    {{- /* If no network fallback to default rule (no ingress) */}}
+    {{- end }}
+  {{- end }}
 {{- else }}
+  {{- /* No global networks: allow same-sandbox ingress per service (no network scoping) */}}
+  {{- range $svcName, $svc := .Values.services }}
 ---
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: {{ template "agentEnv.fullname" $ }}-sandbox-ingress
+  name: {{ template "agentEnv.fullname" $ }}-svc-{{ $svcName }}-ingress
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
   labels:
     {{- toYaml $.Values.labels | nindent 4 }}
 spec:
   description: |
-    Allow ingress from all Pods in the same agent sandbox.
+    Allow ingress to workload "{{ $svcName }}" from same sandbox.
+    If ports are specified, only those ports are exposed; otherwise all ports are allowed.
   endpointSelector:
     matchLabels:
-      io.kubernetes.pod.namespace: {{ .Release.Namespace }}
+      io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
       {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
+      inspect/service: {{ $svcName }}
   ingress:
     - fromEndpoints:
       - matchLabels:
-          io.kubernetes.pod.namespace: {{ .Release.Namespace }}
+          io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
           {{- include "agentEnv.selectorLabels" $ | nindent 10 }}
+      {{- if $svc.ports }}
+      toPorts:
+        - ports:
+{{ include "agentEnv.servicePortsListFor" (dict "svc" $svc) | nindent 12 }}
+      {{- end }}
+  {{- end }}
 {{- end }}
