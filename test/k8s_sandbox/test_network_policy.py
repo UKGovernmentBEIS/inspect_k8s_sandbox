@@ -24,6 +24,12 @@ async def sandbox_entities_world() -> AsyncGenerator[K8sSandboxEnvironment, None
         yield envs["default"]
 
 
+@pytest_asyncio.fixture(scope="module")
+async def sandbox_ports() -> AsyncGenerator[K8sSandboxEnvironment, None]:
+    async with install_sandbox_environments(__file__, "ports-values.yaml") as envs:
+        yield envs["default"]
+
+
 async def test_allowed_fqdn(sandbox: K8sSandboxEnvironment) -> None:
     result = await sandbox.exec(["curl", "-I", "https://google.com"], timeout=10)
 
@@ -94,3 +100,16 @@ async def test_pip_install(sandbox: K8sSandboxEnvironment) -> None:
     )
 
     assert result.stdout.strip() == "success"
+
+
+async def test_only_specified_ports_are_open(sandbox_ports: K8sSandboxEnvironment):
+    open_port = "8080"
+    closed_port = "9090"
+    expected_open_result = await sandbox_ports.exec(
+        ["nc", "-vz", "-w", "5", "target", open_port], timeout=10
+    )
+    expected_closed_result = await sandbox_ports.exec(
+        ["nc", "-vz", "-w", "5", "target", closed_port], timeout=10
+    )
+    assert expected_open_result.returncode == 0
+    assert expected_closed_result.returncode != 0

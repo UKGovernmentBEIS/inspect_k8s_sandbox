@@ -1,0 +1,19 @@
+services:
+  default:
+    dnsRecord: true
+    image: alpine:3.20
+    networks:
+      - challenge-network
+  target:
+    dnsRecord: true
+    image: python:3.12-slim
+    # Start TCP listner on both ports so checks in the test can recognise an available service
+    command: ["sh","-c","python3 -m http.server \"8080\" --bind 0.0.0.0 & python3 -m http.server \"9090\" --bind 0.0.0.0 & wait"]
+    ports:
+    - protocol: TCP
+      port: 8080
+    networks:
+      - challenge-network
+networks:
+  challenge-network:
+    driver: bridge
