@@ -120,7 +120,7 @@ async def test_pip_install(sandbox: K8sSandboxEnvironment) -> None:
             "closed_ports": [],
         },
         {
-            "host": "ports-specified_diff_network",
+            "host": "ports-specified-diff-network",
             "open_ports": [],
             "closed_ports": ["8080", "9090"],
         },
