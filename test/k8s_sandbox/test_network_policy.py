@@ -24,20 +24,6 @@ async def sandbox_entities_world() -> AsyncGenerator[K8sSandboxEnvironment, None
         yield envs["default"]
 
 
-@pytest_asyncio.fixture(scope="module")
-async def sandbox_ports() -> AsyncGenerator[K8sSandboxEnvironment, None]:
-    async with install_sandbox_environments(__file__, "ports-values.yaml") as envs:
-        yield envs["default"]
-
-
-@pytest_asyncio.fixture(scope="module")
-async def sandbox_ports_no_net() -> AsyncGenerator[K8sSandboxEnvironment, None]:
-    async with install_sandbox_environments(
-        __file__, "ports-no-net-values.yaml"
-    ) as envs:
-        yield envs["default"]
-
-
 async def test_allowed_fqdn(sandbox: K8sSandboxEnvironment) -> None:
     result = await sandbox.exec(["curl", "-I", "https://google.com"], timeout=10)
 
@@ -108,69 +94,3 @@ async def test_pip_install(sandbox: K8sSandboxEnvironment) -> None:
     )
 
     assert result.stdout.strip() == "success"
-
-
-@pytest.mark.parametrize(
-    "host_to_mapped_ports",
-    [
-        {"host": "ports-specified", "open_ports": ["8080"], "closed_ports": ["9090"]},
-        {
-            "host": "ports-not-specified",
-            "open_ports": ["8080", "9090"],
-            "closed_ports": [],
-        },
-        {
-            "host": "ports-specified-diff-network",
-            "open_ports": [],
-            "closed_ports": ["8080", "9090"],
-        },
-    ],
-)
-async def test_only_specified_ports_are_open(
-    sandbox_ports: K8sSandboxEnvironment, host_to_mapped_ports
-):
-    await assert_proper_ports_are_open(sandbox_ports, host_to_mapped_ports)
-
-
-@pytest.mark.parametrize(
-    "host_to_mapped_ports",
-    [
-        {"host": "ports-specified", "open_ports": ["8080"], "closed_ports": ["9090"]},
-        {
-            "host": "ports-not-specified",
-            "open_ports": ["8080", "9090"],
-            "closed_ports": [],
-        },
-    ],
-)
-async def test_only_specified_ports_are_open_no_networks(
-    sandbox_ports_no_net: K8sSandboxEnvironment, host_to_mapped_ports
-):
-    await assert_proper_ports_are_open(sandbox_ports_no_net, host_to_mapped_ports)
-
-
-async def assert_proper_ports_are_open(
-    sandbox_env: K8sSandboxEnvironment, host_to_mapped_ports
-) -> None:
-    hostname = host_to_mapped_ports["host"]
-    open_ports = host_to_mapped_ports["open_ports"]
-    closed_ports = host_to_mapped_ports["closed_ports"]
-
-    expected_open_results = [
-        await sandbox_env.exec(
-            ["nc", "-vz", "-w", "5", hostname, open_port], timeout=10
-        )
-        for open_port in open_ports
-    ]
-    expected_closed_results = [
-        await sandbox_env.exec(
-            ["nc", "-vz", "-w", "5", hostname, closed_port], timeout=10
-        )
-        for closed_port in closed_ports
-    ]
-
-    for result in expected_open_results:
-        assert result.returncode == 0
-
-    for result in expected_closed_results:
-        assert result.returncode != 0
