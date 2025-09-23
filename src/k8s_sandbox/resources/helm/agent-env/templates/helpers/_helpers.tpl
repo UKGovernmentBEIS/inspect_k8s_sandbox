@@ -71,3 +71,20 @@ true
 {{- /* An empty value represents false */ -}}
 {{- end -}}
 {{- end -}}
+
+{{/* Render a deduped list of ports for a single service object (svc) */}}
+{{- define "agentEnv.servicePortsListFor" -}}
+{{- $seen := dict -}}
+{{- $out := list -}}
+{{- with .svc }}
+  {{- range .ports }}
+    {{- $proto := (default "TCP" .protocol) | upper -}}
+    {{- $key := printf "%s/%v" $proto .port -}}
+    {{- if not (hasKey $seen $key) -}}
+      {{- $_ := set $seen $key true -}}
+      {{- $out = append $out (dict "port" (printf "%v" .port) "protocol" $proto) -}}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{ toYaml $out -}}
+{{- end -}}

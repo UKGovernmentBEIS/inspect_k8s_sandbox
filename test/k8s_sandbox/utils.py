@@ -40,3 +40,30 @@ async def install_sandbox_environments(
         except UnboundLocalError:
             # Release wasn't successfully installed.
             pass
+
+
+async def assert_proper_ports_are_open(
+    sandbox_env: K8sSandboxEnvironment, host_to_mapped_ports
+) -> None:
+    hostname = host_to_mapped_ports["host"]
+    open_ports = host_to_mapped_ports["open_ports"]
+    closed_ports = host_to_mapped_ports["closed_ports"]
+
+    expected_open_results = [
+        await sandbox_env.exec(
+            ["nc", "-vz", "-w", "5", hostname, open_port], timeout=10
+        )
+        for open_port in open_ports
+    ]
+    expected_closed_results = [
+        await sandbox_env.exec(
+            ["nc", "-vz", "-w", "5", hostname, closed_port], timeout=10
+        )
+        for closed_port in closed_ports
+    ]
+
+    for result in expected_open_results:
+        assert result.returncode == 0
+
+    for result in expected_closed_results:
+        assert result.returncode != 0
