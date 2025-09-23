@@ -107,6 +107,17 @@ spec:
         - ports:
 {{ include "agentEnv.servicePortsListFor" (dict "svc" $svc) | nindent 12 }}
       {{- end }}
+    - fromEndpoints:
+      - matchLabels:
+          io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
+          {{- include "agentEnv.selectorLabels" $ | nindent 10 }}
+          aisi.gov.uk/network-{{ $net }}: "true"
+      icmps:
+        - fields:
+          - type: 8
+            family: IPv4
+          - type: 128
+            family: IPv6
       {{- end }}
     {{- else }}
     {{- /* If no network fallback to default rule (no ingress) */}}
@@ -128,6 +139,7 @@ spec:
   description: |
     Allow ingress to workload "{{ $svcName }}" from same sandbox.
     If ports are specified, only those ports are exposed; otherwise all ports are allowed.
+    Always allow ICMP echo requests (ping).
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
@@ -143,5 +155,15 @@ spec:
         - ports:
 {{ include "agentEnv.servicePortsListFor" (dict "svc" $svc) | nindent 12 }}
       {{- end }}
+    - fromEndpoints:
+      - matchLabels:
+          io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
+          {{- include "agentEnv.selectorLabels" $ | nindent 10 }}
+      icmps:
+        - fields:
+          - type: 8
+            family: IPv4
+          - type: 128
+            family: IPv6
   {{- end }}
 {{- end }}
