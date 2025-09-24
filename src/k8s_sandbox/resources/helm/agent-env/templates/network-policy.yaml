@@ -90,6 +90,7 @@ spec:
   description: |
     Allow ingress to workload "{{ $svcName }}" from same sandbox on network "{{ $net }}".
     If ports are specified, only those ports are exposed; otherwise all ports are allowed.
+    Always allow ICMP echo requests (ping)
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
