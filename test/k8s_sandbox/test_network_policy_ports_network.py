@@ -22,7 +22,11 @@ async def sandbox_ports() -> AsyncGenerator[K8sSandboxEnvironment, None]:
 @pytest.mark.parametrize(
     "host_to_mapped_ports",
     [
-        {"host": "ports-specified", "open_ports": ["8080"], "closed_ports": ["9090"]},
+        {
+            "host": "ports-specified",
+            "open_ports": ["8080"],
+            "closed_ports": ["9090"],
+        },
         {
             "host": "ports-specified-two-networks",
             "open_ports": ["8080"],
@@ -43,4 +47,12 @@ async def sandbox_ports() -> AsyncGenerator[K8sSandboxEnvironment, None]:
 async def test_only_specified_ports_are_open(
     sandbox_ports: K8sSandboxEnvironment, host_to_mapped_ports
 ):
+    host = host_to_mapped_ports["host"]
+    reachable = len(host_to_mapped_ports["open_ports"]) > 0
+
+    result = await sandbox_ports.exec(["ping", "-c", "1", "-W", "5", host], timeout=10)
+
+    assert not reachable or result.returncode == 0, (
+        f"Host {host} should be reachable but is not: {result}"
+    )
     await assert_proper_ports_are_open(sandbox_ports, host_to_mapped_ports)

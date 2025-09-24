@@ -384,6 +384,8 @@ From the default service port 8080 should be reachable but port 9090 should be i
 
 If no ports are specified on the host it will allow ingress on any port
 
+Specifying ports in Cillium means that *all other L4 protocols are blocked*. The default helm chart manually exposes echo ICMP requests so tools like `ping` still work. If you want to expose some other protocol we recommend you use additionalResources.
+
 ## Additional resources
 
 You can pass arbitrary Kubernetes resources to the Helm chart using the
