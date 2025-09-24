@@ -51,10 +51,8 @@ async def test_only_specified_ports_are_open(
     reachable = len(host_to_mapped_ports["open_ports"]) > 0
 
     result = await sandbox_ports.exec(["ping", "-c", "1", "-W", "5", host], timeout=10)
-    print(result.stdout)
-    print(result.stderr)
+
     assert not reachable or result.returncode == 0, (
         f"Host {host} should be reachable but is not: {result}"
     )
-
     await assert_proper_ports_are_open(sandbox_ports, host_to_mapped_ports)

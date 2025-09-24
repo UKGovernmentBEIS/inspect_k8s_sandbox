@@ -41,8 +41,7 @@ async def test_only_specified_ports_are_open_no_networks(
     result = await sandbox_ports_no_net.exec(
         ["ping", "-c", "1", "-W", "5", host], timeout=10
     )
-    print(result.stdout)
-    print(result.stderr)
+
     assert not reachable or result.returncode == 0, (
         f"Host {host} should be reachable but is not: {result}"
     )
