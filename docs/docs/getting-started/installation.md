@@ -19,7 +19,7 @@ Python package in your environment.
 === "uv"
 
     ```sh
-    uv pip install git+https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox.git
+    uv add git+https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox.git
     ```
 
 Then, pass `"k8s"` as the `sandbox` argument to the Inspect `Task` or `Sample`
