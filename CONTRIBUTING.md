@@ -13,7 +13,7 @@ This project uses [uv](https://github.com/astral-sh/uv) for Python packaging.
 Run this beforehand:
 
 ```
-uv sync
+uv sync --extra dev
 ```
 
 You then can either source the venv with
