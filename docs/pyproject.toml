@@ -1,15 +1,9 @@
-[tool.poetry]
+[project]
 name = "k8s-docs"
 version = "0.1.0"
 description = "Docs site for k8s_sandbox"
-authors = ["Craig.Walton <Craig.Walton@dsit.gov.uk>"]
-package-mode = false
-
-[tool.poetry.dependencies]
-python = "^3.10"
-mkdocs-material = "^9.5.44"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+authors = [{name = "UK AI Security Institute"}]
+requires-python = ">=3.10"
+dependencies = [
+    "mkdocs-material>=9.5.44",
+]
