@@ -4,7 +4,7 @@ If you don't have access to a remote Kubernetes cluster, you can prototype local
 
 ## Devcontainer
 
-This repository publishes a devcontainer template which you can use as a starting point
+This repository publishes a [devcontainer](https://containers.dev/) template which you can use as a starting point
 by setting the following in your `devcontainer.json`:
 
 ```json
