@@ -137,6 +137,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         # Ignored. Inspect docs: "For sandbox implementations this parameter is advisory
         # (they should only use it if potential unreliablity exists in their runtime)."
         timeout_retry: bool = True,
+        # To be implemented - see https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/126
+        concurrency: bool = True,
     ) -> ExecResult[str]:
         log_kwargs = dict(cmd=cmd, stdin=input, cwd=cwd, env=env, timeout=timeout)
         # Do not log these at error level or re-raise as enriched K8sError.
