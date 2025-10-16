@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Migrate to uv
+- Add (ignored) concurrency param to exec
 
 ## 2025-09-25 0.2.0
 
