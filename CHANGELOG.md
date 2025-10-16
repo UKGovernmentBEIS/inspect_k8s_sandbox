@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Migrate to uv
+
+## 2025-09-25 0.2.0
+
+- First release to Pypi
 - Ignore `x-local` key in Docker Compose files (Inspect-specific extension).
 - Enhanced `additionalResources` to support full Helm templating.
 - Support `user` parameter on `K8sSandboxEnvironment.exec()` (only when container is running as root and `runuser` is installed).

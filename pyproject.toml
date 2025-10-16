@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "inspect-k8s-sandbox"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Kubernetes Sandbox Environment for Inspect"
 authors = ["UK AI Security Institute"]
 readme = "README.md"
@@ -10,7 +10,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-inspect-ai = ">=0.3.57"
+inspect-ai = ">=0.3.120"
 kubernetes = "^31.0.0"
 jsonschema = "^4.23.0"
 
