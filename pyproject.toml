@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "inspect-k8s-sandbox"
-version = "0.2.0"
+version = "0.2.1"
 description = "A Kubernetes Sandbox Environment for Inspect"
 authors = ["UK AI Security Institute"]
 readme = "README.md"
