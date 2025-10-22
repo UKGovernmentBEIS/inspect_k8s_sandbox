@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## Unreleased to PyPI
 
 - Migrate to uv
 - Add (ignored) concurrency param to exec
