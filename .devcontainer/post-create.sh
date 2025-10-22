@@ -42,5 +42,5 @@ cilium install
 cilium status --wait
 cilium hubble enable --ui
 
-echo "Installing poetry environment..."
-poetry install
+echo "Installing uv environment..."
+uv sync --extra dev

@@ -8,21 +8,21 @@ Slack workspace.
 
 ## Development
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management.
+This project uses [uv](https://github.com/astral-sh/uv) for Python packaging.
 
-Make sure you have Poetry installed. If not, follow the [official installation
-guide](https://python-poetry.org/docs/#installation). Then, install the project
-dependencies:
+Run this beforehand:
 
-```bash
-poetry install
+```
+uv sync --extra dev
 ```
 
-To activate the virtual environment:
+You then can either source the venv with
 
-```bash
-poetry shell
 ```
+source .venv/bin/activate
+```
+
+or prefix your pytest (etc.) commands with `uv run ...`
 
 If you don't have access to a K8s cluster, you can develop using
 [minikube](https://minikube.sigs.k8s.io/). If you're using VS Code, the devcontainer

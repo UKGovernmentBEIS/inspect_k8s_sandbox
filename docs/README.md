@@ -5,7 +5,7 @@ A docs site which uses [mkdocs-material](https://squidfunk.github.io/mkdocs-mate
 From the `docs` directory:
 
 ```bash
-poetry install
+uv sync
 ```
 
 Consider using the recommended [Rewrap](https://stkb.github.io/Rewrap/) extension
@@ -14,5 +14,5 @@ Consider using the recommended [Rewrap](https://stkb.github.io/Rewrap/) extensio
 ## Serve docs
 
 ```bash
-mkdocs serve
+uv run mkdocs serve
 ```

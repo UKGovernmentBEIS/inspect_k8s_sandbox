@@ -6,6 +6,4 @@ FROM mcr.microsoft.com/vscode/devcontainers/python:0-${VARIANT}
 ENV XDG_RUNTIME_DIR=/tmp
 USER vscode
 RUN pip3 --disable-pip-version-check --no-cache-dir install -U \
-  'poetry==1.8.3' \
-  'pip==22.1.2'
-ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+  'uv==0.8.22'
