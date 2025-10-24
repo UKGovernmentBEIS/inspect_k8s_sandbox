@@ -126,11 +126,11 @@ spec:
             subPath: Corefile
       {{- with $service.tolerations }}
       tolerations:
-        {{- toYaml . | nindent 10 }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with $service.nodeSelector }}
       nodeSelector:
-        {{- toYaml . | nindent 10 }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
         - name: coredns-config
