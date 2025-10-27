@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shlex
+import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -36,6 +37,22 @@ from k8s_sandbox._manager import (
 from k8s_sandbox._pod import Pod
 from k8s_sandbox._prereqs import validate_prereqs
 from k8s_sandbox.compose._compose import ComposeValuesSource, is_docker_compose_file
+
+rlimit_adjusted = False
+
+if sys.platform != "win32" and not rlimit_adjusted:
+    import resource
+
+    # the linux default of 1024 max open files causes problems
+    existing_soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    desired_soft = min(100000, hard)  # don't try to set soft higher than hard
+    if existing_soft < desired_soft:
+        print(
+            f"Increasing RLIMIT_NOFILE to {desired_soft}; "
+            f"existing soft limit {existing_soft}; existing hard limit {hard}"
+        )
+        resource.setrlimit(resource.RLIMIT_NOFILE, (desired_soft, hard))
+        rlimit_adjusted = True
 
 
 @sandboxenv(name="k8s")
