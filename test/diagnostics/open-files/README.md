@@ -18,8 +18,11 @@ Ensure your ulimit has not already been increased.
 For this to be a valid test, this should return `1024`.
 
 ```bash
-ulimit -n
+ulimit -S -n
 ```
+
+(If you want to artificially play around with this limit, you must make sure you always
+only affect the soft limit, by including `-S`.)
 
 Now run the test. Note, this creates 500 helm charts and pods, so try to use a cluster
 where nothing critical is currently happening. The test should take less than 5 minutes.
