@@ -51,7 +51,15 @@ if sys.platform != "win32" and not rlimit_adjusted:
             f"Increasing RLIMIT_NOFILE to {desired_soft}; "
             f"existing soft limit {existing_soft}; existing hard limit {hard}"
         )
-        resource.setrlimit(resource.RLIMIT_NOFILE, (desired_soft, hard))
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (desired_soft, hard))
+        except Exception as e:
+            print(
+                f"Warning: Failed to increase maximum open files to {desired_soft}: {e}. "  # noqa: E501
+                f"Continuing with existing soft limit {existing_soft}."
+            )
+
+        # even if the adjustment failed, there's no point trying again, so set to True
         rlimit_adjusted = True
 
 
