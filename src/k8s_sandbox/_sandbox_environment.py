@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shlex
+import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -27,6 +28,7 @@ from k8s_sandbox._logger import (
     inspect_trace_action,
     log_error,
     log_trace,
+    log_warn,
 )
 from k8s_sandbox._manager import (
     HelmReleaseManager,
@@ -37,15 +39,51 @@ from k8s_sandbox._pod import Pod
 from k8s_sandbox._prereqs import validate_prereqs
 from k8s_sandbox.compose._compose import ComposeValuesSource, is_docker_compose_file
 
+MIN_DESIRED_SOFT = 100000
+
 
 @sandboxenv(name="k8s")
 class K8sSandboxEnvironment(SandboxEnvironment):
     """An Inspect sandbox environment for a Kubernetes (k8s) cluster."""
 
+    _rlimit_adjusted = False
+
     def __init__(self, release: Release, pod: Pod, config: _ResolvedConfig):
         self.release = release
         self._pod = pod
         self._config = config
+        self._adjust_rlimit()
+
+    def _adjust_rlimit(self):
+        if sys.platform != "win32" and not K8sSandboxEnvironment._rlimit_adjusted:
+            import resource
+
+            # the linux default of 1024 max open files causes problems
+            existing_soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            # don't try to set soft higher than hard
+            desired_soft = min(MIN_DESIRED_SOFT, hard)
+            if hard < MIN_DESIRED_SOFT:
+                log_warn(
+                    f"Unable to increase max open files to {MIN_DESIRED_SOFT}. "
+                    f"Setting instead to the hard limit of {desired_soft}."
+                )
+            if existing_soft < desired_soft:
+                log_trace(
+                    f"Increasing RLIMIT_NOFILE to {desired_soft}",
+                    existing_soft=existing_soft,
+                    existing_hard=hard,
+                )
+                try:
+                    resource.setrlimit(resource.RLIMIT_NOFILE, (desired_soft, hard))
+                except Exception as e:
+                    log_warn(
+                        f"Failed to increase maximum open files to {desired_soft}. "
+                        f"Continuing with existing soft limit {existing_soft}.",
+                        error=str(e),
+                    )
+
+            # even if the adjustment failed, there's no point trying again
+            K8sSandboxEnvironment._rlimit_adjusted = True
 
     @classmethod
     def config_files(cls) -> list[str]:

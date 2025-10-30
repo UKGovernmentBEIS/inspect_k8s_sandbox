@@ -2,6 +2,7 @@
 
 ## Unreleased to PyPI
 
+- Increase files open limit if necessary
 - Migrate to uv
 - Add (ignored) concurrency param to exec
 
