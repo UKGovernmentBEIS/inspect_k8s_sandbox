@@ -9,5 +9,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm install -g @devcontainers/cli@v0.30.0
-      - run: devcontainer up --workspace-folder=.
-      - run: devcontainer exec --workspace-folder=. uv run pytest -rA -x --color=yes
+      - run: devcontainer up --workspace-folder=devcontainer-templates/default
+      - run: devcontainer exec --workspace-folder=devcontainer-templates/default uv run pytest -rA -x --color=yes

@@ -1,0 +1,12 @@
+{
+    "id": "default",
+    "version": "1.0.0",
+    "name": "Default",
+    "description": "A basic devcontainer that sets up minikube with cilium ready to test inspect_k8s_sandbox on.",
+    "documentationURL": "https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/tree/main/devcontainer-templates/default",
+    "licenseURL": "https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/blob/main/LICENSE",
+    "options": {},
+    "platforms": [
+        "Any"
+    ]
+}
