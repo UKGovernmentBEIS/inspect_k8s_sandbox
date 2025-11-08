@@ -200,6 +200,36 @@ def test_labels(
         assert labels.items() <= deployment["metadata"]["labels"].items()
 
 
+def test_init_containers(chart_dir: Path, test_resources_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "services-with-init-container.yaml"
+    )
+
+    stateful_sets = _get_documents(documents, "StatefulSet")
+
+    expected_bar_name = "agent-env-my-release-bar"
+    bar_sets = [s for s in stateful_sets if s["metadata"]["name"] == expected_bar_name]
+    assert bar_sets, f"No StatefulSet named {expected_bar_name} found"
+
+    bar_spec = bar_sets[0]["spec"]["template"]["spec"]
+
+    assert "initContainers" in bar_spec, "bar must have initContainers"
+    init_containers = bar_spec["initContainers"]
+    assert len(init_containers) == 1
+
+    wait_ic = init_containers[0]
+    assert wait_ic["name"] == "wait-for-foo-connectivity"
+    assert "command" in wait_ic
+
+    cmd_str = " ".join(wait_ic["command"])
+    assert "nc -z -v -w5" in cmd_str
+    assert "sleep" in cmd_str
+
+    container = bar_spec["containers"][0]
+    assert "command" in container
+    assert len(container["command"]) > 0
+
+
 def test_resource_requests_and_limits(
     chart_dir: Path, test_resources_dir: Path
 ) -> None:
