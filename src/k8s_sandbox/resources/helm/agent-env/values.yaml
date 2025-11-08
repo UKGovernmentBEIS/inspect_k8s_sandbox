@@ -63,6 +63,8 @@ services:
     ports: []
     # -- Environment variables that will be set in the container.
     env: []
+    # -- Init containers to run before the main container starts (e.g., waiting for dependencies like DB)
+    initContainers: []
     # -- Volumes accessible to the container. Supports arbitrary yaml or colon-separated
     # strings of the form `volume-name:/mount-path`.
     volumes: []

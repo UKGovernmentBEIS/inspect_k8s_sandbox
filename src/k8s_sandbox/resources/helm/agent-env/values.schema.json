@@ -138,6 +138,20 @@
             },
             "nodeSelector": {
               "type": "object"
+            },
+            "initContainers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "image": {"type": "string"},
+                  "command": { "type": "array", "items": { "type": "string" } },
+                  "args": { "type": "array", "items": { "type": "string" } },
+                  "env": { "type": "array" }
+                },
+                "required": ["name", "image", "command"]
+              }
             }
           },
           "required": [
