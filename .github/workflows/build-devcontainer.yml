@@ -32,5 +32,4 @@ jobs:
         uses: devcontainers/ci@v0.3
         with:
           imageName: ghcr.io/ukgovernmentbeis/inspect_k8s_sandbox-devcontainer
-          cacheFrom: ghcr.io/ukgovernmentbeis/inspect_k8s_sandbox-devcontainer
           push: always
