@@ -4,14 +4,7 @@ If you don't have access to a remote Kubernetes cluster, you can prototype local
 
 ## Devcontainer
 
-This repository publishes a [devcontainer](https://containers.dev/) template which you can use as a starting point
-by setting the following in your `devcontainer.json`:
-
-```json
-{
-  "image": "ghcr.io/UKGovernmentBEIS/inspect_k8s_sandbox:latest",
-}
-```
+This repository publishes a prebuilt [devcontainer](https://containers.dev/) image which you can use as a starting point, it is configured in  `.devcontainer/devcontainer.json`.
 
 Note that the container **doesn't** include an installation of `inspect` or
 `inspect_k8s_sandbox` - you should install these with whatever package management
