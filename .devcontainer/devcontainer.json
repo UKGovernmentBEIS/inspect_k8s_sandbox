@@ -1,17 +1,13 @@
 {
-  "name": "inspect_k8s_sandbox devcontainer",
-  // Use prebuilt image for faster startup. To rebuild, use the build-devcontainer workflow
-  // or comment out "image" and uncomment "build" below.
-  "image": "ghcr.io/ukgovernmentbeis/inspect_k8s_sandbox-devcontainer:latest",
-  // Uncomment to build locally instead of using prebuilt image:
-  // "build": {
-  //   "dockerfile": "Dockerfile",
-  //   "args": {
-  //     "VARIANT": "3.11",
-  //     "INSTALL_NODE": "true",
-  //     "NODE_VERSION": "18.7"
-  //   }
-  // },
+  "name": "Devcontainer",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "VARIANT": "3.11",
+      "INSTALL_NODE": "true",
+      "NODE_VERSION": "18.7"
+    }
+  },
   "runArgs": [
     "--network=host" // Allows accessing K8s API from within container using docker outside of docker
   ],
@@ -23,8 +19,7 @@
       "version": "1.31.0",
       "helm": "3.16.1",
       "minikube": "1.34.0"
-    },
-    "ghcr.io/devcontainers-extra/features/tmux-apt-get:1": {}
+    }
   },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "remoteUser": "vscode"

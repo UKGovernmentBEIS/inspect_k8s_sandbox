@@ -1,25 +1,13 @@
 # Local Cluster
 
-If you don't have access to a remote Kubernetes cluster, you can prototype locally.
+If you don't have access to a remote Kubernetes cluster, you can prototype locally using
+[minikube](https://minikube.sigs.k8s.io/docs/).
 
-## Devcontainer
-
-This repository publishes a prebuilt [devcontainer](https://containers.dev/) image which you can use as a starting point, it is configured in  `.devcontainer/devcontainer.json`.
-
-Note that the container **doesn't** include an installation of `inspect` or
-`inspect_k8s_sandbox` - you should install these with whatever package management
-system your project is using. The container handles the setup and configuration of
-a local cluster using minikube.
-
-## Self-Build
-
-### Dependencies
+## Dependencies
 
 * [minikube](https://minikube.sigs.k8s.io/docs/)
 * [gVisor](https://gvisor.dev/docs/user_guide/install/)
 * [Cilium](https://github.com/cilium/cilium-cli)
-
-### Setup
 
 A minimal setup compatible with the built-in Helm chart can be created as follows:
 

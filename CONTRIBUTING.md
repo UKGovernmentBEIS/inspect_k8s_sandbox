@@ -24,12 +24,9 @@ source .venv/bin/activate
 
 or prefix your pytest (etc.) commands with `uv run ...`
 
-If you don't have access to a K8s cluster, you can develop using [minikube](https://minikube.sigs.k8s.io/).
-If you're using VS Code or GitHub Codespaces, the devcontainer (`.devcontainer`) will set this up for you.
-The devcontainer uses a prebuilt image for faster startup.
-
-To rebuild the image, use the `build-devcontainer` GitHub Actions workflow,
-or locally build by uncommenting the `build` section in `.devcontainer/devcontainer.json`.
+If you don't have access to a K8s cluster, you can develop using
+[minikube](https://minikube.sigs.k8s.io/). If you're using VS Code, the devcontainer
+(`.devcontainer`) will spin this up for you.
 
 ## Testing
 
