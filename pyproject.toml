@@ -17,6 +17,7 @@ dev = [
   "pre-commit>=3.6.2",
   "pytest>=8.1.1",
   "pytest-asyncio>=0.23.7",
+  "pytest-env>=1.2.0",
   "pytest-repeat>=0.9.3",
   "ruff>=0.9.6",
   "types-pyyaml>=6.0.12",
@@ -66,4 +67,7 @@ check_untyped_defs = true
 asyncio_mode = "auto"
 markers = [
     "req_k8s: marks tests as requiring a test Kubernetes cluster (deselect with '-m \"not req_k8s\"')"
+]
+env = [
+    "INSPECT_HELM_TIMEOUT=30"
 ]
