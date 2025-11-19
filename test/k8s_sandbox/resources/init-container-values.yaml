@@ -1,0 +1,57 @@
+services:
+  default:
+    image: "nicolaka/netshoot:v0.13"
+    command: ["tail", "-f", "/dev/null"]
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  foo:
+    image: "nicolaka/netshoot:v0.13"
+    dnsRecord: true
+    command:
+      - sh
+      - -c
+      - "echo 'Simulate foo taking time to be set up...'; sleep 5; echo 'Foo is ready'; nc -lk -p 3306"
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  bar:
+    image: "nicolaka/netshoot:v0.13"
+    initContainers:
+      - name: wait-for-foo-connectivity
+        image: nicolaka/netshoot:v0.13
+        command:
+          - sh
+          - -c
+          - |
+            echo Waiting for foo...
+            until nc -z -v -w5 $AGENT_ENV-foo 3306; do
+              echo "Waiting for foo..."
+              sleep 2
+            done
+            echo "foo is up."
+
+    command:
+      - sh
+      - -c
+      - |
+        if nc -z -v -w5 foo 3306; then
+          echo "Initialisation can run now."
+        else
+          exit 1
+        fi
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
