@@ -828,7 +828,9 @@ x-inspect_k8s_sandbox:
     assert "Invalid 'allow_domains' type" in str(exc_info.value)
 
 
-def test_rejects_unsupported_extension_key(tmp_compose: TmpComposeFixture) -> None:
+def test_rejects_unsupported_k8s_extension_subkeys(
+    tmp_compose: TmpComposeFixture,
+) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
@@ -841,6 +843,29 @@ x-inspect_k8s_sandbox:
         convert_compose_to_helm_values(compose_path)
 
     assert "Unsupported key(s) in 'x-inspect_k8s_sandbox'" in str(exc_info.value)
+
+
+def test_ignores_x_extension_keys_except_x_inspect_k8s_sandbox(
+    tmp_compose: TmpComposeFixture, caplog: pytest.LogCaptureFixture
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-inspect_k8s_sandbox:
+  allow_domains:
+    - example.com
+x-custom: "custom value"
+""")
+
+    with caplog.at_level(logging.INFO):
+        result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["image"] == "my-image"
+    assert result["allowDomains"] == ["example.com"]
+    assert "x-custom" not in result
+    assert "Ignoring extension keys" in caplog.text
+    assert "x-custom" in caplog.text
 
 
 ### Network elements

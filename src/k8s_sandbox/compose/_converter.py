@@ -58,6 +58,12 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
         result.update(_convert_extensions(extensions, compose_file))
     # Ignore the version key.
     compose.pop("version", None)
+    # Ignore all other extension keys (x-*).
+    if filtered_keys := _filter_extension_keys(compose):
+        logger.info(
+            f"Ignoring extension keys in Docker Compose file: {filtered_keys}. "
+            f"Compose file: '{compose_file}'."
+        )
     if compose:
         raise ComposeConverterError(
             f"Unsupported top-level key(s) in Docker Compose file: {set(compose)}. "
@@ -143,6 +149,21 @@ def _convert_extensions(
             f"Compose file: '{compose_file}'."
         )
     return result
+
+
+def _filter_extension_keys(src: dict[str, Any]) -> list[str]:
+    """Filter out extension keys (x-*) from a dictionary.
+
+    Args:
+        src: The dictionary to filter (will be mutated).
+
+    Returns:
+        A list of filtered key names.
+    """
+    extension_keys = [key for key in src.keys() if key.startswith("x-")]
+    for key in extension_keys:
+        src.pop(key)
+    return extension_keys
 
 
 class _ServiceConverter:
