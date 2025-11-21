@@ -193,7 +193,25 @@ class _ServiceConverter:
         _transform(
             src, "user", result, "securityContext", self._user_to_security_context
         )
-        _transform(src, "networks", result, "networks")
+        # Check for network_mode first
+        network_mode = src.pop("network_mode", None)
+        networks = src.get("networks")
+
+        if network_mode == "none":
+            if networks is not None:
+                raise ComposeConverterError(
+                    f"Cannot specify both 'network_mode: none' and 'networks'. "
+                    f"{self.context}"
+                )
+        elif network_mode is not None:
+            raise ComposeConverterError(
+                f"Unsupported network_mode: '{network_mode}'. Only 'none' is "
+                f"supported. {self.context}"
+            )
+        else:
+            # Only process networks if network_mode is not set
+            _transform(src, "networks", result, "networks")
+
         if hostname := src.pop("hostname", None):
             if hostname != self._name:
                 raise ComposeConverterError(

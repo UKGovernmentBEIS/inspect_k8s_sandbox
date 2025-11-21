@@ -709,12 +709,65 @@ def test_ignores_and_warns_build_keys(
         assert expected_warning in record.message
 
 
-def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None:
+def test_converts_network_mode_none(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
     image: my-image
     network_mode: none
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # network_mode: none should be accepted without error
+    assert "my-service" in result["services"]
+
+
+def test_rejects_network_mode_none_with_networks(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: none
+    networks:
+      - my-network
+networks:
+  my-network:
+    driver: bridge
+    internal: true
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Cannot specify both 'network_mode: none' and 'networks'" in str(
+        exc_info.value
+    )
+
+
+def test_rejects_unsupported_network_mode(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: host
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported network_mode: 'host'" in str(exc_info.value)
+
+
+def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    ports:
+      - "8080:80"
 """)
 
     with pytest.raises(ComposeConverterError) as exc_info:
@@ -723,7 +776,7 @@ services:
     # Verify that the error message includes the service name, invalid keys and the
     # compose file path.
     assert (
-        "Unsupported key(s) in 'service': {'network_mode'}. Service: 'my-service'; "
+        "Unsupported key(s) in 'service': {'ports'}. Service: 'my-service'; "
         "Compose file: '/" in str(exc_info.value)
     )
 
