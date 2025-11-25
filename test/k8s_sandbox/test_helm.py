@@ -1,19 +1,23 @@
 import asyncio
 import logging
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 from inspect_ai.util import ExecResult
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._helm import (
     INSPECT_HELM_TIMEOUT,
     Release,
+    StaticValuesSource,
     ValuesSource,
     _run_subprocess,
     get_all_release_names,
     uninstall,
+    validate_no_null_values,
 )
 from k8s_sandbox._kubernetes_api import get_default_namespace
 
@@ -161,3 +165,111 @@ async def test_helm_create_namespace(
     assert (
         "--create-namespace" in mock_run.call_args[0][1]
     ) == expected_create_namespace
+
+
+def test_validate_no_null_values_with_valid_data() -> None:
+    """Test that validation passes for valid data without null values."""
+    valid_data = {
+        "services": {"default": {"image": "python:3.12"}},
+        "volumes": {"shared": {}},
+    }
+    # Should not raise
+    validate_no_null_values(valid_data, "test-source")
+
+
+def test_validate_no_null_values_with_top_level_null() -> None:
+    """Test that validation catches null values at top level."""
+    invalid_data = {"services": {"default": {"image": "python:3.12"}}, "volumes": None}
+
+    with pytest.raises(ValueError) as excinfo:
+        validate_no_null_values(invalid_data, "test-source")
+
+    assert "test-source" in str(excinfo.value)
+    assert "volumes" in str(excinfo.value)
+    assert "null values" in str(excinfo.value)
+
+
+def test_validate_no_null_values_with_nested_null() -> None:
+    """Test that validation catches null values nested in dicts."""
+    invalid_data = {
+        "services": {"default": {"image": "python:3.12"}},
+        "volumes": {"shared": None, "data": {}},
+    }
+
+    with pytest.raises(ValueError) as excinfo:
+        validate_no_null_values(invalid_data, "test-source")
+
+    assert "volumes.shared" in str(excinfo.value)
+    assert "null values" in str(excinfo.value)
+
+
+def test_validate_no_null_values_with_list_null() -> None:
+    """Test that validation catches null values in lists."""
+    invalid_data = {"services": {"default": {"env": ["VAR1=value1", None, "VAR3=value3"]}}}
+
+    with pytest.raises(ValueError) as excinfo:
+        validate_no_null_values(invalid_data, "test-source")
+
+    assert "services.default.env[1]" in str(excinfo.value)
+
+
+def test_validate_no_null_values_with_multiple_nulls() -> None:
+    """Test that validation reports all null value paths."""
+    invalid_data = {
+        "services": {"default": {"image": None}},
+        "volumes": {"shared": None, "data": {"nested": None}},
+    }
+
+    with pytest.raises(ValueError) as excinfo:
+        validate_no_null_values(invalid_data, "test-source")
+
+    error_msg = str(excinfo.value)
+    assert "services.default.image" in error_msg
+    assert "volumes.shared" in error_msg
+    assert "volumes.data.nested" in error_msg
+
+
+def test_static_values_source_validates_on_init() -> None:
+    """Test that StaticValuesSource validates values file during initialization."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump({"services": {"default": {"image": "python:3.12"}}, "volumes": {"shared": None}}, f)
+        temp_path = Path(f.name)
+
+    try:
+        with pytest.raises(ValueError) as excinfo:
+            StaticValuesSource(temp_path)
+
+        assert str(temp_path) in str(excinfo.value)
+        assert "volumes.shared" in str(excinfo.value)
+    finally:
+        temp_path.unlink()
+
+
+def test_static_values_source_with_valid_file() -> None:
+    """Test that StaticValuesSource accepts valid values file."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        yaml.dump({"services": {"default": {"image": "python:3.12"}}, "volumes": {"shared": {}}}, f)
+        temp_path = Path(f.name)
+
+    try:
+        # Should not raise
+        source = StaticValuesSource(temp_path)
+        with source.values_file() as values_file:
+            assert values_file == temp_path
+    finally:
+        temp_path.unlink()
+
+
+def test_static_values_source_with_empty_file() -> None:
+    """Test that StaticValuesSource handles empty YAML files."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write("")  # Empty file
+        temp_path = Path(f.name)
+
+    try:
+        # Should not raise for empty file
+        source = StaticValuesSource(temp_path)
+        with source.values_file() as values_file:
+            assert values_file == temp_path
+    finally:
+        temp_path.unlink()

@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, AsyncContextManager, Generator, Literal, NoReturn, Protocol
 
+import yaml
 from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
 from shortuuid import uuid
@@ -34,6 +35,61 @@ class _ResourceQuotaModifiedError(Exception):
     pass
 
 
+def validate_no_null_values(values: dict[str, Any], source_description: str) -> None:
+    """Validate that the values dict does not contain any null values.
+
+    Helm filters out null values from maps during template processing, which can
+    cause unexpected behavior. This function checks for null values and raises an
+    error with instructions to replace them with empty objects.
+
+    Args:
+        values: The values dictionary to validate.
+        source_description: A description of the source (e.g., file path) for error messages.
+
+    Raises:
+        ValueError: If any null values are found in the values.
+    """
+
+    def find_null_paths(obj: Any, path: str = "") -> list[str]:
+        """Recursively find all paths to null values in the object."""
+        null_paths = []
+
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                current_path = f"{path}.{key}" if path else key
+                if value is None:
+                    null_paths.append(current_path)
+                else:
+                    null_paths.extend(find_null_paths(value, current_path))
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                current_path = f"{path}[{i}]"
+                if item is None:
+                    null_paths.append(current_path)
+                else:
+                    null_paths.extend(find_null_paths(item, current_path))
+
+        return null_paths
+
+    null_paths = find_null_paths(values)
+
+    if null_paths:
+        paths_str = "\n  - ".join(null_paths)
+        raise ValueError(
+            f"The values from '{source_description}' contain null values at the "
+            f"following paths:\n  - {paths_str}\n\n"
+            f"Helm filters out null values from maps during template processing, which "
+            f"causes them to be ignored. Please replace null values with empty objects "
+            f"{{}} instead.\n\n"
+            f"For example, change:\n"
+            f"  volumes:\n"
+            f"    shared:  # null\n\n"
+            f"To:\n"
+            f"  volumes:\n"
+            f"    shared: {{}}"
+        )
+
+
 class ValuesSource(Protocol):
     """A protocol for classes which provide Helm values files.
 
@@ -55,10 +111,20 @@ class ValuesSource(Protocol):
 
 
 class StaticValuesSource(ValuesSource):
-    """A ValuesSource which uses a static file."""
+    """A ValuesSource which uses a static file.
+
+    The file is loaded and validated once during initialization, and the validated
+    data is cached in memory. This avoids redundant file reads and validation.
+    """
 
     def __init__(self, file: Path | None) -> None:
         self._file = file
+        # Load and validate the file once during initialization
+        if file is not None:
+            with open(file, "r") as f:
+                values = yaml.safe_load(f)
+            if values is not None:  # Empty files result in None
+                validate_no_null_values(values, str(file))
 
     @contextmanager
     def values_file(self) -> Generator[Path | None, None, None]:

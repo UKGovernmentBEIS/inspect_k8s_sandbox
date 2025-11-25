@@ -359,64 +359,6 @@ class _ResolvedConfig(BaseModel, frozen=True):
     restarted_container_behavior: Literal["warn", "raise"]
 
 
-def _validate_no_null_values(values_file: Path) -> None:
-    """Validate that the values file does not contain any null values.
-
-    Helm filters out null values from maps during template processing, which can
-    cause unexpected behavior. This function checks for null values and raises an
-    error with instructions to replace them with empty objects.
-
-    Args:
-        values_file: Path to the YAML values file to validate.
-
-    Raises:
-        ValueError: If any null values are found in the values file.
-    """
-    import yaml
-
-    with open(values_file, "r") as f:
-        values = yaml.safe_load(f)
-
-    def find_null_paths(obj: Any, path: str = "") -> list[str]:
-        """Recursively find all paths to null values in the object."""
-        null_paths = []
-
-        if isinstance(obj, dict):
-            for key, value in obj.items():
-                current_path = f"{path}.{key}" if path else key
-                if value is None:
-                    null_paths.append(current_path)
-                else:
-                    null_paths.extend(find_null_paths(value, current_path))
-        elif isinstance(obj, list):
-            for i, item in enumerate(obj):
-                current_path = f"{path}[{i}]"
-                if item is None:
-                    null_paths.append(current_path)
-                else:
-                    null_paths.extend(find_null_paths(item, current_path))
-
-        return null_paths
-
-    null_paths = find_null_paths(values)
-
-    if null_paths:
-        paths_str = "\n  - ".join(null_paths)
-        raise ValueError(
-            f"The values file '{values_file}' contains null values at the following "
-            f"paths:\n  - {paths_str}\n\n"
-            f"Helm filters out null values from maps during template processing, which "
-            f"causes them to be ignored. Please replace null values with empty objects "
-            f"{{}} instead.\n\n"
-            f"For example, change:\n"
-            f"  volumes:\n"
-            f"    shared:  # null\n\n"
-            f"To:\n"
-            f"  volumes:\n"
-            f"    shared: {{}}"
-        )
-
-
 def _create_values_source(config: _ResolvedConfig) -> ValuesSource:
     if config.values and is_docker_compose_file(config.values):
         if config.chart is not None:
@@ -426,7 +368,6 @@ def _create_values_source(config: _ResolvedConfig) -> ValuesSource:
             )
         return ComposeValuesSource(config.values)
     if config.values:
-        _validate_no_null_values(config.values)
         return StaticValuesSource(config.values)
     return StaticValuesSource(None)
 
