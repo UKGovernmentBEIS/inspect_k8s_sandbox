@@ -330,18 +330,29 @@ def test_coredns_container(
 def _run_helm_template(
     chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
 ) -> list[dict[str, Any]]:
+    from k8s_sandbox._helm import ProcessedValuesSource
+
     cmd = [
         "helm",
         "template",
         "my-release",
         str(chart_dir),
     ]
+
+    # Use ProcessedValuesSource to handle null volume values
     if values_file:
-        cmd += ["-f", str(values_file)]
-    if set_str:
-        cmd += ["--set", set_str]
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
-    return list(yaml.safe_load_all(result.stdout))
+        source = ProcessedValuesSource(values_file)
+        with source.values_file() as processed_file:
+            cmd += ["-f", str(processed_file)]
+            if set_str:
+                cmd += ["--set", set_str]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
+            return list(yaml.safe_load_all(result.stdout))
+    else:
+        if set_str:
+            cmd += ["--set", set_str]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
+        return list(yaml.safe_load_all(result.stdout))
 
 
 def _get_documents(documents: list[Any], doc_type_filter: str) -> list[dict[str, Any]]:

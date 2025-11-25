@@ -18,6 +18,7 @@ from inspect_ai.util import (
 from pydantic import BaseModel
 
 from k8s_sandbox._helm import (
+    ProcessedValuesSource,
     Release,
     StaticValuesSource,
     ValuesSource,
@@ -367,7 +368,9 @@ def _create_values_source(config: _ResolvedConfig) -> ValuesSource:
                 "supported when using the built-in Helm chart."
             )
         return ComposeValuesSource(config.values)
-    return StaticValuesSource(config.values)
+    if config.values:
+        return ProcessedValuesSource(config.values)
+    return StaticValuesSource(None)
 
 
 def _validate_and_resolve_k8s_sandbox_config(

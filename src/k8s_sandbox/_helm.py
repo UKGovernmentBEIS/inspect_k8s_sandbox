@@ -65,6 +65,47 @@ class StaticValuesSource(ValuesSource):
         yield self._file
 
 
+class ProcessedValuesSource(ValuesSource):
+    """A ValuesSource that preprocesses values to work around Helm limitations.
+
+    Specifically, this handles the issue where Helm filters out null values from maps.
+    For volumes with null values (e.g., `volumes: {shared:}`), Helm will completely
+    omit them, making them invisible to templates. This class converts null volume
+    values to empty dicts `{}` to prevent them from being filtered out.
+    """
+
+    def __init__(self, file: Path) -> None:
+        self._file = file
+
+    @contextmanager
+    def values_file(self) -> Generator[Path | None, None, None]:
+        import tempfile
+        import yaml
+
+        # Load the original values
+        with open(self._file, "r") as f:
+            values = yaml.safe_load(f)
+
+        # Convert null volumes to empty dicts to prevent Helm from filtering them
+        if values and "volumes" in values and isinstance(values["volumes"], dict):
+            for volume_name, volume_value in values["volumes"].items():
+                if volume_value is None:
+                    values["volumes"][volume_name] = {}
+
+        # Write to a temporary file
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as tmp_file:
+            yaml.dump(values, tmp_file)
+            tmp_path = Path(tmp_file.name)
+
+        try:
+            yield tmp_path
+        finally:
+            # Clean up the temporary file
+            tmp_path.unlink(missing_ok=True)
+
+
 class Release:
     """A release of a Helm chart."""
 
