@@ -45,8 +45,8 @@ pytest -m "not req_k8s"
 
 ### Test Timeouts
 
-K8s tests use a 30-second Helm timeout (default is 10 minutes) configured in
-`pyproject.toml` via `INSPECT_HELM_TIMEOUT=30`. Assuming you're using a cluster
+K8s tests use a 90-second Helm timeout (default is 10 minutes) configured in
+`pyproject.toml` via `INSPECT_HELM_TIMEOUT=90`. Assuming you're using a cluster
 that isn't overloaded, this should be adequate.
 
 Override if needed:

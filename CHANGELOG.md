@@ -2,9 +2,12 @@
 
 ## Unreleased to PyPI
 
+## 2025-11-28 0.3.0
+
 - Increase files open limit if necessary
 - Migrate to uv
 - Add (ignored) concurrency param to exec
+- Add validation for null values in Helm values files (Helm 4 silently filters out null values from maps during template processing, which can cause unexpected behavior)
 
 ## 2025-09-25 0.2.0
 
