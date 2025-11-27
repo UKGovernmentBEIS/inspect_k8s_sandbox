@@ -1,0 +1,43 @@
+services:
+  default:
+    image: "nicolaka/netshoot:v0.13"
+    command: ["tail", "-f", "/dev/null"]
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+  app:
+    image: "nicolaka/netshoot:v0.13"
+    command: ["tail", "-f", "/dev/null"]
+    initContainers:
+      - name: init-with-all-fields
+        image: busybox:1.36
+        imagePullPolicy: Always
+        command:
+          - sh
+          - -c
+          - echo "Init with all fields"
+        args:
+          - "--verbose"
+        workingDir: /tmp
+        resources:
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+        securityContext:
+          runAsUser: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+    resources:
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+      requests:
+        memory: "128Mi"
+        cpu: "100m"

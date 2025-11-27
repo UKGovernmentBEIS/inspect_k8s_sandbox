@@ -42,13 +42,9 @@ spec:
       {{- range $service.initContainers }}
         - name: {{ .name }}
           image: {{ .image }}
-          # This 'magic env var' has
-          # to be accessible to the initContainers,
-          # b/c the coredns container runs
-          # after the initContainers.
-          env:
-            - name: AGENT_ENV
-              value: "{{ template "agentEnv.fullname" $ }}"
+          {{- if .imagePullPolicy }}
+          imagePullPolicy: {{ .imagePullPolicy }}
+          {{- end }}
           {{- if .command }}
           command:
 {{ toYaml .command | nindent 12 }}
@@ -56,6 +52,24 @@ spec:
           {{- if .args }}
           args:
 {{ toYaml .args | nindent 12 }}
+          {{- end }}
+          {{- if .workingDir }}
+          workingDir: {{ .workingDir }}
+          {{- end }}
+          # This 'magic env var' has
+          # to be accessible to the initContainers,
+          # b/c the coredns container runs
+          # after the initContainers.
+          env:
+            - name: AGENT_ENV
+              value: "{{ template "agentEnv.fullname" $ }}"
+          {{- if .resources }}
+          resources:
+{{ toYaml .resources | nindent 12 }}
+          {{- end }}
+          {{- with .securityContext }}
+          securityContext:
+{{ toYaml . | nindent 12 }}
           {{- end }}
       {{- end }}
       {{- end }}

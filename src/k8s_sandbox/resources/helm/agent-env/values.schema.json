@@ -148,9 +148,12 @@
                   "image": {"type": "string"},
                   "command": { "type": "array", "items": { "type": "string" } },
                   "args": { "type": "array", "items": { "type": "string" } },
-                  "env": { "type": "array" }
+                  "imagePullPolicy": {"type": "string"},
+                  "workingDir": {"type": "string"},
+                  "resources": {"type": "object"},
+                  "securityContext": {"type": "object"}
                 },
-                "required": ["name", "image", "command"]
+                "required": ["name", "image"]
               }
             }
           },

@@ -230,6 +230,62 @@ def test_init_containers(chart_dir: Path, test_resources_dir: Path) -> None:
     assert len(container["command"]) > 0
 
 
+def test_init_containers_with_all_fields(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    """Test init containers support resources, securityContext, etc."""
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "init-container-enhanced-values.yaml"
+    )
+
+    stateful_sets = _get_documents(documents, "StatefulSet")
+
+    expected_app_name = "agent-env-my-release-app"
+    app_sets = [s for s in stateful_sets if s["metadata"]["name"] == expected_app_name]
+    assert app_sets, f"No StatefulSet named {expected_app_name} found"
+
+    app_spec = app_sets[0]["spec"]["template"]["spec"]
+
+    assert "initContainers" in app_spec, "app must have initContainers"
+    init_containers = app_spec["initContainers"]
+    assert len(init_containers) == 1
+
+    init_container = init_containers[0]
+    assert init_container["name"] == "init-with-all-fields"
+    assert init_container["image"] == "busybox:1.36"
+
+    # Test imagePullPolicy
+    assert init_container["imagePullPolicy"] == "Always"
+
+    # Test workingDir
+    assert init_container["workingDir"] == "/tmp"
+
+    # Test resources
+    assert "resources" in init_container
+    assert init_container["resources"]["limits"]["memory"] == "64Mi"
+    assert init_container["resources"]["limits"]["cpu"] == "50m"
+    assert init_container["resources"]["requests"]["memory"] == "64Mi"
+    assert init_container["resources"]["requests"]["cpu"] == "50m"
+
+    # Test securityContext
+    assert "securityContext" in init_container
+    assert init_container["securityContext"]["runAsUser"] == 1000
+    assert init_container["securityContext"]["runAsNonRoot"] is True
+    assert init_container["securityContext"]["allowPrivilegeEscalation"] is False
+
+    # Test command and args
+    assert init_container["command"] == ["sh", "-c", 'echo "Init with all fields"']
+    assert init_container["args"] == ["--verbose"]
+
+    # Test AGENT_ENV is still injected
+    assert "env" in init_container
+    agent_env_var = next(
+        (e for e in init_container["env"] if e["name"] == "AGENT_ENV"), None
+    )
+    assert agent_env_var is not None
+    assert "agent-env-my-release" in agent_env_var["value"]
+
+
 def test_resource_requests_and_limits(
     chart_dir: Path, test_resources_dir: Path
 ) -> None:
