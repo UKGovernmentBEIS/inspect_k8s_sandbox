@@ -43,7 +43,8 @@ def validate_no_null_values(values: dict[str, Any], source_description: str) -> 
 
     Args:
         values: The values dictionary to validate.
-        source_description: A description of the source (e.g., file path) for error messages.
+        source_description: A description of the source (e.g., file path) for
+            error messages.
 
     Raises:
         ValueError: If any null values are found in the values.

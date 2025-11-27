@@ -205,7 +205,9 @@ def test_validate_no_null_values_with_nested_null() -> None:
 
 def test_validate_no_null_values_with_list_null() -> None:
     """Test that validation catches null values in lists."""
-    invalid_data = {"services": {"default": {"env": ["VAR1=value1", None, "VAR3=value3"]}}}
+    invalid_data = {
+        "services": {"default": {"env": ["VAR1=value1", None, "VAR3=value3"]}}
+    }
 
     with pytest.raises(ValueError) as excinfo:
         validate_no_null_values(invalid_data, "test-source")
@@ -232,7 +234,11 @@ def test_validate_no_null_values_with_multiple_nulls() -> None:
 def test_static_values_source_with_valid_file() -> None:
     """Test that StaticValuesSource accepts valid values file."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-        yaml.dump({"services": {"default": {"image": "python:3.12"}}, "volumes": {"shared": {}}}, f)
+        data = {
+            "services": {"default": {"image": "python:3.12"}},
+            "volumes": {"shared": {}},
+        }
+        yaml.dump(data, f)
         temp_path = Path(f.name)
 
     try:
