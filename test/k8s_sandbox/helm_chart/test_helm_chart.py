@@ -327,6 +327,37 @@ def test_coredns_container(
     assert corends_container["command"] == expected_coredns_command
 
 
+def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "network-isolated-values.yaml"
+    )
+
+    cnps = _get_documents(documents, "CiliumNetworkPolicy")
+
+    # Verify isolate-service has isolate policy
+    isolate_policy = next(
+        (cnp for cnp in cnps if cnp["metadata"]["name"].endswith("-isolate")), None
+    )
+    assert isolate_policy is not None
+    assert (
+        isolate_policy["metadata"]["name"]
+        == "agent-env-my-release-svc-isolated-service-isolate"
+    )
+    assert isolate_policy["spec"]["ingress"] == []
+    assert isolate_policy["spec"]["egress"] == []
+
+    # Verify normal-service doesn't have isolate policy
+    normal_service_policies = [
+        cnp for cnp in cnps if "normal-service" in cnp["metadata"]["name"]
+    ]
+    assert len(normal_service_policies) == 1
+    assert "isolate" not in normal_service_policies[0]["metadata"]["name"]
+
+    normal_spec = normal_service_policies[0]["spec"]
+    assert normal_spec.get("ingress") != []
+    assert normal_spec.get("egress") != []
+
+
 def _run_helm_template(
     chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
 ) -> list[dict[str, Any]]:

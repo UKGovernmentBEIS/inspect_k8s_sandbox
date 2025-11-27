@@ -168,3 +168,26 @@ spec:
             family: IPv6
   {{- end }}
 {{- end }}
+{{- range $svcName, $svc := .Values.services }}
+{{- if $svc.networkIsolated }}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ template "agentEnv.fullname" $ }}-svc-{{ $svcName }}-isolate
+  annotations:
+    {{- toYaml $.Values.annotations | nindent 4 }}
+  labels:
+    {{- toYaml $.Values.labels | nindent 4 }}
+spec:
+  description: |
+    Deny all ingress and egress for isolated service "{{ $svcName }}" (network_mode: none).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: {{ $.Release.Namespace }}
+      {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
+      inspect/service: {{ $svcName }}
+  ingress: []
+  egress: []
+{{- end }}
+{{- end }}
