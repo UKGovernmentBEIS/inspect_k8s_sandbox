@@ -13,11 +13,9 @@ from test.k8s_sandbox.inspect_integration.testing_utils.utils import (
 
 @pytest.mark.req_k8s
 def test_normal_services_can_communicate() -> None:
-    """Test that normal services can resolve and connect to other services."""
-    # Try TCP connection - "Connection refused" means we reached the host (network reachable)
-    cmd = "python -c \"import socket; s=socket.socket(); s.settimeout(5); s.connect(('other-service', 80))\" 2>&1 | grep -q 'refused' && echo 'Network reachable' || echo 'Network blocked'"
+    """Test that normal services can connect to other services."""
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": cmd})],
+        [tool_call("bash", {"cmd": _network_test_cmd("other-service")})],
     )
     task = create_task(
         __file__,
@@ -35,10 +33,8 @@ def test_normal_services_can_communicate() -> None:
 @pytest.mark.req_k8s
 def test_isolated_service_cannot_communicate() -> None:
     """Test that an isolated service (network_mode: none) cannot connect to other services."""
-    # Try TCP connection - timeout or other network error (not "refused") means blocked
-    cmd = "python -c \"import socket; s=socket.socket(); s.settimeout(5); s.connect(('other-service', 80))\" 2>&1 | grep -q 'refused' && echo 'Network reachable' || echo 'Network blocked'"
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": cmd})],
+        [tool_call("bash", {"cmd": _network_test_cmd("other-service")})],
     )
     task = create_task(
         __file__,
@@ -51,3 +47,20 @@ def test_isolated_service_cannot_communicate() -> None:
 
     assert result.scores is not None
     assert result.scores["match"].value == "C"
+
+
+def _network_test_cmd(host: str, port: int = 80, timeout: int = 5) -> str:
+    """Returns a command that prints 'Network reachable' or 'Network blocked'."""
+    return f"""python -c "
+import socket
+s = socket.socket()
+s.settimeout({timeout})
+try:
+    s.connect(('{host}', {port}))
+    print('Network reachable')
+except ConnectionRefusedError:
+    print('Network reachable')
+except Exception:
+    print('Network blocked')
+"
+"""
