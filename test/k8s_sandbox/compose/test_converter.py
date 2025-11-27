@@ -723,6 +723,16 @@ services:
     assert "my-service" in result["services"]
 
 
+def test_converter_on_network_mode_none_file() -> None:
+    resources = Path(__file__).parent / "resources" / "network_mode_none"
+    expected = (resources / "helm-values.yaml").read_text()
+
+    result = convert_compose_to_helm_values(resources / "compose.yaml")
+    actual = yaml.dump(result, sort_keys=False)
+
+    assert actual == expected
+
+
 def test_rejects_network_mode_none_with_networks(
     tmp_compose: TmpComposeFixture,
 ) -> None:
