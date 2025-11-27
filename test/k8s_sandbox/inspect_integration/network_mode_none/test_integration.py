@@ -32,7 +32,7 @@ def test_normal_services_can_communicate() -> None:
 
 @pytest.mark.req_k8s
 def test_isolated_service_cannot_communicate() -> None:
-    """Test that an isolated service (network_mode: none) cannot connect to other services."""
+    """Test that an isolated service (network_mode: none) cannot connect."""
     model = MockToolCallModel(
         [tool_call("bash", {"cmd": _network_test_cmd("other-service")})],
     )
