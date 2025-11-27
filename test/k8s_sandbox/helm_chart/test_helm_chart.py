@@ -343,8 +343,9 @@ def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> 
         isolate_policy["metadata"]["name"]
         == "agent-env-my-release-svc-isolated-service-isolate"
     )
-    assert isolate_policy["spec"]["ingress"] == []
-    assert isolate_policy["spec"]["egress"] == []
+    # ingressDeny and egressDeny deny all traffic from/to all entities
+    assert isolate_policy["spec"]["ingressDeny"] == [{"fromEntities": ["all"]}]
+    assert isolate_policy["spec"]["egressDeny"] == [{"toEntities": ["all"]}]
 
     # Verify normal-service doesn't have isolate policy
     normal_service_policies = [
