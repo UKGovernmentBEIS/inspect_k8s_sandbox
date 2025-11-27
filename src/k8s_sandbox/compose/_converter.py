@@ -203,6 +203,7 @@ class _ServiceConverter:
                     f"Cannot specify both 'network_mode: none' and 'networks'. "
                     f"{self.context}"
                 )
+            result["networkIsolated"] = True
         elif network_mode is not None:
             raise ComposeConverterError(
                 f"Unsupported network_mode: '{network_mode}'. Only 'none' is "

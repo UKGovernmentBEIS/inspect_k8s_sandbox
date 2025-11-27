@@ -719,8 +719,9 @@ services:
 
     result = convert_compose_to_helm_values(compose_path)
 
-    # network_mode: none should be accepted without error
+    # network_mode: none should be accepted and set networkIsolated flag
     assert "my-service" in result["services"]
+    assert result["services"]["my-service"]["networkIsolated"] is True
 
 
 def test_converter_on_network_mode_none_file() -> None:
