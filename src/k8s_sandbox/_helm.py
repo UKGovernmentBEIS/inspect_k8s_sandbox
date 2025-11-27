@@ -9,7 +9,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, AsyncContextManager, Generator, Literal, NoReturn, Protocol
 
-import yaml
 from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.rest import ApiException  # type: ignore
 from shortuuid import uuid
@@ -111,20 +110,10 @@ class ValuesSource(Protocol):
 
 
 class StaticValuesSource(ValuesSource):
-    """A ValuesSource which uses a static file.
-
-    The file is loaded and validated once during initialization, and the validated
-    data is cached in memory. This avoids redundant file reads and validation.
-    """
+    """A ValuesSource which uses a static file."""
 
     def __init__(self, file: Path | None) -> None:
         self._file = file
-        # Load and validate the file once during initialization
-        if file is not None:
-            with open(file, "r") as f:
-                values = yaml.safe_load(f)
-            if values is not None:  # Empty files result in None
-                validate_no_null_values(values, str(file))
 
     @contextmanager
     def values_file(self) -> Generator[Path | None, None, None]:

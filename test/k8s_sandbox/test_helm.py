@@ -229,22 +229,6 @@ def test_validate_no_null_values_with_multiple_nulls() -> None:
     assert "volumes.data.nested" in error_msg
 
 
-def test_static_values_source_validates_on_init() -> None:
-    """Test that StaticValuesSource validates values file during initialization."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-        yaml.dump({"services": {"default": {"image": "python:3.12"}}, "volumes": {"shared": None}}, f)
-        temp_path = Path(f.name)
-
-    try:
-        with pytest.raises(ValueError) as excinfo:
-            StaticValuesSource(temp_path)
-
-        assert str(temp_path) in str(excinfo.value)
-        assert "volumes.shared" in str(excinfo.value)
-    finally:
-        temp_path.unlink()
-
-
 def test_static_values_source_with_valid_file() -> None:
     """Test that StaticValuesSource accepts valid values file."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
