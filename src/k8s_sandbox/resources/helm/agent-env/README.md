@@ -27,6 +27,7 @@
 | services.default.image | string | `"python:3.12-bookworm"` | The container's image name. |
 | services.default.imagePullPolicy | string | `nil` | The container's image pull policy. |
 | services.default.livenessProbe | object | `{}` | A probe which is used to determine when to restart a container. |
+| services.default.networkIsolated | bool | `false` | Whether to isolate this service from all network traffic (deny all ingress and egress). This is set automatically when converting Docker Compose files with `network_mode: none`. |
 | services.default.nodeSelector | object | `{}` | Node selector settings for the Pod. |
 | services.default.ports | list | `[]` | Deprecated. All ports of services with a DNS record are accessible (though not necessarily open) to other services within the agent environment. If one or more ports are provided, `dnsRecord` is automatically set to true. |
 | services.default.readinessProbe | object | `{}` | A probe which is used to determine when the container is ready to accept. traffic. |
