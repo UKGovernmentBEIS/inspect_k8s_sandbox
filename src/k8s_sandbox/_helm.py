@@ -270,7 +270,7 @@ class Release:
                 error=result.stderr,
             )
             raise _ResourceQuotaModifiedError(result.stderr)
-        if re.search(r"INSTALLATION FAILED: context deadline exceeded", result.stderr):
+        if re.search(r"context deadline exceeded", result.stderr):
             _raise_runtime_error(
                 f"Helm install timed out (context deadline exceeded). The configured "
                 f"timeout value was {_get_timeout()}s. Please see the docs for why "
