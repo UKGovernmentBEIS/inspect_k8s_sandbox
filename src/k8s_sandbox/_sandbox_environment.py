@@ -367,9 +367,7 @@ def _create_values_source(config: _ResolvedConfig) -> ValuesSource:
                 "supported when using the built-in Helm chart."
             )
         return ComposeValuesSource(config.values)
-    if config.values:
-        return StaticValuesSource(config.values)
-    return StaticValuesSource(None)
+    return StaticValuesSource(config.values)
 
 
 def _validate_and_resolve_k8s_sandbox_config(
