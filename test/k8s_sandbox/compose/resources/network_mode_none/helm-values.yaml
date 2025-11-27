@@ -13,3 +13,4 @@ services:
       requests:
         cpu: 0.5
         memory: 1Gi
+    networkIsolated: true
