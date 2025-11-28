@@ -13,4 +13,4 @@ test-unit:
 
 # Run K8s integration tests with limited concurrency
 test-integration:
-	uv run pytest -rA --color=yes -n 5 -m "req_k8s"
+	uv run pytest -rA --color=yes -n 20 -m "req_k8s"
