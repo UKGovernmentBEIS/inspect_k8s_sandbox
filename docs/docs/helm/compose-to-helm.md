@@ -57,6 +57,10 @@ The default service resolution follows the same rules as [Inspect sandboxing doc
 > 2. Then, take any environment with the `x-default` key set to `true`;
 > 3. Finally, use the first sandbox environment as the default.
 
+For rule 3, the "first" service is determined by YAML order, not alphabetical order. When
+multiple services are defined without an explicit default, the first service in the compose
+file is renamed to `default`. Single-service compose files are left unchanged.
+
 ## Internet Access
 
 As per the built-in Helm chart, internet access is disabled by default. This is in
