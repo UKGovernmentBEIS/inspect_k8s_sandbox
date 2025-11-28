@@ -112,7 +112,6 @@ def _determine_default_service(services: dict[str, Any]) -> str | None:
         if isinstance(service_value, dict) and service_value.get("x-default") is True:
             return service_name
 
-    # Only rename first service to "default" if there are multiple services
     if len(services) > 1:
         return next(iter(services.keys()), None)
 
