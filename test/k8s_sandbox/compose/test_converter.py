@@ -1023,21 +1023,30 @@ services:
     assert "other-service" in result["services"]
 
 
+@pytest.mark.parametrize(
+    "first_service,second_service",
+    [
+        ("aaa-service", "zzz-service"),  # First alphabetically is first in YAML
+        ("zzz-service", "aaa-service"),  # Last alphabetically is first in YAML
+    ],
+)
 def test_first_service_renamed_to_default_when_multiple_services(
     tmp_compose: TmpComposeFixture,
+    first_service: str,
+    second_service: str,
 ) -> None:
-    compose_path = tmp_compose("""
+    compose_path = tmp_compose(f"""
 services:
-  first-service:
+  {first_service}:
     image: first-image
-  second-service:
+  {second_service}:
     image: second-image
 """)
 
     result = convert_compose_to_helm_values(compose_path)
 
-    # First service should be renamed to "default" when multiple services exist
+    # First service (in YAML order) should be renamed to "default"
     assert "default" in result["services"]
     assert result["services"]["default"]["image"] == "first-image"
-    assert "second-service" in result["services"]
-    assert "first-service" not in result["services"]
+    assert second_service in result["services"]
+    assert first_service not in result["services"]
