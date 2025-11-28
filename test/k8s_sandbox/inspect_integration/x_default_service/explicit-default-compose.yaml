@@ -1,0 +1,14 @@
+services:
+  # Explicit "default" service takes precedence over x-default
+  default:
+    image: "python:3.12-bookworm"
+    entrypoint: ["tail", "-f", "/dev/null"]
+    environment:
+      SERVICE_NAME: default
+  # x-default should be ignored when "default" service exists
+  agent:
+    image: "python:3.12-bookworm"
+    entrypoint: ["tail", "-f", "/dev/null"]
+    environment:
+      SERVICE_NAME: agent
+    x-default: true

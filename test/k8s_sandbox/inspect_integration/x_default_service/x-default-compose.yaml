@@ -1,0 +1,14 @@
+services:
+  # This service is marked as default using x-default
+  agent:
+    image: "python:3.12-bookworm"
+    entrypoint: ["tail", "-f", "/dev/null"]
+    environment:
+      SERVICE_NAME: agent
+    x-default: true
+  # This service is NOT the default
+  helper:
+    image: "python:3.12-bookworm"
+    entrypoint: ["tail", "-f", "/dev/null"]
+    environment:
+      SERVICE_NAME: helper
