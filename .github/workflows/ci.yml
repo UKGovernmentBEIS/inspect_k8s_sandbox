@@ -17,5 +17,7 @@ jobs:
     uses: ./.github/workflows/type-check.yml
   test:
     uses: ./.github/workflows/test.yml
+  test-parallel:
+    uses: ./.github/workflows/test-parallel.yml
   pre-commit:
     uses: ./.github/workflows/pre-commit.yml
