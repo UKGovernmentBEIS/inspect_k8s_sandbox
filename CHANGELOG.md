@@ -5,6 +5,7 @@
 - Increase files open limit if necessary
 - Migrate to uv
 - Add (ignored) concurrency param to exec
+- Support `network_mode: none` in Docker Compose files
 
 ## 2025-09-25 0.2.0
 
