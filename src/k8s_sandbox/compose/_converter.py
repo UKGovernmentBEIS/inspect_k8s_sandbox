@@ -101,7 +101,9 @@ def _determine_default_service(services: dict[str, Any]) -> str | None:
     Priority:
     1. Service named "default" - no renaming needed (returns None)
     2. Service with x-default: true - should be renamed to "default"
-    3. No renaming by default
+    3. No renaming needed - Inspect uses the first service as default.
+
+    See: https://inspect.aisi.org.uk/sandboxing.html#multiple-environments
     """
     if "default" in services:
         return None
