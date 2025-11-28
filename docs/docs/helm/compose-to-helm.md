@@ -57,9 +57,11 @@ The default service resolution follows the same rules as [Inspect sandboxing doc
 > 2. Then, take any environment with the `x-default` key set to `true`;
 > 3. Finally, use the first sandbox environment as the default.
 
-For rule 3, the "first" service is determined by YAML order, not alphabetical order. When
-multiple services are defined without an explicit default, the first service in the compose
-file is renamed to `default`. Single-service compose files are left unchanged.
+During conversion, services matching rules 2 or 3 are renamed to `default` to ensure
+consistent default service resolution regardless of Kubernetes pod ordering. For rule 2,
+the service with `x-default: true` is renamed. For rule 3, the "first" service (determined
+by YAML order, not alphabetical order) is renamed. Single-service compose files are left
+unchanged.
 
 ## Internet Access
 
