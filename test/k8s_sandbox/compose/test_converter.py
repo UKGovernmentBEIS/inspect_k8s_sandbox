@@ -970,6 +970,19 @@ networks:
 ### x-default handling
 
 
+def test_keeps_service_named_default_unchanged(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: my-image
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert "default" in result["services"]
+    assert result["services"]["default"]["image"] == "my-image"
+
+
 def test_renames_service_with_x_default_to_default(
     tmp_compose: TmpComposeFixture,
 ) -> None:
@@ -989,19 +1002,6 @@ services:
 
     # Ensure x-default is not in the final output
     assert "x-default" not in result["services"]["default"]
-
-
-def test_keeps_service_named_default_unchanged(tmp_compose: TmpComposeFixture) -> None:
-    compose_path = tmp_compose("""
-services:
-  default:
-    image: my-image
-""")
-
-    result = convert_compose_to_helm_values(compose_path)
-
-    assert "default" in result["services"]
-    assert result["services"]["default"]["image"] == "my-image"
 
 
 def test_service_named_default_takes_precedence_over_x_default(
