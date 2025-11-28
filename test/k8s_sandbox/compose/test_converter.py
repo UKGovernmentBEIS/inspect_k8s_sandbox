@@ -1050,3 +1050,17 @@ services:
     assert result["services"]["default"]["image"] == "first-image"
     assert second_service in result["services"]
     assert first_service not in result["services"]
+
+
+def test_single_service_not_renamed_to_default(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # Single service should keep its original name
+    assert "my-service" in result["services"]
+    assert "default" not in result["services"]
