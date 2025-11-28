@@ -1,0 +1,6 @@
+services:
+  isolated-service:
+    image: my-isolated-image:1.0.0
+    networkIsolated: true
+  normal-service:
+    image: my-normal-image:1.0.0

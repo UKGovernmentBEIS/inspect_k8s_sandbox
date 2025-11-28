@@ -138,6 +138,9 @@
             },
             "nodeSelector": {
               "type": "object"
+            },
+            "networkIsolated": {
+              "type": "boolean"
             }
           },
           "required": [

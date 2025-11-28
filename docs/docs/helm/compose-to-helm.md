@@ -61,3 +61,16 @@ x-inspect_k8s_sandbox:
   allow_domains:
     - google.com
 ```
+
+## Network Modes
+
+The only supported `network_mode` is `none`, which completely isolates a service from
+all network traffic (both ingress and egress). This is useful for evals where the agent
+should not have any network access.
+
+```yaml
+services:
+  isolated-service:
+    image: ubuntu
+    network_mode: none
+```
