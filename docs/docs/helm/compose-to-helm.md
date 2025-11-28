@@ -40,11 +40,28 @@ For internal, non-community eval suites, native Helm `values.yaml` files are sti
 preferred over the automatic translation of `compose.yaml` files for a number of
 reasons:
 
- * To support the whole set of Helm chart and Kubernetes features
- * To explicitly _not_ support Docker for certain evals (reducing maintenance burden and
-   discourage use of Docker which lacks security features of Kubernetes)
- * To be more expressive about which services should get a DNS entry
- * To support more powerful readiness and liveness probes
+- To support the whole set of Helm chart and Kubernetes features
+- To explicitly _not_ support Docker for certain evals (reducing maintenance burden and
+  discourage use of Docker which lacks security features of Kubernetes)
+- To be more expressive about which services should get a DNS entry
+- To support more powerful readiness and liveness probes
+
+## Default Service
+
+The default service resolution follows the same rules as [Inspect sandboxing doc](https://inspect.aisi.org.uk/sandboxing.html#multiple-environments):
+
+> If you define multiple sandbox environments the default sandbox environment will be
+> determined as follows:
+>
+> 1. First, take any sandbox environment named `default`;
+> 2. Then, take any environment with the `x-default` key set to `true`;
+> 3. Finally, use the first sandbox environment as the default.
+
+During conversion, services matching rules 2 or 3 are renamed to `default` to ensure
+consistent default service resolution regardless of Kubernetes pod ordering. For rule 2,
+the service with `x-default: true` is renamed. For rule 3, the "first" service (determined
+by YAML order, not alphabetical order) is renamed. Single-service compose files are left
+unchanged.
 
 ## Internet Access
 

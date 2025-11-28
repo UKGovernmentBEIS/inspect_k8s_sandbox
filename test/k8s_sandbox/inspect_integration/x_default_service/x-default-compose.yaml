@@ -1,0 +1,7 @@
+services:
+  agent:
+    image: "python:3.12-bookworm"
+    entrypoint: ["tail", "-f", "/dev/null"]
+    environment:
+      SERVICE_NAME: agent
+    x-default: true
