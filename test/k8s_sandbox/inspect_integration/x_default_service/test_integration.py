@@ -1,13 +1,3 @@
-"""Integration tests for default service resolution.
-
-Tests the three scenarios from Inspect's sandboxing doc:
-https://inspect.aisi.org.uk/sandboxing.html#multiple-environments
-
-1. Service named "default" takes precedence
-2. Service with x-default: true is used as default
-3. First service is used as fallback
-"""
-
 import pytest
 from inspect_ai.tool import bash
 
