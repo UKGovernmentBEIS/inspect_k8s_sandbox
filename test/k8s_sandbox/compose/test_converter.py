@@ -682,7 +682,7 @@ def test_ignores_and_warns_build_keys(
         yaml.safe_dump(
             {
                 "services": {
-                    "my-service": {
+                    "default": {
                         "image": "my-image",
                         **properties,
                     },
@@ -699,7 +699,7 @@ def test_ignores_and_warns_build_keys(
         result = convert_compose_to_helm_values(compose_path)
 
     expected_ignored = {*properties}
-    for service_name in "my-service", "my-service-2":
+    for service_name in "default", "my-service-2":
         assert service_name in result["services"]
         bad_keys = expected_ignored.intersection(result["services"][service_name])
         assert len(bad_keys) == 0
@@ -1023,7 +1023,7 @@ services:
     assert "other-service" in result["services"]
 
 
-def test_no_renaming_when_no_default_or_x_default(
+def test_first_service_renamed_to_default_when_multiple_services(
     tmp_compose: TmpComposeFixture,
 ) -> None:
     compose_path = tmp_compose("""
@@ -1036,8 +1036,8 @@ services:
 
     result = convert_compose_to_helm_values(compose_path)
 
-    # Services should keep their original names when no x-default is set
-    assert "first-service" in result["services"]
-    assert result["services"]["first-service"]["image"] == "first-image"
+    # First service should be renamed to "default" when multiple services exist
+    assert "default" in result["services"]
+    assert result["services"]["default"]["image"] == "first-image"
     assert "second-service" in result["services"]
-    assert "default" not in result["services"]
+    assert "first-service" not in result["services"]
