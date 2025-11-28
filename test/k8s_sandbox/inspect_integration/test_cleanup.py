@@ -41,7 +41,8 @@ def test_with_cleanup(model: Model, task: Task) -> None:
 
 
 def test_without_cleanup(model: Model, task: Task) -> None:
-    release = "no-clean"
+    # Use unique release name to avoid conflicts in parallel test runs.
+    release = "no-clean-1"
 
     with patch(
         "k8s_sandbox._helm.Release._generate_release_name",
@@ -55,7 +56,8 @@ def test_without_cleanup(model: Model, task: Task) -> None:
 
 
 def test_cli_cleanup_all_gets_user_confirmation(model: Model, task: Task) -> None:
-    release = "no-clean"
+    # Use unique release name to avoid conflicts in parallel test runs.
+    release = "no-clean-2"
     with patch(
         "k8s_sandbox._helm.Release._generate_release_name",
         return_value=release,
