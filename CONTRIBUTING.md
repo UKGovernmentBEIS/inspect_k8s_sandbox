@@ -36,7 +36,7 @@ This project uses [pytest](https://docs.pytest.org/en/stable/). To run all tests
 pytest
 ```
 
-(AISI users: first `unset INSPECT_TELEMETRY INSPECT_API_KEY_OVERRIDE`)
+(AISI users: first `unset INSPECT_TELEMETRY INSPECT_API_KEY_OVERRIDE INSPECT_REQUIRED_HOOKS`)
 
 These tests are automatically run as part of CI. Some tests require a K8s cluster to be
 available. To skip these tests:
