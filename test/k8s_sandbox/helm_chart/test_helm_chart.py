@@ -368,10 +368,12 @@ def _run_helm_template(
         "my-release",
         str(chart_dir),
     ]
+
     if values_file:
         cmd += ["-f", str(values_file)]
     if set_str:
         cmd += ["--set", set_str]
+
     result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
     return list(yaml.safe_load_all(result.stdout))
 
