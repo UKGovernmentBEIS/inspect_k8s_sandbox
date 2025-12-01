@@ -1,0 +1,12 @@
+services:
+  isolated-service:
+    image: my-isolated-service:1.0.0
+    network_mode: none
+    working_dir: /app
+    environment:
+      ENV_VAR: value
+    deploy:
+      resources:
+        limits:
+          memory: 1gb
+          cpus: 0.5

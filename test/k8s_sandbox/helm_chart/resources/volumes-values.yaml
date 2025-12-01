@@ -18,8 +18,8 @@ services:
         emptyDir: {}
       - "simple-volume-1:/simple-volume-mount-path"
 volumes:
-  simple-volume-1:
-  simple-volume-2:
+  simple-volume-1: {}
+  simple-volume-2: {}
   custom-volume:
     spec:
       storageClassName: nfs-client

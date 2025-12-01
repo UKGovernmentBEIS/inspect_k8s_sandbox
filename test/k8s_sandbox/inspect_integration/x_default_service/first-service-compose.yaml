@@ -1,0 +1,12 @@
+services:
+  # No "default" service, no x-default - first service should be used
+  first:
+    image: "python:3.12-bookworm"
+    entrypoint: ["tail", "-f", "/dev/null"]
+    environment:
+      SERVICE_NAME: first
+  second:
+    image: "python:3.12-bookworm"
+    entrypoint: ["tail", "-f", "/dev/null"]
+    environment:
+      SERVICE_NAME: second

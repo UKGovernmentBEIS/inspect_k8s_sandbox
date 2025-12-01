@@ -1,0 +1,8 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+    entrypoint: ["tail", "-f", "/dev/null"]
+    network_mode: none
+  other-service:
+    image: "python:3.12-bookworm"
+    entrypoint: ["tail", "-f", "/dev/null"]

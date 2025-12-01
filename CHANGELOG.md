@@ -2,9 +2,17 @@
 
 ## Unreleased to PyPI
 
+## 2025-11-28 0.3.0
+
 - Increase files open limit if necessary
 - Migrate to uv
 - Add (ignored) concurrency param to exec
+- Support `network_mode: none` in Docker Compose files
+- Support `x-default` service key in Docker Compose files
+- **Breaking**: When converting multi-service Docker Compose files without an explicit
+  default, the first service (in YAML order) is now renamed to `default`. This ensures
+  consistent default service resolution regardless of Kubernetes pod ordering.
+- **Breaking**: Add validation for null values in Helm values files (Helm 4 silently filters out null values from maps during template processing, which can cause unexpected behavior)
 
 ## 2025-09-25 0.2.0
 

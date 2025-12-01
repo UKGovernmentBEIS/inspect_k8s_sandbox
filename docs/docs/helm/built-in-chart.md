@@ -286,7 +286,7 @@ services:
     volumes:
       - "my-volume:/my-volume-mount-path"
 volumes:
-  my-volume:
+  my-volume: {}
 ```
 
 Note that this does not allow you to mount directories from the client system (your
@@ -340,8 +340,8 @@ services:
     networks:
       - b
 networks:
-  a:
-  b:
+  a: {}
+  b: {}
 ```
 
 In the example above, the `default` service can communicate with the `intermediate`
@@ -376,8 +376,7 @@ services:
     networks:
       - challenge-network
 networks:
-  challenge-network:
-    driver: bridge
+  challenge-network: {}
 ```
 
 From the default service port 8080 should be reachable but port 9090 should be inaccessable.
