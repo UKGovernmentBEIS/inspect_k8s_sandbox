@@ -63,6 +63,13 @@ services:
     ports: []
     # -- Environment variables that will be set in the container.
     env: []
+    # -- Init containers to run before the main container starts. Useful for waiting for
+    # dependencies to become ready (e.g., database connectivity checks). Each init container
+    # supports: `name` (required), `image` (required), `command`, `args`, `imagePullPolicy`,
+    # `workingDir`, `resources`, and `securityContext`. The `$AGENT_ENV` environment variable
+    # is automatically injected. Note: init containers cannot reliably access external domains
+    # from `allowDomains` due to CoreDNS starting after init containers complete.
+    initContainers: []
     # -- Volumes accessible to the container. Supports arbitrary yaml or colon-separated
     # strings of the form `volume-name:/mount-path`.
     volumes: []

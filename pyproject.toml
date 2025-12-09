@@ -1,6 +1,6 @@
 [project]
 name = "inspect-k8s-sandbox"
-version = "0.3.0"
+version = "0.4.0"
 description = "A Kubernetes Sandbox Environment for Inspect"
 authors = [{name = "UK AI Security Institute"}]
 readme = "README.md"

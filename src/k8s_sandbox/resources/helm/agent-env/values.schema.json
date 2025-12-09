@@ -141,6 +141,23 @@
             },
             "networkIsolated": {
               "type": "boolean"
+            },
+            "initContainers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "image": {"type": "string"},
+                  "command": { "type": "array", "items": { "type": "string" } },
+                  "args": { "type": "array", "items": { "type": "string" } },
+                  "imagePullPolicy": {"type": "string"},
+                  "workingDir": {"type": "string"},
+                  "resources": {"type": "object"},
+                  "securityContext": {"type": "object"}
+                },
+                "required": ["name", "image"]
+              }
             }
           },
           "required": [

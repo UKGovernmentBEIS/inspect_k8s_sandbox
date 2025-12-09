@@ -232,6 +232,42 @@ services:
 You do not need to specify a `readinessProbe` on containers which have a trivial
 entrypoint (e.g. `sleep infinity` or `tail -f /dev/null`).
 
+## Init containers
+
+Init containers run before the main container starts. Use them to wait for dependencies
+or perform setup tasks. They support `resources`, `securityContext`, `imagePullPolicy`,
+and `workingDir` fields. The `$AGENT_ENV` environment variable is automatically injected.
+
+```yaml
+services:
+  database:
+    image: postgres:16
+    dnsRecord: true
+  app:
+    image: myapp:latest
+    initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command:
+          - sh
+          - -c
+          - until nc -z $AGENT_ENV-database 5432; do sleep 2; done
+        resources:
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+```
+
+!!! warning "Init containers cannot access external domains from `allowDomains`"
+
+    The CoreDNS sidecar (which handles `allowDomains`) starts after init containers
+    complete. Use `$AGENT_ENV-servicename` for internal services or `allowCIDR` with IP
+    addresses for external access.
+
+**Limitations:** Init containers cannot currently access `volumes` or custom `env` vars
+from the service definition. See the [Kubernetes init container
+docs](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) for details.
+
 ## Resource requests and limits
 
 Default resource limits are assigned for each `service` within the Helm chart. The
