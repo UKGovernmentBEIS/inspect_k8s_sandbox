@@ -5,7 +5,7 @@ from typing import Generator
 
 import yaml
 
-from k8s_sandbox._helm import ValuesSource
+from k8s_sandbox._helm import ValuesSource, validate_no_null_values
 from k8s_sandbox.compose._converter import convert_compose_to_helm_values
 
 
@@ -18,6 +18,8 @@ class ComposeValuesSource(ValuesSource):
     @contextmanager
     def values_file(self) -> Generator[Path | None, None, None]:
         converted = convert_compose_to_helm_values(self._compose_file)
+        # Validate the converted values before writing to temp file
+        validate_no_null_values(converted, f"compose file {self._compose_file}")
         with tempfile.NamedTemporaryFile("w") as f:
             f.write(yaml.dump(converted, sort_keys=False))
             f.flush()

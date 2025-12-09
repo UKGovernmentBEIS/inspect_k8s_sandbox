@@ -682,7 +682,7 @@ def test_ignores_and_warns_build_keys(
         yaml.safe_dump(
             {
                 "services": {
-                    "my-service": {
+                    "default": {
                         "image": "my-image",
                         **properties,
                     },
@@ -699,7 +699,7 @@ def test_ignores_and_warns_build_keys(
         result = convert_compose_to_helm_values(compose_path)
 
     expected_ignored = {*properties}
-    for service_name in "my-service", "my-service-2":
+    for service_name in "default", "my-service-2":
         assert service_name in result["services"]
         bad_keys = expected_ignored.intersection(result["services"][service_name])
         assert len(bad_keys) == 0
@@ -709,12 +709,76 @@ def test_ignores_and_warns_build_keys(
         assert expected_warning in record.message
 
 
-def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None:
+def test_converts_network_mode_none(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
     image: my-image
     network_mode: none
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # network_mode: none should be accepted and set networkIsolated flag
+    assert "my-service" in result["services"]
+    assert result["services"]["my-service"]["networkIsolated"] is True
+
+
+def test_converter_on_network_mode_none_file() -> None:
+    resources = Path(__file__).parent / "resources" / "network_mode_none"
+    expected = (resources / "helm-values.yaml").read_text()
+
+    result = convert_compose_to_helm_values(resources / "compose.yaml")
+    actual = yaml.dump(result, sort_keys=False)
+
+    assert actual == expected
+
+
+def test_rejects_network_mode_none_with_networks(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: none
+    networks:
+      - my-network
+networks:
+  my-network:
+    driver: bridge
+    internal: true
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Cannot specify both 'network_mode: none' and 'networks'" in str(
+        exc_info.value
+    )
+
+
+def test_rejects_unsupported_network_mode(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: host
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported network_mode: 'host'" in str(exc_info.value)
+
+
+def test_rejects_unsupported_service_key(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    ports:
+      - "8080:80"
 """)
 
     with pytest.raises(ComposeConverterError) as exc_info:
@@ -723,7 +787,7 @@ services:
     # Verify that the error message includes the service name, invalid keys and the
     # compose file path.
     assert (
-        "Unsupported key(s) in 'service': {'network_mode'}. Service: 'my-service'; "
+        "Unsupported key(s) in 'service': {'ports'}. Service: 'my-service'; "
         "Compose file: '/" in str(exc_info.value)
     )
 
@@ -901,3 +965,102 @@ networks:
         convert_compose_to_helm_values(compose_path)
 
     assert "Unsupported network internal value" in str(exc_info.value)
+
+
+### x-default handling
+
+
+def test_keeps_service_named_default_unchanged(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: my-image
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert "default" in result["services"]
+    assert result["services"]["default"]["image"] == "my-image"
+
+
+def test_renames_service_with_x_default_to_default(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  calculator_improvement:
+    image: my-image
+    x-default: true
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # Verify that service name changed to "default"
+    assert "default" in result["services"]
+    assert "calculator_improvement" not in result["services"]
+    assert result["services"]["default"]["image"] == "my-image"
+
+    # Ensure x-default is not in the final output
+    assert "x-default" not in result["services"]["default"]
+
+
+def test_service_named_default_takes_precedence_over_x_default(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: default-image
+  other-service:
+    image: other-image
+    x-default: true
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # The service named "default" should remain, not be overwritten
+    assert result["services"]["default"]["image"] == "default-image"
+    assert "other-service" in result["services"]
+
+
+@pytest.mark.parametrize(
+    "first_service,second_service",
+    [
+        ("aaa-service", "zzz-service"),  # First alphabetically is first in YAML
+        ("zzz-service", "aaa-service"),  # Last alphabetically is first in YAML
+    ],
+)
+def test_first_service_renamed_to_default_when_multiple_services(
+    tmp_compose: TmpComposeFixture,
+    first_service: str,
+    second_service: str,
+) -> None:
+    compose_path = tmp_compose(f"""
+services:
+  {first_service}:
+    image: first-image
+  {second_service}:
+    image: second-image
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # First service (in YAML order) should be renamed to "default"
+    assert "default" in result["services"]
+    assert result["services"]["default"]["image"] == "first-image"
+    assert second_service in result["services"]
+    assert first_service not in result["services"]
+
+
+def test_single_service_not_renamed_to_default(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # Single service should keep its original name
+    assert "my-service" in result["services"]
+    assert "default" not in result["services"]

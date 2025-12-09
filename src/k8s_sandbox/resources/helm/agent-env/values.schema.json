@@ -139,6 +139,9 @@
             "nodeSelector": {
               "type": "object"
             },
+            "networkIsolated": {
+              "type": "boolean"
+            },
             "initContainers": {
               "type": "array",
               "items": {

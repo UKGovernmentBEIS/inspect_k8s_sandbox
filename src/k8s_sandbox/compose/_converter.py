@@ -79,10 +79,43 @@ def _validate_compose(compose: dict[str, Any], compose_file: Path) -> None:
 
 def _convert_services(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
     result: dict[str, Any] = dict()
+
+    service_to_rename = _determine_default_service(src)
+
     for service_name, service_value in src.items():
         service_converter = _ServiceConverter(service_name, service_value, compose_file)
-        result[service_name] = service_converter.convert()
+        # Rename the service to "default" if needed
+        output_service_name = (
+            "default" if service_name == service_to_rename else service_name
+        )
+        result[output_service_name] = service_converter.convert()
     return result
+
+
+def _determine_default_service(services: dict[str, Any]) -> str | None:
+    """Determine which service should be renamed to "default".
+
+    Returns the service name that should be renamed to "default", or None if no
+    renaming is needed.
+
+    Priority:
+    1. Service named "default" - no renaming needed (returns None)
+    2. Service with x-default: true - should be renamed to "default"
+    3. First service (only if multiple services) - rename to "default"
+
+    See: https://inspect.aisi.org.uk/sandboxing.html#multiple-environments
+    """
+    if "default" in services:
+        return None
+
+    for service_name, service_value in services.items():
+        if isinstance(service_value, dict) and service_value.get("x-default") is True:
+            return service_name
+
+    if len(services) > 1:
+        return next(iter(services.keys()), None)
+
+    return None
 
 
 def _convert_volumes(src: dict[str, Any], compose_file: Path) -> dict[str, Any]:
@@ -193,7 +226,26 @@ class _ServiceConverter:
         _transform(
             src, "user", result, "securityContext", self._user_to_security_context
         )
-        _transform(src, "networks", result, "networks")
+        # Check for network_mode first
+        network_mode = src.pop("network_mode", None)
+        networks = src.get("networks")
+
+        if network_mode == "none":
+            if networks is not None:
+                raise ComposeConverterError(
+                    f"Cannot specify both 'network_mode: none' and 'networks'. "
+                    f"{self.context}"
+                )
+            result["networkIsolated"] = True
+        elif network_mode is not None:
+            raise ComposeConverterError(
+                f"Unsupported network_mode: '{network_mode}'. Only 'none' is "
+                f"supported. {self.context}"
+            )
+        else:
+            # Only process networks if network_mode is not set
+            _transform(src, "networks", result, "networks")
+
         if hostname := src.pop("hostname", None):
             if hostname != self._name:
                 raise ComposeConverterError(
@@ -215,6 +267,9 @@ class _ServiceConverter:
 
         has_x_local = src.pop("x-local", None) == "true"
         has_build = src.pop("build", None) is not None
+        src.pop(
+            "x-default", None
+        )  # Remove x-default key (handled during service detection)
         # x-local is an Inspect-specific key to indicate that an image should not be
         # pulled. https://inspect.aisi.org.uk/sandboxing.html#task-configuration
         # If it is set to anything but "true", silently ignore it.
