@@ -5,7 +5,7 @@
     "args": {
       "VARIANT": "3.11",
       "INSTALL_NODE": "true",
-      "NODE_VERSION": "18.7"
+      "NODE_VERSION": "22.21"
     }
   },
   "runArgs": [
@@ -13,13 +13,14 @@
   ],
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-      "dockerDashComposeVersion": "2.30.3"
+      "dockerDashComposeVersion": "2.40.3"
     },
     "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
-      "version": "1.31.0",
-      "helm": "3.16.1",
-      "minikube": "1.34.0"
-    }
+      "version": "1.34.2",
+      "helm": "4.0.1",
+      "minikube": "1.37.0"
+    },
+    "ghcr.io/devcontainers-extra/features/tmux-apt-get:1": {}
   },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "remoteUser": "vscode"

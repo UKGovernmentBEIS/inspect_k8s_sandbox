@@ -29,7 +29,7 @@ EOF
 # Install Cilium CLI. Previously, the ghcr.io/audacioustux/devcontainers/cilium:1
 # devcontainer feature was used, but it doesn't allow a specific version of the CLI to
 # be installed and the latest version failed at `cilium install`.
-CILIUM_CLI_VERSION=v0.16.15
+CILIUM_CLI_VERSION=v0.18.8
 CILIUM_CLI_ARCH=amd64
 echo "Installing Cilium CLI $CILIUM_CLI_VERSION $CILIUM_CLI_ARCH..."
 curl -L --fail --remote-name-all https://github.com/cilium/cilium-cli/releases/download/${CILIUM_CLI_VERSION}/cilium-linux-${CILIUM_CLI_ARCH}.tar.gz{,.sha256sum}
