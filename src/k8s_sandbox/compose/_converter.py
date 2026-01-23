@@ -170,6 +170,13 @@ def _convert_extensions(
                 f"Compose file: '{compose_file}'."
             )
         result["allowDomains"] = allow_domains
+    if allow_entities := extensions.pop("allow_entities", None):
+        if not isinstance(allow_entities, list):
+            raise ComposeConverterError(
+                f"Invalid 'allow_entities' type: {type(allow_entities)}. Expected list. "
+                f"Compose file: '{compose_file}'."
+            )
+        result["allowEntities"] = allow_entities
     if extensions:
         raise ComposeConverterError(
             f"Unsupported key(s) in 'x-inspect_k8s_sandbox': {set(extensions)}. "
