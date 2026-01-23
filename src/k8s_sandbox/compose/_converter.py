@@ -144,12 +144,6 @@ def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
                 f"Unsupported network driver: '{driver}'. Only 'bridge' is "
                 f"supported. Compose file: '{compose_file}'."
             )
-        internal = network_value.pop("internal", False)
-        if internal is not True:
-            raise ComposeConverterError(
-                f"Unsupported network internal value: '{internal}'. Only "
-                f"'internal: true' is supported. Compose file: '{compose_file}'."
-            )
         if network_value:
             raise ComposeConverterError(
                 f"Unsupported key(s) in network '{network_name}': "
