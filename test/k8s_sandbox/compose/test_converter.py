@@ -980,7 +980,9 @@ networks:
     assert "Unsupported network driver" in str(exc_info.value)
 
 
-def test_converts_network_without_explicit_driver(tmp_compose: TmpComposeFixture) -> None:
+def test_converts_network_without_explicit_driver(
+    tmp_compose: TmpComposeFixture,
+) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
