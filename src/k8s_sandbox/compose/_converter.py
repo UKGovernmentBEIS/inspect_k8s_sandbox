@@ -144,6 +144,9 @@ def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
                 f"Unsupported network driver: '{driver}'. Only 'bridge' is "
                 f"supported. Compose file: '{compose_file}'."
             )
+        # Ignore internal key - users are responsible for correctly setting
+        # matching x-inspect_k8s_sandbox.allow_[entities|domains]
+        network_value.pop("internal", None)
         if network_value:
             raise ComposeConverterError(
                 f"Unsupported key(s) in network '{network_name}': "

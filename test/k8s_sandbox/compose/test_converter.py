@@ -892,6 +892,37 @@ x-inspect_k8s_sandbox:
     assert "Invalid 'allow_domains' type" in str(exc_info.value)
 
 
+def test_converts_allow_entities(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-inspect_k8s_sandbox:
+  allow_entities:
+    - world
+    - cluster
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["allowEntities"] == ["world", "cluster"]
+
+
+def test_rejects_invalid_allow_entities(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-inspect_k8s_sandbox:
+  allow_entities: "invalid"
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Invalid 'allow_entities' type" in str(exc_info.value)
+
+
 def test_rejects_unsupported_extension_key(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
@@ -949,7 +980,24 @@ networks:
     assert "Unsupported network driver" in str(exc_info.value)
 
 
-def test_rejects_non_internal_network(tmp_compose: TmpComposeFixture) -> None:
+def test_converts_network_without_explicit_driver(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    networks:
+        - my-network
+networks:
+    my-network: {}
+    """)
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["networks"] == ["my-network"]
+    assert result["networks"]["my-network"] == {}
+
+
+def test_ignores_network_internal_key(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
   my-service:
@@ -958,13 +1006,13 @@ services:
         - my-network
 networks:
     my-network:
-        driver: bridge
+        internal: false
     """)
 
-    with pytest.raises(ComposeConverterError) as exc_info:
-        convert_compose_to_helm_values(compose_path)
+    result = convert_compose_to_helm_values(compose_path)
 
-    assert "Unsupported network internal value" in str(exc_info.value)
+    assert result["services"]["my-service"]["networks"] == ["my-network"]
+    assert result["networks"]["my-network"] == {}
 
 
 ### x-default handling
