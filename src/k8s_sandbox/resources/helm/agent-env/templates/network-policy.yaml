@@ -38,6 +38,23 @@ spec:
               {{- if or (has "all" .Values.allowEntities) (has "world" .Values.allowEntities) }}
               - matchPattern: "*"
               {{- end }}
+    - toServices:
+      - k8sService:
+          namespace: kube-system
+          serviceName: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+          rules:
+            dns:
+              - matchPattern: "*.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- range .Values.allowDomains }}
+              - matchPattern: "{{ . }}"
+              {{- end }}
+              {{- if or (has "all" .Values.allowEntities) (has "world" .Values.allowEntities) }}
+              - matchPattern: "*"
+              {{- end }}
     - toEndpoints:
       - matchLabels:
           io.kubernetes.pod.namespace: {{ .Release.Namespace }}
