@@ -138,7 +138,7 @@ def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
                 f"Invalid network value: '{network_value}'. Expected dict. "
                 f"Compose file: '{compose_file}'."
             )
-        driver = network_value.pop("driver", None)
+        driver = network_value.pop("driver", "bridge")
         if driver != "bridge":
             raise ComposeConverterError(
                 f"Unsupported network driver: '{driver}'. Only 'bridge' is "
