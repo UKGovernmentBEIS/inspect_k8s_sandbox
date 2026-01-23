@@ -79,6 +79,17 @@ x-inspect_k8s_sandbox:
     - google.com
 ```
 
+or
+
+```yaml
+services:
+  myservice:
+    image: ubuntu
+x-inspect_k8s_sandbox:
+  allow_entities:
+    - world
+```
+
 ## Network Modes
 
 The only supported `network_mode` is `none`, which completely isolates a service from

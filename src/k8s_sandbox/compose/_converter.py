@@ -138,18 +138,15 @@ def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
                 f"Invalid network value: '{network_value}'. Expected dict. "
                 f"Compose file: '{compose_file}'."
             )
-        driver = network_value.pop("driver", None)
+        driver = network_value.pop("driver", "bridge")
         if driver != "bridge":
             raise ComposeConverterError(
                 f"Unsupported network driver: '{driver}'. Only 'bridge' is "
                 f"supported. Compose file: '{compose_file}'."
             )
-        internal = network_value.pop("internal", False)
-        if internal is not True:
-            raise ComposeConverterError(
-                f"Unsupported network internal value: '{internal}'. Only "
-                f"'internal: true' is supported. Compose file: '{compose_file}'."
-            )
+        # Ignore internal key - users are responsible for correctly setting
+        # matching x-inspect_k8s_sandbox.allow_[entities|domains]
+        network_value.pop("internal", None)
         if network_value:
             raise ComposeConverterError(
                 f"Unsupported key(s) in network '{network_name}': "
@@ -166,10 +163,19 @@ def _convert_extensions(
     if allow_domains := extensions.pop("allow_domains", None):
         if not isinstance(allow_domains, list):
             raise ComposeConverterError(
-                f"Invalid 'allow_domains' type: {type(allow_domains)}. Expected list. "
+                f"Invalid 'allow_domains' type: {type(allow_domains)}. "
+                f"Expected list. "
                 f"Compose file: '{compose_file}'."
             )
         result["allowDomains"] = allow_domains
+    if allow_entities := extensions.pop("allow_entities", None):
+        if not isinstance(allow_entities, list):
+            raise ComposeConverterError(
+                f"Invalid 'allow_entities' type: {type(allow_entities)}. "
+                f"Expected list. "
+                f"Compose file: '{compose_file}'."
+            )
+        result["allowEntities"] = allow_entities
     if extensions:
         raise ComposeConverterError(
             f"Unsupported key(s) in 'x-inspect_k8s_sandbox': {set(extensions)}. "
