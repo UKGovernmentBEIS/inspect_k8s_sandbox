@@ -131,6 +131,7 @@ class Release:
         values_source: ValuesSource,
         context_name: str | None,
         restarted_container_behavior: Literal["warn", "raise"] = "warn",
+        sample_uuid: str | None = None,
     ) -> None:
         self.task_name = task_name
         self._chart_path = chart_path or DEFAULT_CHART
@@ -140,6 +141,7 @@ class Release:
         # The release name is used in pod names too, so limit it to 8 chars.
         self.release_name = self._generate_release_name()
         self.restarted_container_behavior = restarted_container_behavior
+        self.sample_uuid = sample_uuid
 
     def _generate_release_name(self) -> str:
         return uuid().lower()[:8]
@@ -249,6 +251,11 @@ class Release:
                 # Include a label to identify releases created by Inspect.
                 "--labels=inspectSandbox=true",
             ]
+            + (
+                [f"--set=labels.inspectSampleUUID={self.sample_uuid}"]
+                if self.sample_uuid
+                else []
+            )
             + _kubeconfig_context_args(self._context_name)
             + values_args,
             capture_output=True,
