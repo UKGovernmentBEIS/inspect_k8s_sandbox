@@ -1,6 +1,8 @@
-# See here for image contents: https://github.com/microsoft/vscode-dev-containers/tree/v0.148.1/containers/python-3/.devcontainer/base.Dockerfile
-ARG VARIANT="3.11"
-FROM mcr.microsoft.com/vscode/devcontainers/python:0-${VARIANT}
+FROM mcr.microsoft.com/devcontainers/python:1-3.11
+
+# The base image ships a Yarn apt source whose GPG key has expired,
+# which breaks apt-get update (used by devcontainer features).
+RUN rm -f /etc/apt/sources.list.d/yarn.list
 
 # https://github.com/UKGovernmentBEIS/inspect_ai/issues/51
 ENV XDG_RUNTIME_DIR=/tmp

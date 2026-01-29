@@ -2,11 +2,7 @@
   "name": "Devcontainer",
   "build": {
     "dockerfile": "Dockerfile",
-    "args": {
-      "VARIANT": "3.11",
-      "INSTALL_NODE": "true",
-      "NODE_VERSION": "18.7"
-    }
+    "args": {}
   },
   "runArgs": [
     "--network=host" // Allows accessing K8s API from within container using docker outside of docker
