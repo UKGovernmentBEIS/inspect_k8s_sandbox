@@ -57,3 +57,38 @@ def test_filter_sentinel_and_returncode_255():
     frame = b"<completed-sentinel-value-255>"
 
     assert executor._filter_sentinel_and_returncode(frame) == (b"", 255)
+
+
+def test_build_idempotent_shell_script_contains_marker():
+    executor = ExecuteOperation(MagicMock())
+    exec_id = "test-exec-id-123"
+    script = executor._build_idempotent_shell_script(
+        command=["echo", "hello"],
+        stdin=None,
+        cwd=None,
+        env={},
+        timeout=None,
+        execution_id=exec_id,
+    )
+    # Should create marker file before command
+    assert f"/tmp/.k8s_exec_{exec_id}.marker" in script
+    # Should write status after command
+    assert f"/tmp/.k8s_exec_{exec_id}.status" in script
+    # Original command should be present
+    assert "echo hello" in script
+
+
+def test_build_idempotent_shell_script_with_cwd_and_env():
+    executor = ExecuteOperation(MagicMock())
+    exec_id = "test-exec-id-456"
+    script = executor._build_idempotent_shell_script(
+        command=["ls", "-la"],
+        stdin=None,
+        cwd="/tmp",
+        env={"FOO": "bar"},
+        timeout=10,
+        execution_id=exec_id,
+    )
+    assert "cd /tmp" in script
+    assert "export FOO=bar" in script
+    assert f"/tmp/.k8s_exec_{exec_id}.marker" in script

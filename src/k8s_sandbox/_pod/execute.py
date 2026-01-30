@@ -1,6 +1,8 @@
 import base64
+import logging
 import re
 import shlex
+import time
 from contextlib import contextmanager
 from typing import Generator
 
@@ -12,6 +14,15 @@ from k8s_sandbox._pod.buffer import LimitedBuffer
 from k8s_sandbox._pod.error import ExecutableNotFoundError
 from k8s_sandbox._pod.get_returncode import get_returncode
 from k8s_sandbox._pod.op import PodOperation
+from k8s_sandbox._pod.retry import (
+    ExecutionState,
+    RetryContext,
+    generate_execution_id,
+    get_marker_paths,
+    is_retryable_error,
+)
+
+logger = logging.getLogger(__name__)
 
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
@@ -29,13 +40,124 @@ class ExecuteOperation(PodOperation):
         timeout: int | None,
     ) -> ExecResult[str]:
         self._check_for_pod_restart()
-        shell_script = self._build_shell_script(cmd, stdin, cwd, env, timeout)
+
+        retry_ctx = RetryContext(max_retries=3, base_delay=1.0, max_delay=10.0)
+        execution_id = generate_execution_id()
+
+        while True:
+            try:
+                result = self._exec_with_idempotency(
+                    cmd, stdin, cwd, env, user, timeout, execution_id
+                )
+            except BaseException as e:
+                # Check if this is a retryable error
+                if not is_retryable_error(e):
+                    raise
+
+                # Check if we can still retry
+                if not retry_ctx.should_retry:
+                    logger.warning(
+                        "Exhausted retries for exec after %d attempts. Last error: %s",
+                        retry_ctx.attempt,
+                        e,
+                    )
+                    raise
+
+                # Check if the command started executing (unsafe to retry)
+                state = self._check_execution_state(execution_id)
+                if state == ExecutionState.STARTED.value:
+                    logger.warning(
+                        f"Cannot retry exec: command may have started executing. "
+                        f"Marker file exists for execution_id={execution_id}"
+                    )
+                    raise
+                if state == ExecutionState.COMPLETED.value:
+                    logger.warning(
+                        f"Cannot retry exec: command appears to have completed. "
+                        f"Status file exists for execution_id={execution_id}"
+                    )
+                    raise
+
+                # Safe to retry
+                retry_ctx.increment()
+                delay = retry_ctx.get_delay()
+                logger.info(
+                    "Retrying exec (attempt %d/%d) after %.2fs delay. Error: %s",
+                    retry_ctx.attempt,
+                    retry_ctx.max_retries,
+                    delay,
+                    e,
+                )
+                time.sleep(delay)
+
+                # Generate new execution ID for retry
+                execution_id = generate_execution_id()
+                continue
+
+            # Success - clean up marker files (best effort) and return
+            self._cleanup_marker_files(execution_id)
+            return result
+
+    def _exec_with_idempotency(
+        self,
+        cmd: list[str],
+        stdin: str | bytes | None,
+        cwd: str | None,
+        env: dict[str, str],
+        user: str | None,
+        timeout: int | None,
+        execution_id: str,
+    ) -> ExecResult[str]:
+        """Execute command with idempotency tracking via marker files."""
+        shell_script = self._build_idempotent_shell_script(
+            cmd, stdin, cwd, env, timeout, execution_id
+        )
         with self._interactive_shell(user) as ws_client:
-            # Write the script to the shell's stdin rather than passing it as a command
-            # argument (-c) to better support potentially long commands.
             ws_client.write_stdin(shell_script)
             result = self._handle_shell_output(ws_client, user, timeout)
         return result
+
+    def _check_execution_state(self, execution_id: str) -> str:
+        """Check the execution state by looking for marker/status files.
+
+        This runs a quick command to check if marker or status files exist.
+        Returns 'not_started', 'started', or 'completed'.
+        """
+        marker_path, status_path = get_marker_paths(execution_id)
+        try:
+            check_script = (
+                f"if [ -f {shlex.quote(status_path)} ]; then echo completed; "
+                f"elif [ -f {shlex.quote(marker_path)} ]; then echo started; "
+                f"else echo not_started; fi\n"
+                f'echo -n "<{COMPLETED_SENTINEL}-0>"\n'
+                f"exit 0\n"
+            )
+            with self._interactive_shell(user=None) as ws_client:
+                ws_client.write_stdin(check_script)
+                result = self._handle_shell_output(ws_client, user=None, timeout=10)
+                return result.stdout.strip()
+        except Exception as e:
+            # If we can't check, assume not started to allow retry
+            logger.warning(f"Failed to check execution state: {e}")
+            return ExecutionState.NOT_STARTED.value
+
+    def _cleanup_marker_files(self, execution_id: str) -> None:
+        """Clean up marker and status files for an execution.
+
+        Best effort - failures are logged but don't raise exceptions.
+        """
+        marker_path, status_path = get_marker_paths(execution_id)
+        try:
+            cleanup_script = (
+                f"rm -f {shlex.quote(marker_path)} {shlex.quote(status_path)}\n"
+                f'echo -n "<{COMPLETED_SENTINEL}-0>"\n'
+                f"exit 0\n"
+            )
+            with self._interactive_shell(user=None) as ws_client:
+                ws_client.write_stdin(cleanup_script)
+                self._handle_shell_output(ws_client, user=None, timeout=10)
+        except Exception as e:
+            logger.debug(f"Failed to cleanup marker files for {execution_id}: {e}")
 
     @contextmanager
     def _interactive_shell(self, user: str | None) -> Generator[WSClient, None, None]:
@@ -89,6 +211,69 @@ class ExecuteOperation(PodOperation):
             # Exit the shell. This won't actually close the websocket connection until
             # stdout and stderr (which have been inherited by the user command) are
             # closed. But it will force the echo above to be flushed.
+            yield "exit $returncode\n"
+
+        return "".join(generate())
+
+    def _build_idempotent_shell_script(
+        self,
+        command: list[str],
+        stdin: str | bytes | None,
+        cwd: str | None,
+        env: dict[str, str],
+        timeout: int | None,
+        execution_id: str,
+    ) -> str:
+        """Build a shell script with idempotency detection for safe retries.
+
+        Creates marker files to track execution state:
+        - .marker file: Created before command runs, indicates execution started
+        - .status file: Created after command completes with exit code
+
+        Args:
+            command: The command and arguments to execute.
+            stdin: Optional standard input.
+            cwd: Working directory.
+            env: Environment variables.
+            timeout: Command timeout in seconds.
+            execution_id: Unique ID for this execution attempt.
+
+        Returns:
+            Shell script string with idempotency tracking.
+        """
+        marker_file = f"/tmp/.k8s_exec_{execution_id}.marker"
+        status_file = f"/tmp/.k8s_exec_{execution_id}.status"
+
+        def generate() -> Generator[str, None, None]:
+            # Create marker file to indicate execution has started
+            yield f"touch {shlex.quote(marker_file)}\n"
+
+            # Standard setup: cd and env vars
+            if cwd is not None:
+                yield f"cd {shlex.quote(cwd)} || exit $?\n"
+            for key, value in env.items():
+                yield f"export {shlex.quote(key)}={shlex.quote(value)}\n"
+
+            # Pipe stdin if provided
+            if stdin is not None:
+                yield self._pipe_user_input(stdin)
+
+            # Run the command
+            yield f"{self._prefix_timeout(timeout)}{shlex.join(command)}\n"
+
+            # Store the returncode
+            yield "returncode=$?\n"
+
+            # Write status file with return code
+            yield f"echo $returncode > {shlex.quote(status_file)}\n"
+
+            # Ensure stdout and stderr are flushed
+            yield "sync\n"
+
+            # Write sentinel value with returncode
+            yield f'echo -n "<{COMPLETED_SENTINEL}-$returncode>"\n'
+
+            # Exit the shell
             yield "exit $returncode\n"
 
         return "".join(generate())

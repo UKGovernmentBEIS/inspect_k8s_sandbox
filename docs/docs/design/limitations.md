@@ -151,10 +151,10 @@ chart](../helm/built-in-chart.md#dns). Or, if using a custom Helm chart, conside
 the `hostAliases` field in the Pod spec
 ([docs](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/)).
 
-## Transient network or infrastructure issues during `exec()` won't be retried
+## Transient network or infrastructure issues during `exec()`
 
-The following exceptions have occasionally been observed during calls to `exec()`,
-`read_file()` or `write_file()`:
+The following exceptions can occasionally occur during calls to `exec()`,
+`read_file()` or `write_file()` due to transient network or infrastructure issues:
 
 * `WebSocketBadStatusException: pod does not exist` (re-raised as `ApiException`)
 * `WebSocketBadStatusException: container not found` (re-raised as `ApiException`)
@@ -163,13 +163,27 @@ The following exceptions have occasionally been observed during calls to `exec()
 * `WebSocketConnectionClosedException: Connection to remote host was lost`
 * `SSLEOFError: EOF occurred in violation of protocol`
 
-These are likely due to transient network or infrastructure issues. For example, when a
-node becomes unhealthy and the Pod is rescheduled.
+For example, these can occur during Kubernetes API server updates, when a node
+becomes unhealthy, or when a Pod is rescheduled.
 
-The `k8s_sandbox` package will not retry the remote command execution when any of these
-(or other) exceptions are raised because it cannot assume that the command is idempotent
-and that the command did not at least start executing. This will result in that sample
-of the eval failing.
+### Automatic retry for `exec()`
+
+For `exec()` operations, the `k8s_sandbox` package will automatically retry
+transient connection errors (like `WebSocketConnectionClosedException`) up to 3
+times with exponential backoff.
+
+**Important:** Retries only occur if the command has not started executing. The
+retry logic uses marker files to detect whether a command began execution before
+the connection dropped. If the marker file exists, the command may have had side
+effects, so it will not be retried.
+
+This behavior is automatic and requires no configuration.
+
+### No retry for `read_file()` and `write_file()`
+
+The `read_file()` and `write_file()` operations do not currently have automatic
+retry logic. If these operations fail due to transient errors, the sample will
+fail.
 
 ## Must run as root to use the `user` parameter in `exec()` { #exec-user }
 
