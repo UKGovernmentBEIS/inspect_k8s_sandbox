@@ -1,4 +1,5 @@
 import logging
+import os
 from abc import ABC
 from dataclasses import dataclass
 from typing import Generator, Literal
@@ -98,6 +99,8 @@ class PodOperation(ABC):
         ws_client._all = _IgnoredIO()
 
     def _check_for_pod_restart(self):
+        if os.environ.get("INSPECT_POD_RESTART_CHECK", "true").lower() == "false":
+            return
         client = k8s_client(self._pod.context_name)
         pod = client.read_namespaced_pod(
             name=self._pod.name, namespace=self._pod.namespace
