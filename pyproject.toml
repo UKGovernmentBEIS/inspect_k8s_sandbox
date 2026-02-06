@@ -69,5 +69,5 @@ markers = [
     "req_k8s: marks tests as requiring a test Kubernetes cluster (deselect with '-m \"not req_k8s\"')"
 ]
 env = [
-    "INSPECT_HELM_TIMEOUT=300"
+    "INSPECT_HELM_TIMEOUT=600"
 ]
