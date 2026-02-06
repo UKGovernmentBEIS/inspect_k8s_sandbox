@@ -1,10 +1,12 @@
+import json
 import logging
+import threading
 from abc import ABC
 from dataclasses import dataclass
 from typing import Generator, Literal
 
 from kubernetes.stream import stream  # type: ignore
-from kubernetes.stream.ws_client import WSClient  # type: ignore
+from kubernetes.stream.ws_client import RESIZE_CHANNEL, WSClient  # type: ignore
 
 from k8s_sandbox._kubernetes_api import k8s_client
 
@@ -13,6 +15,16 @@ from k8s_sandbox._kubernetes_api import k8s_client
 # long-running commands will not be affected by this timeout.
 # https://github.com/kubernetes-client/python/blob/master/examples/watch/timeout-settings.md
 API_TIMEOUT = 60
+
+# Interval between WebSocket keepalive frames. Containerd's CRI streaming server
+# enforces a stream_idle_timeout (default 4h [1]) that closes connections with no
+# data activity. Sending a resize-channel data frame resets the idle timer via
+# resetTimeout() in the server's wsstream conn.go read loop [2]. 30 seconds is well
+# under any realistic idle timeout while adding negligible overhead.
+#
+# [1] https://github.com/kubernetes/kubernetes/blob/db9fcfeed29b860d8dd7188bc1903c4709977890/staging/src/k8s.io/kubelet/pkg/cri/streaming/server.go#L100-L105
+# [2] https://github.com/kubernetes/kubernetes/blob/77b02b7ad40d36cd803856de5ba5922c947cb0aa/staging/src/k8s.io/apimachinery/pkg/util/httpstream/wsstream/conn.go#L348-L356
+_KEEPALIVE_INTERVAL_SECONDS = 30
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +75,19 @@ class PodOperation(ABC):
             _request_timeout=API_TIMEOUT,
             **kwargs,
         )
+        stop_keepalive = threading.Event()
+        keepalive = threading.Thread(
+            target=_send_keepalive,
+            args=(ws_client, stop_keepalive),
+            daemon=True,
+            name="ws-keepalive",
+        )
         try:
             self._discard_duplicate_channel(ws_client)
+            keepalive.start()
             yield ws_client
         finally:
+            stop_keepalive.set()
             ws_client.close()
 
     def _discard_duplicate_channel(self, ws_client: WSClient) -> None:
@@ -144,6 +165,38 @@ class PodOperation(ABC):
                 logger.warning(message)
             else:
                 raise RuntimeError(message)
+
+
+def _send_keepalive(ws_client: WSClient, stop: threading.Event) -> None:
+    """Send periodic resize-channel frames to prevent idle timeout.
+
+    Containerd's CRI streaming server closes WebSocket connections that receive no
+    data frames within stream_idle_timeout (default 4h). Standard WebSocket pings do
+    NOT reset this timer because the Python kubernetes client negotiates the
+    v4.channel.k8s.io subprotocol [1], whose server-side handler uses
+    golang.org/x/net/websocket. That library's Receive() silently consumes ping/pong
+    control frames in an internal loop [2][3] without returning to the caller, so the
+    resetTimeout() call in wsstream/conn.go (which sits *before* Receive()) is never
+    re-executed.
+
+    Writing to the resize channel (channel 4) sends a real data frame that causes
+    Receive() to return, triggering resetTimeout() [4]. The resize handler silently
+    ignores the payload since no TTY is allocated for non-interactive exec sessions.
+
+    [1] https://github.com/kubernetes-client/python/blob/6fb1fd723eeb8880626118aeb95ebb1a7c73d5ad/kubernetes/base/stream/ws_client.py#L468-L472
+    [2] https://github.com/golang/net/blob/2914f46773171f4fa13e276df1135bafef677801/websocket/websocket.go#L339-L349
+    [3] https://github.com/golang/net/blob/2914f46773171f4fa13e276df1135bafef677801/websocket/hybi.go#L290-L302
+    [4] https://github.com/kubernetes/kubernetes/blob/77b02b7ad40d36cd803856de5ba5922c947cb0aa/staging/src/k8s.io/apimachinery/pkg/util/httpstream/wsstream/conn.go#L348-L356
+    """
+    payload = json.dumps({"Width": 80, "Height": 24}).encode()
+    while not stop.wait(_KEEPALIVE_INTERVAL_SECONDS):
+        try:
+            if ws_client.is_open():
+                ws_client.write_channel(RESIZE_CHANNEL, payload)
+            else:
+                break
+        except Exception:
+            break
 
 
 def raise_for_known_read_write_errors(stderr: str) -> None:
