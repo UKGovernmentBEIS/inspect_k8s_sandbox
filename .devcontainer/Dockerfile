@@ -9,4 +9,4 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list
 ENV XDG_RUNTIME_DIR=/tmp
 USER vscode
 RUN pip3 --disable-pip-version-check --no-cache-dir install -U \
-  'uv==0.8.22'
+  'uv==0.9.13'
