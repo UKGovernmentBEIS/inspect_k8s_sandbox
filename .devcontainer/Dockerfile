@@ -4,9 +4,6 @@ FROM mcr.microsoft.com/devcontainers/python:1-3.11
 # which breaks apt-get update (used by devcontainer features).
 RUN rm -f /etc/apt/sources.list.d/yarn.list
 
-# Remove Yarn apt source with expired GPG key
-RUN rm -f /etc/apt/sources.list.d/yarn.list
-
 # https://github.com/UKGovernmentBEIS/inspect_ai/issues/51
 ENV XDG_RUNTIME_DIR=/tmp
 USER vscode
