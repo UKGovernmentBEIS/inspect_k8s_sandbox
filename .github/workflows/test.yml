@@ -10,4 +10,4 @@ jobs:
       - uses: actions/checkout@v4
       - run: npm install -g @devcontainers/cli@v0.30.0
       - run: devcontainer up --workspace-folder=.
-      - run: devcontainer exec --workspace-folder=. uv run pytest -rA -x --color=yes
+      - run: devcontainer exec --workspace-folder=. env INSPECT_HELM_TIMEOUT=300 uv run pytest -rA -x --color=yes
