@@ -188,7 +188,7 @@ def _send_keepalive(ws_client: WSClient, stop: threading.Event) -> None:
     [3] https://github.com/golang/net/blob/2914f46773171f4fa13e276df1135bafef677801/websocket/hybi.go#L290-L302
     [4] https://github.com/kubernetes/kubernetes/blob/77b02b7ad40d36cd803856de5ba5922c947cb0aa/staging/src/k8s.io/apimachinery/pkg/util/httpstream/wsstream/conn.go#L348-L356
     """
-    payload = json.dumps({"Width": 80, "Height": 24}).encode()
+    payload = json.dumps({"Width": 80, "Height": 24}).encode()  # Size is arbitrary
     while not stop.wait(_KEEPALIVE_INTERVAL_SECONDS):
         try:
             if ws_client.is_open():
@@ -196,6 +196,10 @@ def _send_keepalive(ws_client: WSClient, stop: threading.Event) -> None:
             else:
                 break
         except Exception:
+            logger.debug(
+                "Failed to send k8s websocket keepalive frame, bailing out",
+                exc_info=True,
+            )
             break
 
 
