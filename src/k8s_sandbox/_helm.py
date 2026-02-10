@@ -132,6 +132,7 @@ class Release:
         context_name: str | None,
         restarted_container_behavior: Literal["warn", "raise"] = "warn",
         sample_uuid: str | None = None,
+        extra_values: dict[str, str] | None = None,
     ) -> None:
         self.task_name = task_name
         self._chart_path = chart_path or DEFAULT_CHART
@@ -142,6 +143,7 @@ class Release:
         self.release_name = self._generate_release_name()
         self.restarted_container_behavior = restarted_container_behavior
         self.sample_uuid = sample_uuid
+        self._extra_values = extra_values or {}
 
     def _generate_release_name(self) -> str:
         return uuid().lower()[:8]
@@ -256,6 +258,7 @@ class Release:
                 if self.sample_uuid
                 else []
             )
+            + [f"--set={k}={v}" for k, v in self._extra_values.items()]
             + _kubeconfig_context_args(self._context_name)
             + values_args,
             capture_output=True,

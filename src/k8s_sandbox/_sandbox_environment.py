@@ -146,7 +146,13 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         resolved_config = _validate_and_resolve_k8s_sandbox_config(config)
         state = sample_state()
         sample_uuid = state.uuid if state else None
-        release = _create_release(task_name, resolved_config, sample_uuid=sample_uuid)
+        extra_values = _metadata_to_extra_values(metadata)
+        release = _create_release(
+            task_name,
+            resolved_config,
+            sample_uuid=sample_uuid,
+            extra_values=extra_values,
+        )
         await HelmReleaseManager.get_instance().install(release)
         return reorder_default_first(await get_sandboxes(release, resolved_config))
 
@@ -341,8 +347,31 @@ class K8sError(Exception):
         super().__init__(format_log_message(message, **kwargs))
 
 
+def _metadata_to_extra_values(metadata: dict[str, str]) -> dict[str, str]:
+    """Convert sample metadata to Helm extra values.
+
+    Each metadata key is split on spaces and converted to PascalCase, then
+    prefixed with ``sampleMetadata``.
+
+    Args:
+        metadata: The sample metadata dict.
+
+    Returns:
+        A dict of Helm ``--set`` key-value pairs.
+    """
+    extra_values: dict[str, str] = {}
+    for key, value in metadata.items():
+        words = key.split(" ")
+        pascal = "".join(w.capitalize() for w in words)
+        extra_values[f"sampleMetadata{pascal}"] = value
+    return extra_values
+
+
 def _create_release(
-    task_name: str, config: _ResolvedConfig, sample_uuid: str | None = None
+    task_name: str,
+    config: _ResolvedConfig,
+    sample_uuid: str | None = None,
+    extra_values: dict[str, str] | None = None,
 ) -> Release:
     values_source = _create_values_source(config)
     return Release(
@@ -352,6 +381,7 @@ def _create_release(
         config.context,
         config.restarted_container_behavior,
         sample_uuid=sample_uuid,
+        extra_values=extra_values,
     )
 
 

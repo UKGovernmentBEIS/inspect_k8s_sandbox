@@ -20,6 +20,7 @@ from k8s_sandbox._helm import (
     validate_no_null_values,
 )
 from k8s_sandbox._kubernetes_api import get_default_namespace
+from k8s_sandbox._sandbox_environment import _metadata_to_extra_values
 
 
 @pytest.fixture
@@ -165,6 +166,44 @@ async def test_helm_create_namespace(
     assert (
         "--create-namespace" in mock_run.call_args[0][1]
     ) == expected_create_namespace
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        ({}, {}),
+        ({"test": "5"}, {"sampleMetadataTest": "5"}),
+        ({"test name": "abc"}, {"sampleMetadataTestName": "abc"}),
+    ],
+)
+def test_metadata_to_extra_values(
+    metadata: dict[str, str], expected: dict[str, str]
+) -> None:
+    assert _metadata_to_extra_values(metadata) == expected
+
+
+async def test_helm_install_extra_values() -> None:
+    extra = {"sampleMetadataTestName": "abc", "sampleMetadataTest": "5"}
+    release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        await release.install()
+
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][1]
+    assert "--set=sampleMetadataTestName=abc" in args
+    assert "--set=sampleMetadataTest=5" in args
+
+
+async def test_helm_install_no_extra_values() -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        await release.install()
+
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][1]
+    assert not any(arg.startswith("--set=sampleMetadata") for arg in args)
 
 
 def test_validate_no_null_values_with_valid_data() -> None:
