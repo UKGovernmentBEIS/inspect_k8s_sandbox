@@ -19,6 +19,7 @@ from inspect_ai.util import (
 from pydantic import BaseModel
 
 from k8s_sandbox._helm import (
+    DEFAULT_CHART,
     Release,
     StaticValuesSource,
     ValuesSource,
@@ -146,7 +147,9 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         resolved_config = _validate_and_resolve_k8s_sandbox_config(config)
         state = sample_state()
         sample_uuid = state.uuid if state else None
-        extra_values = _metadata_to_extra_values(metadata)
+        extra_values = _metadata_to_extra_values(
+            metadata, resolved_config.chart, resolved_config.values
+        )
         release = _create_release(
             task_name,
             resolved_config,
@@ -347,24 +350,58 @@ class K8sError(Exception):
         super().__init__(format_log_message(message, **kwargs))
 
 
-def _metadata_to_extra_values(metadata: dict[str, str]) -> dict[str, str]:
+def _metadata_to_extra_values(
+    metadata: dict[str, str],
+    chart_path: Path | None,
+    values_path: Path | None,
+) -> dict[str, str]:
     """Convert sample metadata to Helm extra values.
 
     Each metadata key is split on spaces and converted to PascalCase, then
-    prefixed with ``sampleMetadata``.
+    prefixed with ``sampleMetadata``.  Only metadata keys that are actually
+    referenced in the chart templates or config file are included.
 
     Args:
         metadata: The sample metadata dict.
+        chart_path: Path to the Helm chart directory (uses DEFAULT_CHART if None).
+        values_path: Path to the values/config file (may be None).
 
     Returns:
         A dict of Helm ``--set`` key-value pairs.
     """
+    if not metadata:
+        return {}
+
+    config_text = _read_chart_config_text(chart_path or DEFAULT_CHART, values_path)
+
     extra_values: dict[str, str] = {}
     for key, value in metadata.items():
         words = key.split(" ")
         pascal = "".join(w.capitalize() for w in words)
-        extra_values[f"sampleMetadata{pascal}"] = value
+        helm_key = f"sampleMetadata{pascal}"
+        if helm_key in config_text:
+            extra_values[helm_key] = value
     return extra_values
+
+
+def _read_chart_config_text(chart_path: Path, values_path: Path | None) -> str:
+    """Read all chart files and the config file as a single string."""
+    parts: list[str] = []
+
+    for chart_file in chart_path.rglob("*"):
+        if chart_file.is_file():
+            try:
+                parts.append(chart_file.read_text())
+            except (OSError, UnicodeDecodeError):
+                pass
+
+    if values_path and values_path.is_file():
+        try:
+            parts.append(values_path.read_text())
+        except (OSError, UnicodeDecodeError):
+            pass
+
+    return "\n".join(parts)
 
 
 def _create_release(

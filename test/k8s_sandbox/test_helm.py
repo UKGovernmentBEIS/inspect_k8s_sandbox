@@ -169,17 +169,67 @@ async def test_helm_create_namespace(
 
 
 @pytest.mark.parametrize(
-    ("metadata", "expected"),
+    ("metadata", "template_content", "expected"),
     [
-        ({}, {}),
-        ({"test": "5"}, {"sampleMetadataTest": "5"}),
-        ({"test name": "abc"}, {"sampleMetadataTestName": "abc"}),
+        ({}, "", {}),
+        (
+            {"test": "5"},
+            "{{ .Values.sampleMetadataTest }}",
+            {"sampleMetadataTest": "5"},
+        ),
+        (
+            {"test name": "abc"},
+            "{{ .Values.sampleMetadataTestName }}",
+            {"sampleMetadataTestName": "abc"},
+        ),
+        # Metadata key not referenced in templates is excluded.
+        (
+            {"test": "5"},
+            "no references here",
+            {},
+        ),
+        # Only referenced keys are included.
+        (
+            {"used": "yes", "unused": "no"},
+            "{{ .Values.sampleMetadataUsed }}",
+            {"sampleMetadataUsed": "yes"},
+        ),
     ],
 )
 def test_metadata_to_extra_values(
-    metadata: dict[str, str], expected: dict[str, str]
+    metadata: dict[str, str],
+    template_content: str,
+    expected: dict[str, str],
+    tmp_path: Path,
 ) -> None:
-    assert _metadata_to_extra_values(metadata) == expected
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "test.yaml").write_text(template_content)
+    assert _metadata_to_extra_values(metadata, tmp_path, None) == expected
+
+
+def test_metadata_to_extra_values_checks_values_file(tmp_path: Path) -> None:
+    """Metadata referenced in the values file (but not templates) is included."""
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "test.yaml").write_text("nothing here")
+    values_file = tmp_path / "values.yaml"
+    values_file.write_text("key: {{ .Values.sampleMetadataFoo }}")
+    assert _metadata_to_extra_values({"foo": "bar"}, tmp_path, values_file) == {
+        "sampleMetadataFoo": "bar",
+    }
+
+
+def test_metadata_to_extra_values_checks_subcharts(tmp_path: Path) -> None:
+    """Metadata referenced in a subchart template is included."""
+    subchart_templates = tmp_path / "charts" / "mysubchart" / "templates"
+    subchart_templates.mkdir(parents=True)
+    (subchart_templates / "deployment.yaml").write_text(
+        "{{ .Values.sampleMetadataFoo }}"
+    )
+    assert _metadata_to_extra_values({"foo": "bar"}, tmp_path, None) == {
+        "sampleMetadataFoo": "bar",
+    }
 
 
 async def test_helm_install_extra_values() -> None:
