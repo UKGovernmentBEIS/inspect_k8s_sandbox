@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shlex
 import sys
 import tempfile
@@ -376,6 +377,12 @@ def _metadata_to_extra_values(
 
     extra_values: dict[str, str] = {}
     for key, value in metadata.items():
+        if not re.fullmatch(r"[a-zA-Z0-9 ]+", key):
+            log_warn(
+                "Skipping sample metadata key with unsupported characters",
+                key=key,
+            )
+            continue
         words = key.split(" ")
         pascal = "".join(w.capitalize() for w in words)
         helm_key = f"sampleMetadata{pascal}"

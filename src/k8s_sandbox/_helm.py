@@ -143,7 +143,7 @@ class Release:
         self.release_name = self._generate_release_name()
         self.restarted_container_behavior = restarted_container_behavior
         self.sample_uuid = sample_uuid
-        self._extra_values = extra_values or {}
+        self._extra_values = dict(extra_values) if extra_values else {}
 
     def _generate_release_name(self) -> str:
         return uuid().lower()[:8]
@@ -258,7 +258,10 @@ class Release:
                 if self.sample_uuid
                 else []
             )
-            + [f"--set={k}={v}" for k, v in self._extra_values.items()]
+            + [
+                f"--set-string={_helm_escape(k)}={_helm_escape(v)}"
+                for k, v in self._extra_values.items()
+            ]
             + _kubeconfig_context_args(self._context_name)
             + values_args,
             capture_output=True,
@@ -380,6 +383,21 @@ def _raise_runtime_error(
         raise RuntimeError(formatted) from from_exception
     else:
         raise RuntimeError(formatted)
+
+
+def _helm_escape(value: str) -> str:
+    """Escape special characters for Helm's strvals parser.
+
+    Helm's ``--set`` / ``--set-string`` flags use a custom parser that treats
+    ``\\``, ``,``, ``.`` and ``=`` as metacharacters.  Each must be escaped
+    with a leading backslash so the value is passed through literally.
+    """
+    # Order matters: escape backslashes first to avoid double-escaping.
+    value = value.replace("\\", "\\\\")
+    value = value.replace(",", "\\,")
+    value = value.replace(".", "\\.")
+    value = value.replace("=", "\\=")
+    return value
 
 
 async def _run_subprocess(

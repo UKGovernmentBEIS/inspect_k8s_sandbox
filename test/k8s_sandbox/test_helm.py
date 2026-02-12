@@ -14,6 +14,7 @@ from k8s_sandbox._helm import (
     Release,
     StaticValuesSource,
     ValuesSource,
+    _helm_escape,
     _run_subprocess,
     get_all_release_names,
     uninstall,
@@ -241,8 +242,8 @@ async def test_helm_install_extra_values() -> None:
 
     mock_run.assert_called_once()
     args = mock_run.call_args[0][1]
-    assert "--set=sampleMetadataTestName=abc" in args
-    assert "--set=sampleMetadataTest=5" in args
+    assert "--set-string=sampleMetadataTestName=abc" in args
+    assert "--set-string=sampleMetadataTest=5" in args
 
 
 async def test_helm_install_no_extra_values() -> None:
@@ -253,7 +254,45 @@ async def test_helm_install_no_extra_values() -> None:
 
     mock_run.assert_called_once()
     args = mock_run.call_args[0][1]
-    assert not any(arg.startswith("--set=sampleMetadata") for arg in args)
+    assert not any(arg.startswith("--set-string=sampleMetadata") for arg in args)
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("plain", "plain"),
+        ("has,comma", "has\\,comma"),
+        ("has.dot", "has\\.dot"),
+        ("has=equals", "has\\=equals"),
+        ("back\\slash", "back\\\\slash"),
+        ("a,b.c=d\\e", "a\\,b\\.c\\=d\\\\e"),
+    ],
+)
+def test_helm_escape(value: str, expected: str) -> None:
+    assert _helm_escape(value) == expected
+
+
+async def test_helm_install_extra_values_escaped() -> None:
+    extra = {"sampleMetadataKey": "val,with.special=chars"}
+    release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        await release.install()
+
+    args = mock_run.call_args[0][1]
+    assert "--set-string=sampleMetadataKey=val\\,with\\.special\\=chars" in args
+
+
+def test_metadata_to_extra_values_skips_invalid_keys(tmp_path: Path) -> None:
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "test.yaml").write_text(
+        "{{ .Values.sampleMetadataGood }} {{ .Values.sampleMetadataBad.Key }}"
+    )
+    result = _metadata_to_extra_values(
+        {"good": "ok", "bad.key": "nope", "also=bad": "nope"}, tmp_path, None
+    )
+    assert result == {"sampleMetadataGood": "ok"}
 
 
 def test_validate_no_null_values_with_valid_data() -> None:
