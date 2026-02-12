@@ -1,5 +1,8 @@
 import yaml
-from kubernetes.stream.ws_client import ERROR_CHANNEL, WSClient  # type: ignore
+from kubernetes.stream.ws_client import (  # type: ignore[import-untyped]
+    ERROR_CHANNEL,
+    WSClient,
+)
 
 from k8s_sandbox._pod.error import ExecutableNotFoundError, GetReturncodeError
 

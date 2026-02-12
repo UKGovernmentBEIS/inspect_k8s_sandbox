@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import IO, Generator
 
-from kubernetes.stream.ws_client import WSClient  # type: ignore
+from kubernetes.stream.ws_client import WSClient  # type: ignore[import-untyped]
 
 from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.get_returncode import get_returncode

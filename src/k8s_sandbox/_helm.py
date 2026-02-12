@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, AsyncContextManager, Generator, Literal, NoReturn, Protocol
 
 from inspect_ai.util import ExecResult, concurrency
-from kubernetes.client.rest import ApiException  # type: ignore
+from kubernetes.client.exceptions import ApiException
 from shortuuid import uuid
 
 from k8s_sandbox._kubernetes_api import get_default_namespace, k8s_client
@@ -201,6 +201,11 @@ class Release:
             _raise_runtime_error("No pods found.", release=self.release_name)
         sandboxes = dict()
         for pod in pods.items:
+            assert pod.metadata is not None
+            assert pod.metadata.labels is not None
+            assert pod.spec is not None
+            assert pod.status is not None
+            assert pod.status.container_statuses is not None
             service_name = pod.metadata.labels.get("inspect/service")
             # Depending on the Helm chart, some Pods may not have a service label.
             # These should not be considered to be a sandbox pod (as per our docs).
@@ -214,6 +219,8 @@ class Release:
                     ),
                     0,
                 )
+                assert pod.metadata.name is not None
+                assert pod.metadata.uid is not None
                 sandboxes[service_name] = Pod(
                     pod.metadata.name,
                     self._namespace,

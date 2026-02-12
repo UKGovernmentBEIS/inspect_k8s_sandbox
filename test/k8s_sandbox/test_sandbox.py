@@ -565,7 +565,8 @@ async def _wait_for_restart(sandbox: K8sSandboxEnvironment, timeout=30):
         pod = client.read_namespaced_pod(
             name=pod_info.name, namespace=pod_info.namespace
         )
-        if any(cs.restart_count > 0 for cs in pod.status.container_statuses or []):
+        statuses = pod.status.container_statuses if pod.status else None
+        if any(cs.restart_count > 0 for cs in statuses or []):
             return
         if asyncio.get_event_loop().time() > deadline:
             raise TimeoutError("container did not restart in time")
