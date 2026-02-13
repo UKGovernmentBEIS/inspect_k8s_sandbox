@@ -895,6 +895,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "kubernetes-stubs-elephant-fork" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -911,6 +912,7 @@ requires-dist = [
     { name = "inspect-ai", specifier = ">=0.3.120" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "kubernetes", specifier = ">=31.0.0" },
+    { name = "kubernetes-stubs-elephant-fork", marker = "extra == 'dev'", specifier = ">=35.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.9.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.6.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.1.1" },
@@ -1032,6 +1034,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ef/55/3f880ef65f559cbed44a9aa20d3bdbc219a2c3a3bac4a30a513029b03ee9/kubernetes-34.1.0.tar.gz", hash = "sha256:8fe8edb0b5d290a2f3ac06596b23f87c658977d46b5f8df9d0f4ea83d0003912", size = 1083771, upload-time = "2025-09-29T20:23:49.283Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ca/ec/65f7d563aa4a62dd58777e8f6aa882f15db53b14eb29aba0c28a20f7eb26/kubernetes-34.1.0-py2.py3-none-any.whl", hash = "sha256:bffba2272534e224e6a7a74d582deb0b545b7c9879d2cd9e4aae9481d1f2cc2a", size = 2008380, upload-time = "2025-09-29T20:23:47.684Z" },
+]
+
+[[package]]
+name = "kubernetes-stubs-elephant-fork"
+version = "35.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/60/dc/33909531e075aff7c0184bc685b841ec04f9f22b98fa23d5c4530a1f1fd8/kubernetes_stubs_elephant_fork-35.0.0.tar.gz", hash = "sha256:7210ba17ad844402d745db1a22c03f86e8f1e2077307fa4d60e3ab579efa05cd", size = 148591, upload-time = "2026-01-16T02:25:54.502Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/67/742f356e96f98df5fc0b2152f2af5495c99c846c91c02c2f7e3b7d5a4f15/kubernetes_stubs_elephant_fork-35.0.0-py2.py3-none-any.whl", hash = "sha256:bf87d24c50e3a8ba13481b54ea8f186a05c1e9cb030a430af375010c2c0b5304", size = 454460, upload-time = "2026-01-16T02:25:53.104Z" },
 ]
 
 [[package]]
