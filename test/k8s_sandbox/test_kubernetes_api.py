@@ -54,28 +54,9 @@ class TestConfigLoading:
     # Singleton reset handled by _reset_config autouse fixture.
 
     @patch("k8s_sandbox._kubernetes_api.config")
-    def test_loads_incluster_config_when_available(
-        self, mock_config: MagicMock
-    ) -> None:
-        """When running in a pod, load_incluster_config() is used."""
+    def test_loads_kubeconfig_when_available(self, mock_config: MagicMock) -> None:
+        """When kubeconfig exists, it is preferred over in-cluster config."""
         typed_config = cast(_ConfigMock, mock_config)
-        typed_config.load_incluster_config.return_value = None
-
-        instance = Config.get_instance()
-
-        typed_config.load_incluster_config.assert_called_once()
-        typed_config.load_kube_config.assert_not_called()
-        assert instance.in_cluster is True
-
-    @patch("k8s_sandbox._kubernetes_api.config")
-    def test_falls_back_to_kubeconfig(self, mock_config: MagicMock) -> None:
-        """When not in a pod, falls back to load_kube_config()."""
-        from kubernetes.config import ConfigException  # type: ignore
-
-        typed_config = cast(_ConfigMock, mock_config)
-        typed_config.load_incluster_config.side_effect = ConfigException(
-            "not in cluster"
-        )
         typed_config.load_kube_config.return_value = None
         typed_config.list_kube_config_contexts.return_value = (
             [{"name": "test", "context": {"namespace": "default"}}],
@@ -84,16 +65,48 @@ class TestConfigLoading:
 
         instance = Config.get_instance()
 
-        typed_config.load_incluster_config.assert_called_once()
         typed_config.load_kube_config.assert_called_once()
+        typed_config.load_incluster_config.assert_not_called()
         assert instance.in_cluster is False
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    def test_falls_back_to_incluster(self, mock_config: MagicMock) -> None:
+        """When no kubeconfig exists, falls back to in-cluster config."""
+        from kubernetes.config import ConfigException
+
+        typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
+        typed_config.load_incluster_config.return_value = None
+
+        instance = Config.get_instance()
+
+        typed_config.load_kube_config.assert_called_once()
+        typed_config.load_incluster_config.assert_called_once()
+        assert instance.in_cluster is True
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    def test_raises_when_no_config_available(self, mock_config: MagicMock) -> None:
+        """Raises ConfigException when neither kubeconfig nor in-cluster config exists."""
+        from kubernetes.config import ConfigException
+
+        typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
+        typed_config.load_incluster_config.side_effect = ConfigException(
+            "not in cluster"
+        )
+
+        with pytest.raises(ConfigException, match="Unable to load Kubernetes"):
+            Config.get_instance()
 
     @patch("k8s_sandbox._kubernetes_api.config")
     def test_incluster_get_context_returns_none_context_name(
         self, mock_config: MagicMock
     ) -> None:
         """In-cluster mode: get_context(None) returns a synthetic context."""
+        from kubernetes.config import ConfigException
+
         typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
         typed_config.load_incluster_config.return_value = None
 
         instance = Config.get_instance()
@@ -104,7 +117,10 @@ class TestConfigLoading:
     @patch("k8s_sandbox._kubernetes_api.config")
     def test_incluster_rejects_named_context(self, mock_config: MagicMock) -> None:
         """In-cluster mode: get_context('some-name') raises ValueError."""
+        from kubernetes.config import ConfigException
+
         typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
         typed_config.load_incluster_config.return_value = None
 
         instance = Config.get_instance()
@@ -123,7 +139,10 @@ class TestGetDefaultNamespace:
         self, mock_config: MagicMock, tmp_path: Path
     ) -> None:
         """In-cluster mode reads namespace from the SA token mount."""
+        from kubernetes.config import ConfigException
+
         typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
         typed_config.load_incluster_config.return_value = None
 
         ns_file = tmp_path / "namespace"
@@ -144,7 +163,10 @@ class TestGetDefaultNamespace:
         self, mock_config: MagicMock
     ) -> None:
         """In-cluster mode defaults to 'default' if SA namespace file is missing."""
+        from kubernetes.config import ConfigException
+
         typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
         typed_config.load_incluster_config.return_value = None
 
         instance = Config.get_instance()
