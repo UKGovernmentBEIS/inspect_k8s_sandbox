@@ -181,7 +181,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         cmd: list[str],
         input: str | bytes | None = None,
         cwd: str | None = None,
-        env: dict[str, str] = {},
+        env: dict[str, str] | None = {},
         user: str | None = None,
         timeout: int | None = None,
         # Ignored. Inspect docs: "For sandbox implementations this parameter is advisory
