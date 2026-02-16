@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from inspect_ai.util._sandbox.compose import ComposeConfig
+from inspect_ai.util import ComposeConfig
 from pydantic import BaseModel
 
 from k8s_sandbox import K8sSandboxEnvironment, K8sSandboxEnvironmentConfig

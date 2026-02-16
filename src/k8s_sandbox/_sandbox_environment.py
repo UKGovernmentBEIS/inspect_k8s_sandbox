@@ -9,6 +9,7 @@ from typing import Any, Generator, Literal, cast, overload
 
 from inspect_ai.solver._task_state import sample_state
 from inspect_ai.util import (
+    ComposeConfig,
     ExecResult,
     OutputLimitExceededError,
     SandboxConnection,
@@ -16,7 +17,6 @@ from inspect_ai.util import (
     SandboxEnvironmentConfigType,
     sandboxenv,
 )
-from inspect_ai.util._sandbox.compose import ComposeConfig
 from pydantic import BaseModel, TypeAdapter
 
 from k8s_sandbox._helm import (
@@ -181,7 +181,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         cmd: list[str],
         input: str | bytes | None = None,
         cwd: str | None = None,
-        env: dict[str, str] | None = {},
+        env: dict[str, str] = {},
         user: str | None = None,
         timeout: int | None = None,
         # Ignored. Inspect docs: "For sandbox implementations this parameter is advisory

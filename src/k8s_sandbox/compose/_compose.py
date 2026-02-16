@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Generator
 
 import yaml
-from inspect_ai.util._sandbox.compose import ComposeConfig
+from inspect_ai.util import ComposeConfig
 
 from k8s_sandbox._helm import ValuesSource, validate_no_null_values
 from k8s_sandbox.compose._converter import convert_compose_to_helm_values
