@@ -16,7 +16,8 @@ from inspect_ai.util import (
     SandboxEnvironmentConfigType,
     sandboxenv,
 )
-from pydantic import BaseModel
+from inspect_ai.util._sandbox.compose import ComposeConfig
+from pydantic import BaseModel, TypeAdapter
 
 from k8s_sandbox._helm import (
     Release,
@@ -38,7 +39,11 @@ from k8s_sandbox._manager import (
 )
 from k8s_sandbox._pod import Pod
 from k8s_sandbox._prereqs import validate_prereqs
-from k8s_sandbox.compose._compose import ComposeValuesSource, is_docker_compose_file
+from k8s_sandbox.compose._compose import (
+    ComposeConfigValuesSource,
+    ComposeValuesSource,
+    is_docker_compose_file,
+)
 
 MIN_DESIRED_SOFT = 100000
 
@@ -92,6 +97,10 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         # specified as the values file. To reduce risk of a user accidentally using a
         # compose.yaml file over a (e.g. misnamed) helm-values.yaml file.
         return ["values.yaml", "helm-values.yaml"]
+
+    @classmethod
+    def is_docker_compatible(cls) -> bool:
+        return True
 
     @classmethod
     async def task_init(
@@ -172,7 +181,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         cmd: list[str],
         input: str | bytes | None = None,
         cwd: str | None = None,
-        env: dict[str, str] = {},
+        env: dict[str, str] | None = {},
         user: str | None = None,
         timeout: int | None = None,
         # Ignored. Inspect docs: "For sandbox implementations this parameter is advisory
@@ -279,7 +288,10 @@ class K8sSandboxEnvironment(SandboxEnvironment):
 
     @classmethod
     def config_deserialize(cls, config: dict[str, Any]) -> BaseModel:
-        return K8sSandboxEnvironmentConfig(**config)
+        adapter = TypeAdapter[K8sSandboxEnvironmentConfig | ComposeConfig](
+            K8sSandboxEnvironmentConfig | ComposeConfig
+        )
+        return adapter.validate_python(config)
 
     def _get_kubectl_connection_command(self, user: str | None) -> str:
         kubectl_cmd = [
@@ -363,9 +375,18 @@ class _ResolvedConfig(BaseModel, frozen=True):
     context: str | None
     default_user: str | None
     restarted_container_behavior: Literal["warn", "raise"]
+    compose_config: BaseModel | None = None
 
 
 def _create_values_source(config: _ResolvedConfig) -> ValuesSource:
+    if config.compose_config is not None:
+        if config.chart is not None:
+            raise ValueError(
+                "Automatic conversion from ComposeConfig to helm-values is only "
+                "supported when using the built-in Helm chart."
+            )
+
+        return ComposeConfigValuesSource(cast(ComposeConfig, config.compose_config))
     if config.values and is_docker_compose_file(config.values):
         if config.chart is not None:
             raise ValueError(
@@ -419,6 +440,15 @@ def _validate_and_resolve_k8s_sandbox_config(
             context=config.context,
             default_user=config.default_user,
             restarted_container_behavior=config.restarted_container_behavior,
+        )
+    if isinstance(config, ComposeConfig):
+        return _ResolvedConfig(
+            chart=None,
+            values=None,
+            context=None,
+            default_user=None,
+            restarted_container_behavior="warn",
+            compose_config=config,
         )
     if isinstance(config, str):
         values = Path(config).resolve()
