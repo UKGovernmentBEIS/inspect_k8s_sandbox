@@ -202,7 +202,9 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             user = self._config.default_user
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
-            result = await self._pod.exec(cmd, input, cwd, env, user, timeout)
+            result = await self._pod.exec(
+                cmd, input, cwd, env or {}, user, timeout
+            )
             log_trace(f"Completed: {op}.", **(log_kwargs | {"result": result}))
             return result
 
