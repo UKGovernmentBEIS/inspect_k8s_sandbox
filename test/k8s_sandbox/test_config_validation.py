@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from inspect_ai.util import ComposeConfig
+from inspect_ai.util import ComposeBuild, ComposeConfig
 from pydantic import BaseModel
 
 from k8s_sandbox import K8sSandboxEnvironment, K8sSandboxEnvironmentConfig
@@ -88,3 +88,42 @@ def test_validate_compose_config() -> None:
     assert resolved.chart is None
     assert resolved.values is None
     assert resolved.compose_config is compose_config
+
+
+def test_validate_dockerfile_str_config(tmp_path: Path) -> None:
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM python:3.11\n")
+
+    resolved = _validate_and_resolve_k8s_sandbox_config(str(dockerfile))
+
+    assert resolved.chart is None
+    assert resolved.values is None
+    assert resolved.compose_config is not None
+    compose_config = resolved.compose_config
+    assert isinstance(compose_config, ComposeConfig)
+    assert "default" in compose_config.services
+    service = compose_config.services["default"]
+    assert isinstance(service.build, ComposeBuild)
+    assert service.build.dockerfile == "Dockerfile"
+
+
+def test_validate_compose_yaml_str_config(tmp_path: Path) -> None:
+    compose_file = tmp_path / "compose.yaml"
+    compose_file.write_text("services:\n  default:\n    image: python:3.11\n")
+
+    resolved = _validate_and_resolve_k8s_sandbox_config(str(compose_file))
+
+    assert resolved.chart is None
+    assert resolved.values is None
+    assert resolved.compose_config is not None
+    compose_config = resolved.compose_config
+    assert isinstance(compose_config, ComposeConfig)
+    assert "default" in compose_config.services
+    assert compose_config.services["default"].image == "python:3.11"
+
+
+def test_validate_helm_values_str_config_unchanged() -> None:
+    """Verify that non-Dockerfile/compose string configs still work as Helm values."""
+    resolved = _validate_and_resolve_k8s_sandbox_config(VALID_VALUES)
+    assert resolved.values is not None
+    assert resolved.compose_config is None

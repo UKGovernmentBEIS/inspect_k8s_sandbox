@@ -6,7 +6,14 @@ from pathlib import Path
 from typing import Generator
 
 import yaml
-from inspect_ai.util import ComposeConfig
+from inspect_ai.util import (
+    ComposeBuild,
+    ComposeConfig,
+    ComposeService,
+    is_compose_yaml,
+    is_dockerfile,
+    parse_compose_yaml,
+)
 
 from k8s_sandbox._helm import ValuesSource, validate_no_null_values
 from k8s_sandbox.compose._converter import convert_compose_to_helm_values
@@ -62,3 +69,45 @@ def is_docker_compose_file(file: Path) -> bool:
         otherwise.
     """
     return file.name.endswith("compose.yaml") or file.name.endswith("compose.yml")
+
+
+def parse_docker_config(file: str) -> ComposeConfig:
+    """Parse a Dockerfile or Docker Compose file into a ComposeConfig.
+
+    If the file is a Docker Compose file, it is parsed directly using
+    inspect_ai's parse_compose_yaml(). If the file is a Dockerfile, a
+    ComposeConfig is built with a single "default" service that references
+    the Dockerfile via a build configuration.
+
+    Args:
+        file: Path to a Dockerfile or Docker Compose file.
+
+    Returns:
+        A ComposeConfig representing the parsed configuration.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file is neither a Dockerfile nor a Docker Compose file.
+    """
+    path = Path(file)
+    if not path.exists():
+        raise FileNotFoundError(f"Docker config file not found: '{file}'.")
+
+    if is_compose_yaml(file):
+        return parse_compose_yaml(file)
+
+    if is_dockerfile(file):
+        return ComposeConfig(
+            services={
+                "default": ComposeService(
+                    build=ComposeBuild(
+                        context=str(path.parent),
+                        dockerfile=path.name,
+                    ),
+                ),
+            },
+        )
+
+    raise ValueError(
+        f"File '{file}' is neither a Dockerfile nor a Docker Compose file."
+    )

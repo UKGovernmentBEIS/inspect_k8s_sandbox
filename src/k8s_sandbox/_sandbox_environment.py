@@ -15,6 +15,8 @@ from inspect_ai.util import (
     SandboxConnection,
     SandboxEnvironment,
     SandboxEnvironmentConfigType,
+    is_compose_yaml,
+    is_dockerfile,
     sandboxenv,
 )
 from pydantic import BaseModel, TypeAdapter
@@ -43,6 +45,7 @@ from k8s_sandbox.compose._compose import (
     ComposeConfigValuesSource,
     ComposeValuesSource,
     is_docker_compose_file,
+    parse_docker_config,
 )
 
 MIN_DESIRED_SOFT = 100000
@@ -93,10 +96,13 @@ class K8sSandboxEnvironment(SandboxEnvironment):
 
     @classmethod
     def config_files(cls) -> list[str]:
-        # compose.yaml files are not automatically used; they must be explicitly
-        # specified as the values file. To reduce risk of a user accidentally using a
-        # compose.yaml file over a (e.g. misnamed) helm-values.yaml file.
-        return ["values.yaml", "helm-values.yaml"]
+        return [
+            "values.yaml",
+            "helm-values.yaml",
+            "compose.yaml",
+            "docker-compose.yaml",
+            "Dockerfile",
+        ]
 
     @classmethod
     def is_docker_compatible(cls) -> bool:
@@ -451,6 +457,16 @@ def _validate_and_resolve_k8s_sandbox_config(
             compose_config=config,
         )
     if isinstance(config, str):
+        if is_compose_yaml(config) or is_dockerfile(config):
+            compose_config = parse_docker_config(config)
+            return _ResolvedConfig(
+                chart=None,
+                values=None,
+                context=None,
+                default_user=None,
+                restarted_container_behavior="warn",
+                compose_config=compose_config,
+            )
         values = Path(config).resolve()
         validate_values_file(values)
         return _ResolvedConfig(
