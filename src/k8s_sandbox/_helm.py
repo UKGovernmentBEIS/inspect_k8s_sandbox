@@ -386,7 +386,7 @@ def _raise_runtime_error(
 
 
 def _helm_escape(value: str) -> str:
-    """Escape special characters for Helm's strvals parser.
+    r"""Escape special characters for Helm's strvals parser.
 
     Helm's ``--set`` / ``--set-string`` flags use a custom parser that treats
     ``\\``, ``,``, ``.`` and ``=`` as metacharacters.  Each must be escaped
