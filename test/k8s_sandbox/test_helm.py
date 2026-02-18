@@ -21,7 +21,7 @@ from k8s_sandbox._helm import (
     validate_no_null_values,
 )
 from k8s_sandbox._kubernetes_api import get_default_namespace
-from k8s_sandbox._sandbox_environment import _metadata_to_extra_values
+from k8s_sandbox._sandbox_environment import _key_to_pascal, _metadata_to_extra_values
 
 
 @pytest.fixture
@@ -170,6 +170,23 @@ async def test_helm_create_namespace(
 
 
 @pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        ("foo", "Foo"),
+        ("foo bar", "FooBar"),
+        ("fooBar", "FooBar"),
+        ("fooBarBaz", "FooBarBaz"),
+        ("FOO", "Foo"),
+        ("test", "Test"),
+        ("multi word key", "MultiWordKey"),
+        ("camelCaseKey", "CamelCaseKey"),
+    ],
+)
+def test_key_to_pascal(key: str, expected: str) -> None:
+    assert _key_to_pascal(key) == expected
+
+
+@pytest.mark.parametrize(
     ("metadata", "template_content", "expected"),
     [
         ({}, "", {}),
@@ -180,6 +197,12 @@ async def test_helm_create_namespace(
         ),
         (
             {"test name": "abc"},
+            "{{ .Values.sampleMetadataTestName }}",
+            {"sampleMetadataTestName": "abc"},
+        ),
+        # camelCase key is converted to PascalCase.
+        (
+            {"testName": "abc"},
             "{{ .Values.sampleMetadataTestName }}",
             {"sampleMetadataTestName": "abc"},
         ),

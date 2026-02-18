@@ -351,6 +351,26 @@ class K8sError(Exception):
         super().__init__(format_log_message(message, **kwargs))
 
 
+def _key_to_pascal(key: str) -> str:
+    """Convert a metadata key to PascalCase.
+
+    Splits on spaces and camelCase word boundaries, then capitalises each
+    word.  For example::
+
+        "foo bar"     -> "FooBar"
+        "fooBar"      -> "FooBar"
+        "fooBarBaz"   -> "FooBarBaz"
+        "FOO"         -> "Foo"
+    """
+    words: list[str] = []
+    for segment in key.split(" "):
+        # Split camelCase: insert boundary between a lowercase/digit and an
+        # uppercase letter (e.g. "fooBar" -> ["foo", "Bar"]).
+        parts = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", segment).split()
+        words.extend(parts)
+    return "".join(w.capitalize() for w in words if w)
+
+
 def _metadata_to_extra_values(
     metadata: dict[str, str],
     chart_path: Path | None,
@@ -358,9 +378,10 @@ def _metadata_to_extra_values(
 ) -> dict[str, str]:
     """Convert sample metadata to Helm extra values.
 
-    Each metadata key is split on spaces and converted to PascalCase, then
-    prefixed with ``sampleMetadata``.  Only metadata keys that are actually
-    referenced in the chart templates or config file are included.
+    Each metadata key is converted to PascalCase (handling spaces, hyphens,
+    underscores, and camelCase boundaries) then prefixed with
+    ``sampleMetadata``.  Only metadata keys that are actually referenced in
+    the chart templates or config file are included.
 
     Args:
         metadata: The sample metadata dict.
@@ -383,8 +404,7 @@ def _metadata_to_extra_values(
                 key=key,
             )
             continue
-        words = key.split(" ")
-        pascal = "".join(w.capitalize() for w in words)
+        pascal = _key_to_pascal(key)
         helm_key = f"sampleMetadata{pascal}"
         if helm_key in config_text:
             extra_values[helm_key] = value
