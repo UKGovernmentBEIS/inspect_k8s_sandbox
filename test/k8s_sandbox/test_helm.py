@@ -11,6 +11,7 @@ from pytest import LogCaptureFixture
 
 from k8s_sandbox._helm import (
     INSPECT_HELM_TIMEOUT,
+    INSPECT_SANDBOX_COREDNS_IMAGE,
     Release,
     StaticValuesSource,
     ValuesSource,
@@ -380,6 +381,38 @@ def test_validate_no_null_values_with_multiple_nulls() -> None:
     assert "services.default.image" in error_msg
     assert "volumes.shared" in error_msg
     assert "volumes.data.nested" in error_msg
+
+
+@pytest.mark.parametrize(
+    ("env_value", "expected_set_arg"),
+    [
+        (
+            "public.ecr.aws/eks-distro/coredns/coredns:v1.11.4",
+            "--set=corednsImage=public.ecr.aws/eks-distro/coredns/coredns:v1.11.4",
+        ),
+        (None, None),
+    ],
+)
+async def test_coredns_image_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+    env_value: str | None,
+    expected_set_arg: str | None,
+) -> None:
+    if env_value is None:
+        monkeypatch.delenv(INSPECT_SANDBOX_COREDNS_IMAGE, raising=False)
+    else:
+        monkeypatch.setenv(INSPECT_SANDBOX_COREDNS_IMAGE, env_value)
+
+    release = Release(__file__, None, ValuesSource.none(), None)
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        await release.install()
+
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][1]
+    if expected_set_arg:
+        assert expected_set_arg in args
+    else:
+        assert not any(arg.startswith("--set=corednsImage=") for arg in args)
 
 
 def test_static_values_source_with_valid_file() -> None:
