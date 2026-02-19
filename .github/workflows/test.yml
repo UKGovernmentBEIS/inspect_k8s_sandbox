@@ -9,5 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm install -g @devcontainers/cli@v0.30.0
-      - run: devcontainer up --workspace-folder=.
+      - run: devcontainer up --workspace-folder=. --log-level trace
+      - if: always()
+        run: devcontainer exec --workspace-folder=. cat /tmp/post-create.log || true
       - run: devcontainer exec --workspace-folder=. uv run pytest -rA -x --color=yes

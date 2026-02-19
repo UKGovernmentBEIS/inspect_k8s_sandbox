@@ -1,5 +1,6 @@
 # Exit immediately if a command exits with a non-zero status, and print each command.
 set -e -x
+exec > >(tee /tmp/post-create.log) 2>&1
 
 echo "Setting up Minikube..."
 minikube delete
