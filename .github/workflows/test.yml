@@ -8,7 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npm install -g @devcontainers/cli@latest
-      - run: devcontainer up --workspace-folder=. --skip-post-create
-      - run: devcontainer exec --workspace-folder=. bash .devcontainer/post-create.sh
+      - run: npm install -g @devcontainers/cli@v0.30.0
+      - run: devcontainer up --workspace-folder=.
       - run: devcontainer exec --workspace-folder=. uv run pytest -rA -x --color=yes
