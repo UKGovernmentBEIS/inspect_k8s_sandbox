@@ -9,5 +9,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm install -g @devcontainers/cli@latest
-      - run: devcontainer up --workspace-folder=.
+      - run: devcontainer up --workspace-folder=. --skip-post-create
+      - run: devcontainer exec --workspace-folder=. bash .devcontainer/post-create.sh
       - run: devcontainer exec --workspace-folder=. uv run pytest -rA -x --color=yes
