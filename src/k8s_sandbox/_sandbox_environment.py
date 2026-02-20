@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shlex
 import sys
 import tempfile
@@ -19,6 +20,7 @@ from inspect_ai.util import (
 from pydantic import BaseModel
 
 from k8s_sandbox._helm import (
+    DEFAULT_CHART,
     Release,
     StaticValuesSource,
     ValuesSource,
@@ -146,7 +148,15 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         resolved_config = _validate_and_resolve_k8s_sandbox_config(config)
         state = sample_state()
         sample_uuid = state.uuid if state else None
-        release = _create_release(task_name, resolved_config, sample_uuid=sample_uuid)
+        extra_values = _metadata_to_extra_values(
+            metadata, resolved_config.chart, resolved_config.values
+        )
+        release = _create_release(
+            task_name,
+            resolved_config,
+            sample_uuid=sample_uuid,
+            extra_values=extra_values,
+        )
         await HelmReleaseManager.get_instance().install(release)
         return reorder_default_first(await get_sandboxes(release, resolved_config))
 
@@ -341,8 +351,91 @@ class K8sError(Exception):
         super().__init__(format_log_message(message, **kwargs))
 
 
+def _key_to_pascal(key: str) -> str:
+    """Convert a metadata key to PascalCase.
+
+    Splits on spaces and camelCase word boundaries, then capitalises each
+    word.  For example::
+
+        "foo bar"     -> "FooBar"
+        "fooBar"      -> "FooBar"
+        "fooBarBaz"   -> "FooBarBaz"
+        "FOO"         -> "Foo"
+    """
+    words: list[str] = []
+    for segment in key.split(" "):
+        # Split camelCase: insert boundary between a lowercase/digit and an
+        # uppercase letter (e.g. "fooBar" -> ["foo", "Bar"]).
+        parts = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", segment).split()
+        words.extend(parts)
+    return "".join(w.capitalize() for w in words if w)
+
+
+def _metadata_to_extra_values(
+    metadata: dict[str, str],
+    chart_path: Path | None,
+    values_path: Path | None,
+) -> dict[str, str]:
+    """Convert sample metadata to Helm extra values.
+
+    Each metadata key is converted to PascalCase (handling spaces, hyphens,
+    underscores, and camelCase boundaries) then prefixed with
+    ``sampleMetadata``.  Only metadata keys that are actually referenced in
+    the chart templates or config file are included.
+
+    Args:
+        metadata: The sample metadata dict.
+        chart_path: Path to the Helm chart directory (uses DEFAULT_CHART if None).
+        values_path: Path to the values/config file (may be None).
+
+    Returns:
+        A dict of Helm ``--set`` key-value pairs.
+    """
+    if not metadata:
+        return {}
+
+    config_text = _read_chart_config_text(chart_path or DEFAULT_CHART, values_path)
+
+    extra_values: dict[str, str] = {}
+    for key, value in metadata.items():
+        if not re.fullmatch(r"[a-zA-Z0-9 ]+", key):
+            log_warn(
+                "Skipping sample metadata key with unsupported characters",
+                key=key,
+            )
+            continue
+        pascal = _key_to_pascal(key)
+        helm_key = f"sampleMetadata{pascal}"
+        if helm_key in config_text:
+            extra_values[helm_key] = value
+    return extra_values
+
+
+def _read_chart_config_text(chart_path: Path, values_path: Path | None) -> str:
+    """Read all chart files and the config file as a single string."""
+    parts: list[str] = []
+
+    for chart_file in chart_path.rglob("*"):
+        if chart_file.is_file():
+            try:
+                parts.append(chart_file.read_text())
+            except (OSError, UnicodeDecodeError):
+                pass
+
+    if values_path and values_path.is_file():
+        try:
+            parts.append(values_path.read_text())
+        except (OSError, UnicodeDecodeError):
+            pass
+
+    return "\n".join(parts)
+
+
 def _create_release(
-    task_name: str, config: _ResolvedConfig, sample_uuid: str | None = None
+    task_name: str,
+    config: _ResolvedConfig,
+    sample_uuid: str | None = None,
+    extra_values: dict[str, str] | None = None,
 ) -> Release:
     values_source = _create_values_source(config)
     return Release(
@@ -352,6 +445,7 @@ def _create_release(
         config.context,
         config.restarted_container_behavior,
         sample_uuid=sample_uuid,
+        extra_values=extra_values,
     )
 
 
