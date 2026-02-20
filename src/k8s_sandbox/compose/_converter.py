@@ -226,9 +226,10 @@ class _ServiceConverter:
             "readinessProbe",
             self._healthcheck_to_readiness_probe,
         )
-        # Memory limits can be specified in either deploy.resources or mem_limit.
+        # Resource limits can be specified in deploy.resources or as shortcuts.
         mem_limit = src.pop("mem_limit", None)
-        result.update(self._convert_deploy(src.pop("deploy", {}), mem_limit))
+        cpus = src.pop("cpus", None)
+        result.update(self._convert_deploy(src.pop("deploy", {}), mem_limit, cpus))
         _transform(
             src, "user", result, "securityContext", self._user_to_security_context
         )
@@ -243,13 +244,14 @@ class _ServiceConverter:
                     f"{self.context}"
                 )
             result["networkIsolated"] = True
-        elif network_mode is not None:
+        elif network_mode is not None and network_mode != "bridge":
             raise ComposeConverterError(
-                f"Unsupported network_mode: '{network_mode}'. Only 'none' is "
-                f"supported. {self.context}"
+                f"Unsupported network_mode: '{network_mode}'. Only 'none' and "
+                f"'bridge' are supported. {self.context}"
             )
         else:
-            # Only process networks if network_mode is not set
+            # Process networks if network_mode is not set or is 'bridge'
+            # ('bridge' is Docker's default and is a no-op in k8s).
             _transform(src, "networks", result, "networks")
 
         if hostname := src.pop("hostname", None):
@@ -375,23 +377,34 @@ class _ServiceConverter:
         )
 
     def _convert_deploy(
-        self, src: dict[str, Any], mem_limit: str | None
+        self,
+        src: dict[str, Any],
+        mem_limit: str | None,
+        cpus: float | str | None = None,
     ) -> dict[str, Any]:
         result: dict[str, Any] = dict()
         if resources := src.pop("resources", None):
             result["resources"] = self._convert_resources(resources)
             self._set_requests_to_limits_if_unset(result["resources"])
             if mem_limit:
-                # Log at warning because this is likely a mistake.
                 logger.warning(
                     f"Ignoring 'mem_limit: {mem_limit}' because deploy.resources is "
                     f"set which takes precedence. {self.context}"
                 )
-        elif mem_limit:
-            result["resources"] = {
-                "limits": {"memory": self._convert_byte_value(mem_limit)}
-            }
-            self._set_requests_to_limits_if_unset(result["resources"])
+            if cpus:
+                logger.warning(
+                    f"Ignoring 'cpus: {cpus}' because deploy.resources is "
+                    f"set which takes precedence. {self.context}"
+                )
+        else:
+            limits: dict[str, Any] = {}
+            if mem_limit:
+                limits["memory"] = self._convert_byte_value(mem_limit)
+            if cpus:
+                limits["cpu"] = cpus
+            if limits:
+                result["resources"] = {"limits": limits}
+                self._set_requests_to_limits_if_unset(result["resources"])
         if src:
             raise ComposeConverterError(
                 f"Unsupported key(s) in 'deploy': {set(src)}. {self.context}"

@@ -724,6 +724,21 @@ services:
     assert result["services"]["my-service"]["networkIsolated"] is True
 
 
+def test_converts_network_mode_bridge(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    network_mode: bridge
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # network_mode: bridge is Docker's default and should be treated as a no-op
+    assert "my-service" in result["services"]
+    assert "networkIsolated" not in result["services"]["my-service"]
+
+
 def test_converter_on_network_mode_none_file() -> None:
     resources = Path(__file__).parent / "resources" / "network_mode_none"
     expected = (resources / "helm-values.yaml").read_text()
