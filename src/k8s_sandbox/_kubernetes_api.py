@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import logging
 import threading
+import typing
 
 from kubernetes import client, config  # type: ignore
-from kubernetes.config.kube_config import Context  # type: ignore
+
+if typing.TYPE_CHECKING:
+    from kubernetes.config.kube_config import Context
 
 logger = logging.getLogger(__name__)
 
