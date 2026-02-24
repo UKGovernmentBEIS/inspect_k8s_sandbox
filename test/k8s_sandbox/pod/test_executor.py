@@ -41,6 +41,22 @@ def test_max_workers_via_env_var(monkeypatch: MonkeyPatch) -> None:
     assert actual._max_workers == 42
 
 
+def test_max_workers_via_parameter(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.delenv("INSPECT_MAX_POD_OPS", raising=False)
+
+    actual = PodOpExecutor.get_instance(max_pod_ops=64)
+
+    assert actual._max_workers == 64
+
+
+def test_parameter_takes_precedence_over_env_var(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("INSPECT_MAX_POD_OPS", "42")
+
+    actual = PodOpExecutor.get_instance(max_pod_ops=64)
+
+    assert actual._max_workers == 64
+
+
 async def test_queue_operation(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setenv("INSPECT_MAX_POD_OPS", "10")
     executor = PodOpExecutor.get_instance()

@@ -42,6 +42,7 @@ from k8s_sandbox._manager import (
     uninstall_unmanaged_release,
 )
 from k8s_sandbox._pod import Pod
+from k8s_sandbox._pod.executor import PodOpExecutor
 from k8s_sandbox._prereqs import validate_prereqs
 from k8s_sandbox.compose._compose import (
     ComposeConfigValuesSource,
@@ -115,6 +116,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         cls, task_name: str, config: SandboxEnvironmentConfigType | None
     ) -> None:
         await validate_prereqs()
+        resolved_config = _validate_and_resolve_k8s_sandbox_config(config)
+        PodOpExecutor.get_instance(max_pod_ops=resolved_config.max_pod_ops)
         # Sample contexts will be copied from the task context, so initialise the
         # manager in the task context so that task_cleanup() accesses a manager which
         # is tracking the releases for all of the task's samples.
@@ -357,6 +360,8 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     default_user: str | None = None
     """The user to run commands as in the container if user is not specified."""
     restarted_container_behavior: Literal["warn", "raise"] = "warn"
+    max_pod_ops: int | None = None
+    """Maximum number of concurrent pod operations. Defaults to cpu_count * 4."""
 
 
 class K8sError(Exception):
@@ -476,6 +481,7 @@ class _ResolvedConfig(BaseModel, frozen=True):
     default_user: str | None
     restarted_container_behavior: Literal["warn", "raise"]
     compose_config: BaseModel | None = None
+    max_pod_ops: int | None
 
 
 def _create_values_source(config: _ResolvedConfig) -> ValuesSource:
@@ -527,6 +533,7 @@ def _validate_and_resolve_k8s_sandbox_config(
             context=None,
             default_user=None,
             restarted_container_behavior="warn",
+            max_pod_ops=None,
         )
     if isinstance(config, K8sSandboxEnvironmentConfig):
         chart = Path(config.chart).resolve() if config.chart else None
@@ -540,6 +547,7 @@ def _validate_and_resolve_k8s_sandbox_config(
             context=config.context,
             default_user=config.default_user,
             restarted_container_behavior=config.restarted_container_behavior,
+            max_pod_ops=config.max_pod_ops,
         )
     if isinstance(config, ComposeConfig):
         return _ResolvedConfig(
@@ -569,6 +577,7 @@ def _validate_and_resolve_k8s_sandbox_config(
             context=None,
             default_user=None,
             restarted_container_behavior="warn",
+            max_pod_ops=None,
         )
     raise TypeError(
         f"Invalid 'SandboxEnvironmentConfigType | None' type: {type(config)}."
