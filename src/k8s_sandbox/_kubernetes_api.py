@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any
 
 from kubernetes import client, config  # type: ignore
+from kubernetes.config.kube_config import Context  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +75,8 @@ class _Config:
 
     def __init__(
         self,
-        contexts: list[dict[str, Any]] | None,
-        current_context: dict[str, Any] | None,
+        contexts: list[Context],
+        current_context: Context,
     ):
         self.contexts = contexts
         self.current_context = current_context
@@ -96,12 +96,12 @@ class _Config:
     def ensure_loaded(cls) -> None:
         cls.get_instance()
 
-    def get_context(self, context_name: str | None) -> dict[str, Any]:
+    def get_context(self, context_name: str | None) -> Context:
         if context_name is None:
             return self._get_current_context()
         return self._get_named_context(context_name)
 
-    def _get_current_context(self) -> dict:
+    def _get_current_context(self) -> Context:
         if self.current_context is None:
             raise ValueError(
                 "Could not get the current context because the current context is not "
@@ -109,7 +109,7 @@ class _Config:
             )
         return self.current_context
 
-    def _get_named_context(self, context_name: str) -> dict:
+    def _get_named_context(self, context_name: str) -> Context:
         if not self.contexts:
             raise ValueError(
                 f"Could not find a context named '{context_name}' in kubeconfig "
