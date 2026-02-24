@@ -13,7 +13,8 @@ T = TypeVar("T")
 
 
 class PodOpExecutor:
-    """A singleton class that manages a thread pool executor for running pod operations.
+    """
+    A singleton class that manages a thread pool executor for running pod operations.
 
     This class's API is asynchronous, but the operations it runs are synchronous. It
     runs operations in a thread pool executor.
