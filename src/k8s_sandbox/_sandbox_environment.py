@@ -116,8 +116,12 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         cls, task_name: str, config: SandboxEnvironmentConfigType | None
     ) -> None:
         await validate_prereqs()
-        resolved_config = _validate_and_resolve_k8s_sandbox_config(config)
-        PodOpExecutor.get_instance(max_pod_ops=resolved_config.max_pod_ops)
+        max_pod_ops = (
+            config.max_pod_ops
+            if isinstance(config, K8sSandboxEnvironmentConfig)
+            else None
+        )
+        PodOpExecutor.get_instance(max_pod_ops=max_pod_ops)
         # Sample contexts will be copied from the task context, so initialise the
         # manager in the task context so that task_cleanup() accesses a manager which
         # is tracking the releases for all of the task's samples.
