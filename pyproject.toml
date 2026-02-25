@@ -7,12 +7,13 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "inspect-ai>=0.3.161",
-  "kubernetes>=31.0.0",
+  "kubernetes>=35.0.0",
   "jsonschema>=4.23.0",
 ]
 
 [project.optional-dependencies]
 dev = [
+  "kubernetes-stubs-elephant-fork>=35.0.0",
   "mypy>=1.9.0",
   "pre-commit>=3.6.2",
   "pytest>=8.1.1",

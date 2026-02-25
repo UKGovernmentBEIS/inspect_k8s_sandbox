@@ -875,6 +875,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "kubernetes-stubs-elephant-fork" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -890,7 +891,8 @@ dev = [
 requires-dist = [
     { name = "inspect-ai", specifier = ">=0.3.161" },
     { name = "jsonschema", specifier = ">=4.23.0" },
-    { name = "kubernetes", specifier = ">=31.0.0" },
+    { name = "kubernetes", specifier = ">=35.0.0" },
+    { name = "kubernetes-stubs-elephant-fork", marker = "extra == 'dev'", specifier = ">=35.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.9.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.6.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.1.1" },
@@ -1011,6 +1013,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2c/8f/85bf51ad4150f64e8c665daf0d9dfe9787ae92005efb9a4d1cba592bd79d/kubernetes-35.0.0.tar.gz", hash = "sha256:3d00d344944239821458b9efd484d6df9f011da367ecb155dadf9513f05f09ee", size = 1094642, upload-time = "2026-01-16T01:05:27.76Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/70/05b685ea2dffcb2adbf3cdcea5d8865b7bc66f67249084cf845012a0ff13/kubernetes-35.0.0-py2.py3-none-any.whl", hash = "sha256:39e2b33b46e5834ef6c3985ebfe2047ab39135d41de51ce7641a7ca5b372a13d", size = 2017602, upload-time = "2026-01-16T01:05:25.991Z" },
+]
+
+[[package]]
+name = "kubernetes-stubs-elephant-fork"
+version = "35.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/60/dc/33909531e075aff7c0184bc685b841ec04f9f22b98fa23d5c4530a1f1fd8/kubernetes_stubs_elephant_fork-35.0.0.tar.gz", hash = "sha256:7210ba17ad844402d745db1a22c03f86e8f1e2077307fa4d60e3ab579efa05cd", size = 148591, upload-time = "2026-01-16T02:25:54.502Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/67/742f356e96f98df5fc0b2152f2af5495c99c846c91c02c2f7e3b7d5a4f15/kubernetes_stubs_elephant_fork-35.0.0-py2.py3-none-any.whl", hash = "sha256:bf87d24c50e3a8ba13481b54ea8f186a05c1e9cb030a430af375010c2c0b5304", size = 454460, upload-time = "2026-01-16T02:25:53.104Z" },
 ]
 
 [[package]]
