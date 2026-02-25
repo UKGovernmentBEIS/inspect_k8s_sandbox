@@ -471,7 +471,7 @@ def _coredns_image_args() -> list[str]:
     image = os.getenv(INSPECT_SANDBOX_COREDNS_IMAGE)
     if image is None:
         return []
-    return [f"--set=corednsImage={image}"]
+    return [f"--set-string=corednsImage={_helm_escape(image)}"]
 
 
 def _kubeconfig_context_args(context_name: str | None) -> list[str]:

@@ -388,7 +388,7 @@ def test_validate_no_null_values_with_multiple_nulls() -> None:
     [
         (
             "public.ecr.aws/eks-distro/coredns/coredns:v1.11.4",
-            "--set=corednsImage=public.ecr.aws/eks-distro/coredns/coredns:v1.11.4",
+            "--set-string=corednsImage=public\\.ecr\\.aws/eks-distro/coredns/coredns:v1\\.11\\.4",
         ),
         (None, None),
     ],
@@ -412,7 +412,7 @@ async def test_coredns_image_env_var(
     if expected_set_arg:
         assert expected_set_arg in args
     else:
-        assert not any(arg.startswith("--set=corednsImage=") for arg in args)
+        assert not any(arg.startswith("--set-string=corednsImage=") for arg in args)
 
 
 def test_static_values_source_with_valid_file() -> None:
