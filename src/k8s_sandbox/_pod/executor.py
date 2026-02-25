@@ -7,7 +7,7 @@ from typing import Callable, TypeVar
 
 from inspect_ai.util import concurrency
 
-from k8s_sandbox._logger import log_trace
+from k8s_sandbox._logger import log_debug, log_trace
 
 T = TypeVar("T")
 
@@ -28,15 +28,22 @@ class PodOpExecutor:
     def __init__(self, max_pod_ops: int | None = None) -> None:
         if max_pod_ops is not None:
             self._max_workers = max_pod_ops
+            source = "max_pod_ops argument"
         else:
             try:
                 self._max_workers = int(os.environ["INSPECT_MAX_POD_OPS"])
+                source = "INSPECT_MAX_POD_OPS env var"
             except (KeyError, ValueError):
                 cpu_count = os.cpu_count() or 1
                 # Pod operations are typically I/O-bound (from the
                 # client's perspective).
                 self._max_workers = cpu_count * 4
-        log_trace("Creating PodOpExecutor.", max_workers=self._max_workers)
+                source = f"default (cpu_count={cpu_count} * 4)"
+        log_debug(
+            "Creating PodOpExecutor.",
+            max_workers=self._max_workers,
+            source=source,
+        )
         self._executor = ThreadPoolExecutor(
             max_workers=self._max_workers, thread_name_prefix="pod-op-executor"
         )
