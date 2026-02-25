@@ -561,6 +561,7 @@ def _validate_and_resolve_k8s_sandbox_config(
             default_user=None,
             restarted_container_behavior="warn",
             compose_config=config,
+            max_pod_ops=None,
         )
     if isinstance(config, str):
         if is_compose_yaml(config) or is_dockerfile(config):
@@ -572,6 +573,7 @@ def _validate_and_resolve_k8s_sandbox_config(
                 default_user=None,
                 restarted_container_behavior="warn",
                 compose_config=compose_config,
+                max_pod_ops=None,
             )
         values = Path(config).resolve()
         validate_values_file(values)
