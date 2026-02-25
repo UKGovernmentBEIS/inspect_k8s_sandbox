@@ -2,7 +2,7 @@
 
 import importlib
 from pathlib import Path
-from typing import Protocol, Self, cast
+from typing import Iterator, Protocol, Self, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -35,12 +35,23 @@ def _reset_config_instance() -> None:
     setattr(Config, "_instance", None)
 
 
+@pytest.fixture(autouse=True)
+def _reset_config() -> Iterator[None]:
+    """Reset the _Config singleton before and after every test.
+
+    Without the post-test reset, the singleton leaks mocked state into
+    downstream integration tests (e.g. test_network_policy) that rely on
+    the real kubeconfig being loaded.
+    """
+    _reset_config_instance()
+    yield
+    _reset_config_instance()
+
+
 class TestConfigLoading:
     """Tests for _Config loading with in-cluster and kubeconfig fallback."""
 
-    def setup_method(self) -> None:
-        """Reset the singleton between tests."""
-        _reset_config_instance()
+    # Singleton reset handled by _reset_config autouse fixture.
 
     @patch("k8s_sandbox._kubernetes_api.config")
     def test_loads_incluster_config_when_available(
@@ -105,8 +116,7 @@ class TestConfigLoading:
 class TestGetDefaultNamespace:
     """Tests for namespace resolution in both modes."""
 
-    def setup_method(self) -> None:
-        _reset_config_instance()
+    # Singleton reset handled by _reset_config autouse fixture.
 
     @patch("k8s_sandbox._kubernetes_api.config")
     def test_incluster_reads_namespace_from_sa_token(
