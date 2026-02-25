@@ -14,12 +14,14 @@ from k8s_sandbox._helm import (
     Release,
     StaticValuesSource,
     ValuesSource,
+    _helm_escape,
     _run_subprocess,
     get_all_release_names,
     uninstall,
     validate_no_null_values,
 )
 from k8s_sandbox._kubernetes_api import get_default_namespace
+from k8s_sandbox._sandbox_environment import _key_to_pascal, _metadata_to_extra_values
 
 
 @pytest.fixture
@@ -165,6 +167,155 @@ async def test_helm_create_namespace(
     assert (
         "--create-namespace" in mock_run.call_args[0][1]
     ) == expected_create_namespace
+
+
+@pytest.mark.parametrize(
+    ("key", "expected"),
+    [
+        ("foo", "Foo"),
+        ("foo bar", "FooBar"),
+        ("fooBar", "FooBar"),
+        ("fooBarBaz", "FooBarBaz"),
+        ("FOO", "Foo"),
+        ("test", "Test"),
+        ("multi word key", "MultiWordKey"),
+        ("camelCaseKey", "CamelCaseKey"),
+    ],
+)
+def test_key_to_pascal(key: str, expected: str) -> None:
+    assert _key_to_pascal(key) == expected
+
+
+@pytest.mark.parametrize(
+    ("metadata", "template_content", "expected"),
+    [
+        ({}, "", {}),
+        (
+            {"test": "5"},
+            "{{ .Values.sampleMetadataTest }}",
+            {"sampleMetadataTest": "5"},
+        ),
+        (
+            {"test name": "abc"},
+            "{{ .Values.sampleMetadataTestName }}",
+            {"sampleMetadataTestName": "abc"},
+        ),
+        # camelCase key is converted to PascalCase.
+        (
+            {"testName": "abc"},
+            "{{ .Values.sampleMetadataTestName }}",
+            {"sampleMetadataTestName": "abc"},
+        ),
+        # Metadata key not referenced in templates is excluded.
+        (
+            {"test": "5"},
+            "no references here",
+            {},
+        ),
+        # Only referenced keys are included.
+        (
+            {"used": "yes", "unused": "no"},
+            "{{ .Values.sampleMetadataUsed }}",
+            {"sampleMetadataUsed": "yes"},
+        ),
+    ],
+)
+def test_metadata_to_extra_values(
+    metadata: dict[str, str],
+    template_content: str,
+    expected: dict[str, str],
+    tmp_path: Path,
+) -> None:
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "test.yaml").write_text(template_content)
+    assert _metadata_to_extra_values(metadata, tmp_path, None) == expected
+
+
+def test_metadata_to_extra_values_checks_values_file(tmp_path: Path) -> None:
+    """Metadata referenced in the values file (but not templates) is included."""
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "test.yaml").write_text("nothing here")
+    values_file = tmp_path / "values.yaml"
+    values_file.write_text("key: {{ .Values.sampleMetadataFoo }}")
+    assert _metadata_to_extra_values({"foo": "bar"}, tmp_path, values_file) == {
+        "sampleMetadataFoo": "bar",
+    }
+
+
+def test_metadata_to_extra_values_checks_subcharts(tmp_path: Path) -> None:
+    """Metadata referenced in a subchart template is included."""
+    subchart_templates = tmp_path / "charts" / "mysubchart" / "templates"
+    subchart_templates.mkdir(parents=True)
+    (subchart_templates / "deployment.yaml").write_text(
+        "{{ .Values.sampleMetadataFoo }}"
+    )
+    assert _metadata_to_extra_values({"foo": "bar"}, tmp_path, None) == {
+        "sampleMetadataFoo": "bar",
+    }
+
+
+async def test_helm_install_extra_values() -> None:
+    extra = {"sampleMetadataTestName": "abc", "sampleMetadataTest": "5"}
+    release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        await release.install()
+
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][1]
+    assert "--set-string=sampleMetadataTestName=abc" in args
+    assert "--set-string=sampleMetadataTest=5" in args
+
+
+async def test_helm_install_no_extra_values() -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        await release.install()
+
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][1]
+    assert not any(arg.startswith("--set-string=sampleMetadata") for arg in args)
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("plain", "plain"),
+        ("has,comma", "has\\,comma"),
+        ("has.dot", "has\\.dot"),
+        ("has=equals", "has\\=equals"),
+        ("back\\slash", "back\\\\slash"),
+        ("a,b.c=d\\e", "a\\,b\\.c\\=d\\\\e"),
+    ],
+)
+def test_helm_escape(value: str, expected: str) -> None:
+    assert _helm_escape(value) == expected
+
+
+async def test_helm_install_extra_values_escaped() -> None:
+    extra = {"sampleMetadataKey": "val,with.special=chars"}
+    release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        await release.install()
+
+    args = mock_run.call_args[0][1]
+    assert "--set-string=sampleMetadataKey=val\\,with\\.special\\=chars" in args
+
+
+def test_metadata_to_extra_values_skips_invalid_keys(tmp_path: Path) -> None:
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "test.yaml").write_text(
+        "{{ .Values.sampleMetadataGood }} {{ .Values.sampleMetadataBad.Key }}"
+    )
+    result = _metadata_to_extra_values(
+        {"good": "ok", "bad.key": "nope", "also=bad": "nope"}, tmp_path, None
+    )
+    assert result == {"sampleMetadataGood": "ok"}
 
 
 def test_validate_no_null_values_with_valid_data() -> None:
