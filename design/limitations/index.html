@@ -1,0 +1,1466 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../tips/configuration/">
+      
+      
+        <link rel="next" href="../complexities/">
+      
+      
+      <link rel="icon" href="../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Limitations - Inspect K8s Sandbox Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Funnel+Sans:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Funnel Sans";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#limitations" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Inspect K8s Sandbox Documentation" class="md-header__button md-logo" aria-label="Inspect K8s Sandbox Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon-white.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Inspect K8s Sandbox Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Limitations
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Inspect K8s Sandbox Documentation" class="md-nav__button md-logo" aria-label="Inspect K8s Sandbox Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon-white.png" alt="logo">
+
+    </a>
+    Inspect K8s Sandbox Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introduction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/what-is-k8s/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    What is K8s?
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/prerequisites/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Prerequisites
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/local-cluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Local Cluster
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/remote-cluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Remote Cluster
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Helm Charts
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Helm Charts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../helm/helm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    What is Helm?
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../helm/built-in-chart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Built-in Helm Chart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../helm/compose-to-helm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Compose to Helm
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../helm/custom-chart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Custom Helm Chart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Security
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Security
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/container-runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Container Runtime
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/network-access/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Network Access
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Tips
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Tips
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/debugging-k8s-sandboxes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Debugging K8s Sandboxes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Troubleshooting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cleanup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/images/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Docker Images
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/hubble/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Hubble (Cilium UI)
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/concurrency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Concurrency
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Advanced Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Design Notes
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Design Notes
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Limitations
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Limitations
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#containers-may-restart" class="md-nav__link">
+    <span class="md-ellipsis">
+      Containers may restart
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#denied-network-requests-behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      Denied network requests behaviour
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reverse-dns-lookups-arent-supported" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reverse DNS lookups aren't supported
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ciliums-security-measures-prevent-some-exploits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cilium's security measures prevent some exploits
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-coredns-sidecar-in-the-built-in-helm-chart-will-use-port-53" class="md-nav__link">
+    <span class="md-ellipsis">
+      The CoreDNS sidecar in the built-in Helm chart will use port 53
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changes-to-etchosts-are-ignored" class="md-nav__link">
+    <span class="md-ellipsis">
+      Changes to /etc/hosts are ignored
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transient-network-or-infrastructure-issues-during-exec-wont-be-retried" class="md-nav__link">
+    <span class="md-ellipsis">
+      Transient network or infrastructure issues during exec() won't be retried
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exec-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      Must run as root to use the user parameter in exec()
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#images-are-not-automatically-built-tagged-or-pushed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Images are not automatically built, tagged or pushed
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timeouterror-wont-be-raised-on-busybox-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      TimeoutError won't be raised on busybox images
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#service-names-must-be-lower-case-alphanumeric" class="md-nav__link">
+    <span class="md-ellipsis">
+      Service names must be lower case alphanumeric
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../complexities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Complexities
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#containers-may-restart" class="md-nav__link">
+    <span class="md-ellipsis">
+      Containers may restart
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#denied-network-requests-behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      Denied network requests behaviour
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reverse-dns-lookups-arent-supported" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reverse DNS lookups aren't supported
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ciliums-security-measures-prevent-some-exploits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cilium's security measures prevent some exploits
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-coredns-sidecar-in-the-built-in-helm-chart-will-use-port-53" class="md-nav__link">
+    <span class="md-ellipsis">
+      The CoreDNS sidecar in the built-in Helm chart will use port 53
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changes-to-etchosts-are-ignored" class="md-nav__link">
+    <span class="md-ellipsis">
+      Changes to /etc/hosts are ignored
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transient-network-or-infrastructure-issues-during-exec-wont-be-retried" class="md-nav__link">
+    <span class="md-ellipsis">
+      Transient network or infrastructure issues during exec() won't be retried
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exec-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      Must run as root to use the user parameter in exec()
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#images-are-not-automatically-built-tagged-or-pushed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Images are not automatically built, tagged or pushed
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timeouterror-wont-be-raised-on-busybox-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      TimeoutError won't be raised on busybox images
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#service-names-must-be-lower-case-alphanumeric" class="md-nav__link">
+    <span class="md-ellipsis">
+      Service names must be lower case alphanumeric
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/edit/main/docs/docs/design/limitations.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h1>
+<h2 id="containers-may-restart">Containers may restart<a class="headerlink" href="#containers-may-restart" title="Permanent link">&para;</a></h2>
+<p>Containers may restart during an eval. This can be for several reasons including:</p>
+<ul>
+<li>The container terminates or crashes (PID 1 exited).</li>
+<li>The Pod is killed by Kubernetes (e.g. Out Of Memory).</li>
+<li>The Pod is rescheduled by Kubernetes (e.g. due to node failure or resource
+  constraints).</li>
+<li>The Pod's <a href="https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/#liveness-probe">liveness
+  probes</a>
+  fail.</li>
+</ul>
+<p>Allowing containers to restart may be desirable:</p>
+<ul>
+<li>You may not want an agent to be able to deliberately crash its container (<code>kill 1</code>) in
+  order to fail an eval if that would result in retrying the eval.</li>
+<li>If an agent causes your support infrastructure (like a web server) to crash or exceed
+  memory limits, you may want it to restart.</li>
+<li>Your containers may depend on a certain startup order e.g. a web server assumes it can
+  connect to a database which hasn't been scheduled or is not ready yet. In which case
+  you would want the web server to enter a crash backoff loop until the database is
+  available.</li>
+</ul>
+<p>Sometimes, containers restarting is not desirable:</p>
+<ul>
+<li>If state is stored in-memory or on a non-persistent volume, it will be lost. E.g. an
+  agent starts a long-running background process in its container or a web server stores
+  session data in-memory.</li>
+</ul>
+<p>If the eval attempts to directly interact with a container whilst it is restarting (e.g.
+an agent tries to <code>exec()</code> a shell command), that sample of the eval will fail with a
+suitable exception.</p>
+<p>You can reduce the likelihood of Pod eviction by setting the resource limits and
+requests of Pods such that you get a <code>Guaranteed</code> <a href="https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/">QoS
+class</a>
+which is the case by default in the <a href="../../helm/built-in-chart/#resource-requests-and-limits">built-in Helm
+chart</a>.</p>
+<p>You can reduce the impact of a container restarting by using persistent volumes.</p>
+<p>The framework will issue a warning if a container restarts during an eval. If you set
+the <code>restarted_container_behaviour</code> parameter to <code>raise</code>, the eval will fail the sample
+if it detects a container restart.</p>
+<details class="question">
+<summary>Why not use Jobs over StatefulSets?</summary>
+<p>Instead of using
+<a href="https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/">StatefulSets</a>
+or
+<a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/">Deployments</a>,
+<a href="https://kubernetes.io/docs/concepts/workloads/controllers/job/">Jobs</a> could be used
+as the workload controller for the underlying Pods. This way, the Pod's
+<code>restartPolicy</code> can be configured as <code>Never</code> and the Job's <code>backoffLimit</code> as <code>0</code> in
+the cases where restarts are not desirable. However, this introduces some
+complexities:</p>
+<ol>
+<li>
+<p>The <code>--wait</code> flag passed to <code>helm install</code> does not wait for Pods belonging to
+Jobs to be in a Running state. We'd have to implement our own waiting mechanism,
+possibly as a Helm post-install hook to avoid coupling the Python code to the Helm
+chart.</p>
+</li>
+<li>
+<p>We either need to ask developers to write their images in a way which won't crash
+if dependencies are not ready, or provide some way of expressing dependencies
+(e.g. a <code>dependsOn</code> field in the Helm chart) and ensuring the Pods are started in
+that order (e.g. with an init container which queries <code>kubectl</code>).</p>
+</li>
+<li>
+<p>The Python code would need a way of periodically checking (e.g. before every
+<code>exec()</code>) if any Pods in the release are in a failed state and won't be restarted,
+then fail that sample of the eval by raising an exception.</p>
+</li>
+</ol>
+<p>What about bare Pods?</p>
+<p>When using bare Pods (i.e. not managed by a workload controller),
+<code>helm install --wait</code> will wait for all Pods to be in a Running state. However, if
+a Pod enters a failed state, it will not be restarted and <code>helm install</code> will wait
+indefinitely.</p>
+</details>
+<h2 id="denied-network-requests-behaviour">Denied network requests behaviour<a class="headerlink" href="#denied-network-requests-behaviour" title="Permanent link">&para;</a></h2>
+<p>When Cilium denies a network request, it simply drops the packet.</p>
+<p>If you're using the built-in Helm chart, <a href="../../security/network-access/#dns-exfiltration">DNS lookups are
+restricted</a> in addition to direct
+network requests.</p>
+<p>Therefore, when an agent tries to access a blocked resource via a client like <code>wget</code> or
+<code>curl</code>, one of two things will happen:</p>
+<ol>
+<li>The DNS lookup (if relevant) will time out. In this case, the client may error with
+  "temporary failure in DNS resolution" or similar. If the client is not configured with
+  a timeout (e.g. <code>host -r</code>), it may hang indefinitely until the tool call times out
+  (see below).</li>
+<li>If there is no DNS lookup required, the client will hang waiting for a response until
+  its timeout (if it has one) is reached.</li>
+</ol>
+<p>We recommend that any tools you define or use pass the <code>timeout</code> parameter (e.g.
+<code>timeout=60</code>) in case the model runs a command that doesn't have a built-in timeout.</p>
+<h2 id="reverse-dns-lookups-arent-supported">Reverse DNS lookups aren't supported<a class="headerlink" href="#reverse-dns-lookups-arent-supported" title="Permanent link">&para;</a></h2>
+<p>When using the built-in Helm chart, reverse DNS lookups (i.e. looking up the hostname
+from an IP) are not supported. This is because DNS lookups are restricted to prevent
+<a href="../../security/network-access/#dns-exfiltration">DNS exfiltration</a>.</p>
+<details class="question">
+<summary>Why is ping slow?</summary>
+<p>Executing commands like</p>
+<div class="highlight"><pre><span></span><code>ping<span class="w"> </span>victim
+</code></pre></div>
+<p>where <code>victim</code> is another service's name will result in a reverse DNS lookup in
+addition to the forward DNS lookup. The reverse lookup will fail (which may add ~5s
+to the execution time of the command) but the forward lookup and subsequent command
+will succeed. <code>ping -n</code> disables reverse DNS lookups. Commands such as <code>curl</code> and
+<code>wget</code> do not perform reverse DNS lookups.</p>
+</details>
+<h2 id="ciliums-security-measures-prevent-some-exploits">Cilium's security measures prevent some exploits<a class="headerlink" href="#ciliums-security-measures-prevent-some-exploits" title="Permanent link">&para;</a></h2>
+<p>Cilium imposes some sensible network security measures, described on their
+<a href="https://cilium.io/blog/2020/06/29/cilium-kubernetes-cni-vulnerability/">blog</a>. Amongst
+them is packet spoofing prevention. Any evals (e.g. Cyber misuse) which depend on the
+agent spoofing packets may not work.</p>
+<h2 id="the-coredns-sidecar-in-the-built-in-helm-chart-will-use-port-53">The CoreDNS sidecar in the built-in Helm chart will use port 53<a class="headerlink" href="#the-coredns-sidecar-in-the-built-in-helm-chart-will-use-port-53" title="Permanent link">&para;</a></h2>
+<p>Evals which require the use of port 53 (e.g. a Cyber eval with a vulnerable DNS server)
+will not work with the built-in Helm chart as each Pod has a CoreDNS sidecar which uses
+port 53.</p>
+<h2 id="changes-to-etchosts-are-ignored">Changes to <code>/etc/hosts</code> are ignored<a class="headerlink" href="#changes-to-etchosts-are-ignored" title="Permanent link">&para;</a></h2>
+<p>The kubelet manages the <code>/etc/hosts</code> file. Any changes manually made to this file e.g.
+in the Dockerfile:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;127.0.0.1 my-domain.com&quot;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>/etc/hosts
+</code></pre></div>
+<p>may be lost. If your aim is to make certain hostnames resolve to one of your services,
+use the <code>additionalDnsRecords</code> field in the <a href="../../helm/built-in-chart/#dns">built-in Helm
+chart</a>. Or, if using a custom Helm chart, consider using
+the <code>hostAliases</code> field in the Pod spec
+(<a href="https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/">docs</a>).</p>
+<h2 id="transient-network-or-infrastructure-issues-during-exec-wont-be-retried">Transient network or infrastructure issues during <code>exec()</code> won't be retried<a class="headerlink" href="#transient-network-or-infrastructure-issues-during-exec-wont-be-retried" title="Permanent link">&para;</a></h2>
+<p>The following exceptions have occasionally been observed during calls to <code>exec()</code>,
+<code>read_file()</code> or <code>write_file()</code>:</p>
+<ul>
+<li><code>WebSocketBadStatusException: pod does not exist</code> (re-raised as <code>ApiException</code>)</li>
+<li><code>WebSocketBadStatusException: container not found</code> (re-raised as <code>ApiException</code>)</li>
+<li><code>WebSocketBadStatusException: Handshake status 500 Internal Server Error</code> (re-raised
+  as <code>ApiException</code>)</li>
+<li><code>WebSocketConnectionClosedException: Connection to remote host was lost</code></li>
+<li><code>SSLEOFError: EOF occurred in violation of protocol</code></li>
+</ul>
+<p>These are likely due to transient network or infrastructure issues. For example, when a
+node becomes unhealthy and the Pod is rescheduled.</p>
+<p>The <code>k8s_sandbox</code> package will not retry the remote command execution when any of these
+(or other) exceptions are raised because it cannot assume that the command is idempotent
+and that the command did not at least start executing. This will result in that sample
+of the eval failing.</p>
+<h2 id="exec-user">Must run as root to use the <code>user</code> parameter in <code>exec()</code><a class="headerlink" href="#exec-user" title="Permanent link">&para;</a></h2>
+<p>In Kubernetes, a container runs as a single user. The user can be specified in the
+<code>values.yaml</code> file. For example, if using the <a href="../../helm/built-in-chart/">built-in Helm
+chart</a>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my-service</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">alpine</span>
+<span class="w">    </span><span class="nt">securityContext</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">runAsUser</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
+<span class="w">      </span><span class="nt">runAsGroup</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span>
+</code></pre></div>
+<p>Therefore, executing commands as a different user to the one which the container was
+started with is <strong>not recommended</strong>. Generally, specifying users in tool definitions can
+result in undesirable coupling between your tools and sandbox.</p>
+<p>That said, if you need to run commands as different users, the <code>user</code> parameter to
+<code>exec()</code> is supported. However, you must run the container as root and ensure that
+<code>runuser</code> is installed in the container.</p>
+<h2 id="images-are-not-automatically-built-tagged-or-pushed">Images are not automatically built, tagged or pushed<a class="headerlink" href="#images-are-not-automatically-built-tagged-or-pushed" title="Permanent link">&para;</a></h2>
+<p>The process of building, tagging and pushing images is left to the user or other tooling
+as it is highly dependent on your environment and practices.</p>
+<h2 id="timeouterror-wont-be-raised-on-busybox-images"><code>TimeoutError</code> won't be raised on busybox images<a class="headerlink" href="#timeouterror-wont-be-raised-on-busybox-images" title="Permanent link">&para;</a></h2>
+<p>The <code>timeout</code> binary on busybox images behaves differently, causing a 128 + 15 (SIGTERM)
+= 143 exit code rather than a 124 exit code. This will result in a suitable <code>ExecResult</code>
+being returned rather than raising a <code>TimeoutError</code>.</p>
+<h2 id="service-names-must-be-lower-case-alphanumeric">Service names must be lower case alphanumeric<a class="headerlink" href="#service-names-must-be-lower-case-alphanumeric" title="Permanent link">&para;</a></h2>
+<p>In the built-in Helm chart, service names (i.e. the keys in the <code>services</code> dict) must
+match the case-sensitive regex <code>^[a-z0-9]([-a-z0-9]*[a-z0-9])?$</code> e.g. <code>my-name</code> or
+<code>123-abc</code>. The Helm chart will fail to install if this is not the case.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.action.edit"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
