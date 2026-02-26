@@ -22,6 +22,7 @@ DEFAULT_TIMEOUT = 600  # 10 minutes
 MAX_INSTALL_ATTEMPTS = 3
 INSTALL_RETRY_DELAY_SECONDS = 5
 INSPECT_HELM_TIMEOUT = "INSPECT_HELM_TIMEOUT"
+INSPECT_SANDBOX_COREDNS_IMAGE = "INSPECT_SANDBOX_COREDNS_IMAGE"
 HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
     "https://k8s-sandbox.aisi.org.uk/tips/troubleshooting/"
     "#helm-context-deadline-exceeded"
@@ -265,6 +266,7 @@ class Release:
                 if self.sample_uuid
                 else []
             )
+            + _coredns_image_args()
             + [
                 f"--set-string={_helm_escape(k)}={_helm_escape(v)}"
                 for k, v in self._extra_values.items()
@@ -469,6 +471,14 @@ def _get_environ_int(name: str, default: int) -> int:
         return default
     except ValueError as e:
         raise ValueError(f"{name} must be an int: '{os.environ[name]}'.") from e
+
+
+def _coredns_image_args() -> list[str]:
+    """Formats --set argument for coredns image override if configured via env var."""
+    image = os.getenv(INSPECT_SANDBOX_COREDNS_IMAGE)
+    if image is None:
+        return []
+    return [f"--set-string=corednsImage={_helm_escape(image)}"]
 
 
 def _kubeconfig_context_args(context_name: str | None) -> list[str]:
