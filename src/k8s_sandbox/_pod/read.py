@@ -4,7 +4,7 @@ from typing import IO, Generator
 
 from inspect_ai.util import OutputLimitExceededError
 from inspect_ai.util import SandboxEnvironmentLimits as limits
-from kubernetes.stream.ws_client import WSClient  # type: ignore
+from kubernetes.stream.ws_client import WSClient  # type: ignore[import-untyped]
 
 from k8s_sandbox._pod.buffer import LimitedBuffer
 from k8s_sandbox._pod.error import PodError

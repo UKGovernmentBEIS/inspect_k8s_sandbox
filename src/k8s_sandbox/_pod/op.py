@@ -65,7 +65,7 @@ class PodOperation(ABC):
     ) -> Generator[WSClient, None, None]:
         client = k8s_client(self._pod.context_name)
         # Note: ApiException is intentionally not caught; it should fail the eval.
-        ws_client: WSClient = stream(  # type: ignore[assignment]
+        ws_client: WSClient = stream(
             client.connect_get_namespaced_pod_exec,
             name=self._pod.name,
             namespace=self._pod.namespace,
@@ -125,7 +125,6 @@ class PodOperation(ABC):
         )
         assert pod.metadata is not None
         assert pod.status is not None
-        assert pod.status.container_statuses is not None
         if pod.metadata.uid != self._pod.uid:
             message = (
                 f"Pod UID mismatch: expected {self._pod.uid}, got {pod.metadata.uid} "
@@ -135,6 +134,7 @@ class PodOperation(ABC):
                 logger.warning(message)
             else:
                 raise RuntimeError(message)
+        assert pod.status.container_statuses is not None
         status = next(
             (
                 container_status
@@ -154,11 +154,9 @@ class PodOperation(ABC):
             else:
                 raise RuntimeError(message)
         if status.restart_count > self._pod.initial_restart_count:
-            last_reason = (
-                status.last_state.terminated.reason
-                if status.last_state and status.last_state.terminated
-                else "unknown"
-            )
+            last_state = status.last_state
+            terminated = last_state.terminated if last_state else None
+            last_reason = terminated.reason if terminated else "unknown"
             message = (
                 f"Container '{status.name}' in pod '{pod.metadata.name}' has restarted "
                 f"{status.restart_count} time(s) (last reason: {last_reason}); "
