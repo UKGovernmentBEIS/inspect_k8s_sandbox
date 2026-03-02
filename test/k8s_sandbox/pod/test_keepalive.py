@@ -2,7 +2,7 @@ import threading
 from time import sleep
 from unittest.mock import Mock, patch
 
-from kubernetes.stream.ws_client import RESIZE_CHANNEL
+from kubernetes.stream.ws_client import RESIZE_CHANNEL  # type: ignore
 
 from k8s_sandbox._pod.op import _send_keepalive
 

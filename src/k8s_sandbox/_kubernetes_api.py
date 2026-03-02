@@ -7,7 +7,7 @@ import typing
 from kubernetes import client, config  # type: ignore
 
 if typing.TYPE_CHECKING:
-    from kubernetes.config.kube_config import Context
+    from kubernetes.config.kube_config import Context  # type: ignore
 
 logger = logging.getLogger(__name__)
 
