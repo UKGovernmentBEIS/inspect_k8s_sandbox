@@ -181,6 +181,9 @@ async def test_helm_create_namespace(
         ("test", "Test"),
         ("multi word key", "MultiWordKey"),
         ("camelCaseKey", "CamelCaseKey"),
+        ("eval_name", "EvalName"),
+        ("eval-name", "EvalName"),
+        ("my_camelCase_key", "MyCamelCaseKey"),
     ],
 )
 def test_key_to_pascal(key: str, expected: str) -> None:
@@ -218,6 +221,18 @@ def test_key_to_pascal(key: str, expected: str) -> None:
             {"used": "yes", "unused": "no"},
             "{{ .Values.sampleMetadataUsed }}",
             {"sampleMetadataUsed": "yes"},
+        ),
+        # Underscores are treated as word separators.
+        (
+            {"eval_name": "foo"},
+            "{{ .Values.sampleMetadataEvalName }}",
+            {"sampleMetadataEvalName": "foo"},
+        ),
+        # Hyphens are treated as word separators.
+        (
+            {"eval-name": "bar"},
+            "{{ .Values.sampleMetadataEvalName }}",
+            {"sampleMetadataEvalName": "bar"},
         ),
     ],
 )
@@ -317,6 +332,19 @@ def test_metadata_to_extra_values_skips_invalid_keys(tmp_path: Path) -> None:
         {"good": "ok", "bad.key": "nope", "also=bad": "nope"}, tmp_path, None
     )
     assert result == {"sampleMetadataGood": "ok"}
+
+
+def test_metadata_to_extra_values_skips_clashing_keys(tmp_path: Path) -> None:
+    """Later keys that map to the same Helm key as an earlier key are skipped."""
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "test.yaml").write_text("{{ .Values.sampleMetadataEvalName }}")
+
+    result = _metadata_to_extra_values(
+        {"eval_name": "first", "eval-name": "second"}, tmp_path, None
+    )
+
+    assert result == {"sampleMetadataEvalName": "first"}
 
 
 def test_validate_no_null_values_with_valid_data() -> None:
