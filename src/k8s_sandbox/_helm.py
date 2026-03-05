@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
 import re
@@ -31,6 +32,25 @@ HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
 logger = logging.getLogger(__name__)
 
 
+def _get_helm_major_version() -> int | None:
+    """Return the major version of the installed Helm CLI, or None on failure."""
+    import subprocess as sp
+
+    try:
+        result = sp.run(
+            ["helm", "version", "--short"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        version_str = result.stdout.strip().lstrip("v")
+        return int(version_str.split(".")[0])
+    except Exception:
+        logger.warning("Failed to determine Helm version; assuming Helm 3.x.")
+        return None
+
+
+@functools.lru_cache(maxsize=1)
 def _get_wait_flag() -> str:
     """Return the appropriate --wait flag for the installed Helm version.
 
@@ -43,21 +63,9 @@ def _get_wait_flag() -> str:
     See: https://helm.sh/community/hips/hip-0022/
     See: https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/status/core.go
     """
-    import subprocess as sp
-
-    try:
-        result = sp.run(
-            ["helm", "version", "--short"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        version_str = result.stdout.strip().lstrip("v")
-        major = int(version_str.split(".")[0])
-        if major >= 4:
-            return "--wait=legacy"
-    except Exception:
-        pass
+    major = _get_helm_major_version()
+    if major is not None and major >= 4:
+        return "--wait=legacy"
     return "--wait"
 
 
