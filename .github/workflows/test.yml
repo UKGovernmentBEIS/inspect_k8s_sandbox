@@ -14,13 +14,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm install -g @devcontainers/cli@v0.83.2
-      - run: devcontainer up --workspace-folder=.
-      - name: Install Helm ${{ matrix.helm-version }}
+      - name: Create devcontainer override for Helm ${{ matrix.helm-version }}
         run: |
-          devcontainer exec --workspace-folder=. bash -c "
-            curl -fsSL https://get.helm.sh/helm-v${{ matrix.helm-version }}-linux-amd64.tar.gz | tar xz &&
-            sudo mv linux-amd64/helm /usr/local/bin/helm &&
-            rm -rf linux-amd64 &&
-            helm version --short
-          "
-      - run: devcontainer exec --workspace-folder=. uv run pytest -rA -x --color=yes
+          echo '{"features":{"ghcr.io/devcontainers/features/kubectl-helm-minikube:1":{"helm":"${{ matrix.helm-version }}"}}}' \
+            > ${{ runner.temp }}/devcontainer-override.json
+      - run: devcontainer up --workspace-folder=. --override-config ${{ runner.temp }}/devcontainer-override.json
+      - run: devcontainer exec --workspace-folder=. --override-config ${{ runner.temp }}/devcontainer-override.json helm version --short
+      - run: devcontainer exec --workspace-folder=. --override-config ${{ runner.temp }}/devcontainer-override.json uv run pytest -rA -x --color=yes
