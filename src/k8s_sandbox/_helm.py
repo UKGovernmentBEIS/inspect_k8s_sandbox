@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
 import re
@@ -29,6 +30,43 @@ HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _get_helm_major_version() -> int | None:
+    """Return the major version of the installed Helm CLI, or None on failure."""
+    import subprocess as sp
+
+    try:
+        result = sp.run(
+            ["helm", "version", "--short"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        version_str = result.stdout.strip().lstrip("v")
+        return int(version_str.split(".")[0])
+    except Exception:
+        logger.warning("Failed to determine Helm version; assuming Helm 3.x.")
+        return None
+
+
+@functools.lru_cache(maxsize=1)
+def _get_wait_flag() -> str:
+    """Return the appropriate --wait flag for the installed Helm version.
+
+    Helm 4.x uses kstatus for readiness checks (HIP-0022), which treats pods
+    that cannot be scheduled within 15 seconds as permanently failed. This
+    breaks workloads that depend on cluster autoscaling or resource queuing.
+    Using --wait=legacy on Helm 4.x reverts to the Helm 3 wait behavior which
+    correctly respects --timeout.
+
+    See: https://helm.sh/community/hips/hip-0022/
+    See: https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/status/core.go
+    """
+    major = _get_helm_major_version()
+    if major is not None and major >= 4:
+        return "--wait=legacy"
+    return "--wait"
 
 
 class _ResourceQuotaModifiedError(Exception):
@@ -253,7 +291,7 @@ class Release:
                     in {"1", "true", "yes", "y"}
                     else []
                 ),
-                "--wait",
+                _get_wait_flag(),
                 f"--timeout={_get_timeout()}s",
                 # Annotation do not have strict length reqs. Quoting/escaping
                 # handled by asyncio.create_subprocess_exec.
@@ -337,7 +375,7 @@ async def uninstall(
                     release_name,
                     "--namespace",
                     namespace,
-                    "--wait",
+                    _get_wait_flag(),
                     "--timeout",
                     f"{_get_timeout()}s",
                     # A helm uninstall failure with "release not found" implies that the
