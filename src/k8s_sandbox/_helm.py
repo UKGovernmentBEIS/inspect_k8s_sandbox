@@ -6,7 +6,7 @@ import logging
 import os
 import re
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, AsyncContextManager, Generator, Literal, NoReturn, Protocol
 
@@ -15,12 +15,18 @@ from kubernetes.client.exceptions import ApiException
 from shortuuid import uuid
 
 from k8s_sandbox._kubernetes_api import get_default_namespace, k8s_client
-from k8s_sandbox._logger import format_log_message, inspect_trace_action, log_trace
+from k8s_sandbox._logger import (
+    format_log_message,
+    inspect_trace_action,
+    log_debug,
+    log_trace,
+)
 from k8s_sandbox._pod import Pod
 
 DEFAULT_CHART = Path(__file__).parent / "resources" / "helm" / "agent-env"
 DEFAULT_TIMEOUT = 600  # 10 minutes
 MAX_INSTALL_ATTEMPTS = 3
+_SCHEDULING_POLL_INTERVAL = 10  # seconds between k8s event polls during helm install
 INSTALL_RETRY_DELAY_SECONDS = 5
 INSPECT_HELM_TIMEOUT = "INSPECT_HELM_TIMEOUT"
 INSPECT_SANDBOX_COREDNS_IMAGE = "INSPECT_SANDBOX_COREDNS_IMAGE"
@@ -278,43 +284,93 @@ class Release:
         # `install` for the first attempt.
         subcommand = ["upgrade", "--install"] if upgrade else ["install"]
         values_args = ["--values", str(values)] if values else []
-        result = await _run_subprocess(
-            "helm",
-            subcommand
-            + [
-                self.release_name,
-                str(self._chart_path),
-                f"--namespace={self._namespace}",
-                *(
-                    ["--create-namespace"]
-                    if os.getenv("INSPECT_HELM_CREATE_NAMESPACE", "false").lower()
-                    in {"1", "true", "yes", "y"}
+        watcher = asyncio.ensure_future(self._watch_for_scheduling_events())
+        try:
+            result = await _run_subprocess(
+                "helm",
+                subcommand
+                + [
+                    self.release_name,
+                    str(self._chart_path),
+                    f"--namespace={self._namespace}",
+                    *(
+                        ["--create-namespace"]
+                        if os.getenv("INSPECT_HELM_CREATE_NAMESPACE", "false").lower()
+                        in {"1", "true", "yes", "y"}
+                        else []
+                    ),
+                    _get_wait_flag(),
+                    f"--timeout={_get_timeout()}s",
+                    # Annotation do not have strict length reqs. Quoting/escaping
+                    # handled by asyncio.create_subprocess_exec.
+                    f"--set=annotations.inspectTaskName={self.task_name}",
+                    # Include a label to identify releases created by Inspect.
+                    "--labels=inspectSandbox=true",
+                ]
+                + (
+                    [f"--set=labels.inspectSampleUUID={self.sample_uuid}"]
+                    if self.sample_uuid
                     else []
-                ),
-                _get_wait_flag(),
-                f"--timeout={_get_timeout()}s",
-                # Annotation do not have strict length reqs. Quoting/escaping
-                # handled by asyncio.create_subprocess_exec.
-                f"--set=annotations.inspectTaskName={self.task_name}",
-                # Include a label to identify releases created by Inspect.
-                "--labels=inspectSandbox=true",
-            ]
-            + (
-                [f"--set=labels.inspectSampleUUID={self.sample_uuid}"]
-                if self.sample_uuid
-                else []
+                )
+                + _coredns_image_args()
+                + [
+                    f"--set-string={_helm_escape(k)}={_helm_escape(v)}"
+                    for k, v in self._extra_values.items()
+                ]
+                + _kubeconfig_context_args(self._context_name)
+                + values_args,
+                capture_output=True,
             )
-            + _coredns_image_args()
-            + [
-                f"--set-string={_helm_escape(k)}={_helm_escape(v)}"
-                for k, v in self._extra_values.items()
-            ]
-            + _kubeconfig_context_args(self._context_name)
-            + values_args,
-            capture_output=True,
-        )
+        finally:
+            watcher.cancel()
+            with suppress(asyncio.CancelledError):
+                await watcher
         if not result.success:
             self._raise_install_error(result)
+
+    async def _watch_for_scheduling_events(self) -> None:
+        """Poll for FailedScheduling events and log once if GPU provisioning is needed.
+
+        Runs concurrently with the helm install subprocess. Degrades silently if the
+        k8s API is unavailable — it must never cause an install to fail.
+        """
+        loop = asyncio.get_running_loop()
+        try:
+            k8s = k8s_client(self._context_name)
+        except Exception as e:
+            log_debug(
+                "Could not initialise k8s client for scheduling watcher.", error=e
+            )
+            return
+        logged = False
+        try:
+            while not logged:
+                await asyncio.sleep(_SCHEDULING_POLL_INTERVAL)
+                try:
+                    events = await loop.run_in_executor(
+                        None,
+                        lambda: k8s.list_namespaced_event(
+                            self._namespace,
+                            field_selector="reason=FailedScheduling",
+                        ),
+                    )
+                except Exception as e:
+                    log_debug("Failed to poll scheduling events.", error=e)
+                    return
+                for event in events.items:
+                    obj = event.involved_object
+                    if obj.name and self.release_name in obj.name:
+                        msg = event.message or ""
+                        if "nvidia.com/gpu" in msg:
+                            logger.warning(
+                                f"K8s: GPU node not yet available for Helm release "
+                                f"'{self.release_name}'. Karpenter is provisioning a "
+                                f"new node — this typically takes 4–8 minutes."
+                            )
+                            logged = True
+                            break
+        except asyncio.CancelledError:
+            pass
 
     def _raise_install_error(self, result: ExecResult[str]) -> NoReturn:
         # When concurrent helm operations are modifying the same resource quota, the
