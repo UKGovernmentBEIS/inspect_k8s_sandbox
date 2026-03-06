@@ -303,6 +303,54 @@ services:
 If overriding them, do consider the implications on the QoS class of the Pods and
 cluster utilization.
 
+## Node placement: tolerations and node selectors
+
+By default, Kubernetes will schedule sandbox pods on any available node. To target
+specific nodes — for example, GPU nodes that carry a
+[taint](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+— you can set `tolerations` and `nodeSelector` per service.
+
+**`tolerations`** allow pods to be scheduled onto nodes that would otherwise repel them
+(nodes with matching taints). **`nodeSelector`** ensures pods are scheduled only onto
+nodes with matching labels, rather than relying on the scheduler's default placement.
+
+```yaml
+services:
+  default:
+    image: ubuntu:24.04
+    command: ["tail", "-f", "/dev/null"]
+    tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    nodeSelector:
+      nvidia.com/gpu: "present"
+```
+
+!!! note
+    Tolerations are necessary but not sufficient to land on a tainted node — they
+    remove the repulsion, but the scheduler won't prefer those nodes unless you also
+    set a `nodeSelector` or node affinity. Use both together when targeting dedicated
+    GPU or specialty nodes.
+
+For nodes with multiple taints, include a toleration for each:
+
+```yaml
+services:
+  default:
+    image: ubuntu:24.04
+    command: ["tail", "-f", "/dev/null"]
+    tolerations:
+      - key: "example.org/reserved"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+    nodeSelector:
+      example.org/reserved: "my-team"
+```
+
 ## Volumes
 
 The built-in Helm chart aims to provide a simple way to define and mount volumes in your
