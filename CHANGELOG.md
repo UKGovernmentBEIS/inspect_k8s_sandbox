@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Use `--wait=legacy` with Helm 4.x to avoid kstatus treating unscheduled pods as permanently failed
+- Log a warning when no GPU node is available during `helm install`, so users know the wait is expected rather than a hang
 
 ## 2026-03-04 0.4.0
 
