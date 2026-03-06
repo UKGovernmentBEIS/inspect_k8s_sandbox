@@ -5,8 +5,8 @@ import threading
 from pathlib import Path
 from typing import TypedDict, cast
 
-from kubernetes import client, config
-from kubernetes.config import (
+from kubernetes import client, config  # type: ignore
+from kubernetes.config import (  # type: ignore
     ConfigException,
 )
 

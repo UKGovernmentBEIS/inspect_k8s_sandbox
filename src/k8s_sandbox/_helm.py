@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, AsyncContextManager, Generator, Literal, NoReturn, Protocol
 
 from inspect_ai.util import ExecResult, concurrency
-from kubernetes.client.exceptions import ApiException
+from kubernetes.client.exceptions import ApiException  # type: ignore
 from shortuuid import uuid
 
 from k8s_sandbox._kubernetes_api import get_default_namespace, k8s_client
