@@ -284,7 +284,7 @@ class Release:
         # `install` for the first attempt.
         subcommand = ["upgrade", "--install"] if upgrade else ["install"]
         values_args = ["--values", str(values)] if values else []
-        watcher = asyncio.ensure_future(self._watch_for_scheduling_events())
+        watcher = asyncio.create_task(self._watch_for_scheduling_events())
         try:
             result = await _run_subprocess(
                 "helm",
@@ -323,7 +323,10 @@ class Release:
             )
         finally:
             watcher.cancel()
-            with suppress(asyncio.CancelledError):
+            # Watcher is best-effort; never let its exceptions mask Helm output.
+            # CancelledError is also suppressed explicitly: it's a BaseException in
+            # Python 3.8+, so suppress(Exception) alone won't catch it.
+            with suppress(Exception, asyncio.CancelledError):
                 await watcher
         if not result.success:
             self._raise_install_error(result)
@@ -363,9 +366,9 @@ class Release:
                         msg = event.message or ""
                         if "nvidia.com/gpu" in msg:
                             logger.warning(
-                                f"K8s: GPU node not yet available for Helm release "
-                                f"'{self.release_name}'. Karpenter is provisioning a "
-                                f"new node — this typically takes 4–8 minutes."
+                                f"K8s: No GPU node is currently available for Helm "
+                                f"release '{self.release_name}'. A new GPU node may be "
+                                f"provisioning — this can take several minutes."
                             )
                             logged = True
                             break
