@@ -19,7 +19,6 @@ from k8s_sandbox._helm import (
     _get_wait_flag,
     _helm_escape,
     _run_subprocess,
-    _validate_helm_labels,
     get_all_release_names,
     uninstall,
     validate_no_null_values,
@@ -644,36 +643,6 @@ async def test_helm_labels_env_var(
     mock_run.assert_called_once()
     args = mock_run.call_args[0][1]
     assert expected_labels_arg in args
-
-
-@pytest.mark.parametrize(
-    "labels",
-    [
-        "valid=label",
-        "multi=val,second=label",
-        "with-hyphens=and.dots",
-        "prefix.example.com/name=value",
-        "empty-value=",
-    ],
-)
-def test_validate_helm_labels_valid(labels: str) -> None:
-    _validate_helm_labels(labels)  # should not raise
-
-
-@pytest.mark.parametrize(
-    "labels",
-    [
-        "no-equals-sign",
-        "bad key=value",
-        "key=bad value",
-        "key=toolongvalue" + "x" * 63,
-        "key=val!ue",
-        "key=val,broken",
-    ],
-)
-def test_validate_helm_labels_invalid(labels: str) -> None:
-    with pytest.raises(ValueError):
-        _validate_helm_labels(labels)
 
 
 @pytest.mark.req_k8s

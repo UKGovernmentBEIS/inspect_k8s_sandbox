@@ -582,47 +582,8 @@ def _labels_arg() -> str:
     labels = "inspectSandbox=true"
     extra = os.getenv("INSPECT_HELM_LABELS")
     if extra:
-        _validate_helm_labels(extra)
         labels += "," + extra
     return f"--labels={labels}"
-
-
-# Patterns for Kubernetes label keys and values.
-# Ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
-# Key: optional DNS prefix (max 253 chars) + "/" + name, or just name (max 63 chars).
-_K8S_LABEL_KEY_RE = re.compile(
-    r"([a-zA-Z0-9]([a-zA-Z0-9._-]{0,251}[a-zA-Z0-9])?/)?"
-    r"[a-zA-Z0-9]([a-zA-Z0-9._-]{0,61}[a-zA-Z0-9])?"
-)
-# Value: alphanumeric with [-_.] in the middle (max 63 chars), or empty.
-_K8S_LABEL_VALUE_RE = re.compile(r"[a-zA-Z0-9]([a-zA-Z0-9._-]{0,61}[a-zA-Z0-9])?|")
-
-
-def _validate_helm_labels(labels: str) -> None:
-    """Validate that a Helm --labels string contains well-formed key=value pairs.
-
-    Raises ValueError if any pair is malformed or contains characters outside
-    the Kubernetes label character set.
-    """
-    for pair in labels.split(","):
-        if "=" not in pair:
-            raise ValueError(
-                f"INSPECT_HELM_LABELS: expected 'key=value' pairs separated by "
-                f"commas, got: {pair!r}"
-            )
-        key, _, value = pair.partition("=")
-        if not _K8S_LABEL_KEY_RE.fullmatch(key):
-            raise ValueError(
-                f"INSPECT_HELM_LABELS: invalid label key {key!r}. Keys must be "
-                f"alphanumeric with [-_.] in the middle (max 63 chars), with an "
-                f"optional DNS prefix (max 253 chars) separated by '/'."
-            )
-        if not _K8S_LABEL_VALUE_RE.fullmatch(value):
-            raise ValueError(
-                f"INSPECT_HELM_LABELS: invalid label value {value!r} for key "
-                f"{key!r}. Values must be alphanumeric with [-_.] in the middle "
-                f"(max 63 chars), or empty."
-            )
 
 
 def _coredns_image_args() -> list[str]:
