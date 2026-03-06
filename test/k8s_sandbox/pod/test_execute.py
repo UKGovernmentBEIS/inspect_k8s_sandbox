@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
+from k8s_sandbox._pod.error import GetReturncodeError
 from k8s_sandbox._pod.execute import ExecuteOperation
 
 
@@ -15,7 +16,7 @@ def _make_ws_client(
 
     Simulates the real WSClient behavior where, after the sentinel triggers close(),
     the next call to ws_client.update() (called internally by peek_stdout/peek_stderr)
-    raises BrokenPipeError or ConnectionResetError because the underlying socket is gone.
+    raises BrokenPipeError or ConnectionResetError because the socket is gone.
 
     In the real code, peek_stdout()/peek_stderr() call update(timeout=0) internally,
     which can raise these errors. We simulate this by having update() raise after
@@ -99,7 +100,7 @@ class TestBrokenPipeAfterSentinel:
     """
 
     def test_broken_pipe_after_sentinel_with_timeout_raises_timeout_error(self) -> None:
-        """Sentinel rc=124 with timeout set: should raise TimeoutError, not BrokenPipeError."""
+        """Sentinel rc=124 with timeout: raise TimeoutError."""
         ws = _make_ws_client(
             stdout_frames=[b"output<completed-sentinel-value-124>"],
             error_after_close=BrokenPipeError("socket closed"),
@@ -110,7 +111,7 @@ class TestBrokenPipeAfterSentinel:
             executor._handle_shell_output(ws, user=None, timeout=30)
 
     def test_broken_pipe_after_sentinel_without_timeout_returns_result(self) -> None:
-        """Sentinel rc=0, no timeout: should return ExecResult, not raise BrokenPipeError."""
+        """Sentinel rc=0, no timeout: return ExecResult."""
         ws = _make_ws_client(
             stdout_frames=[b"hello<completed-sentinel-value-0>"],
             error_after_close=BrokenPipeError("socket closed"),
@@ -120,6 +121,7 @@ class TestBrokenPipeAfterSentinel:
         result = executor._handle_shell_output(ws, user=None, timeout=None)
         assert result.returncode == 0
         assert result.stdout == "hello"
+        assert result.stderr == ""
 
     def test_connection_reset_after_sentinel_returns_result(self) -> None:
         """Same as above but with ConnectionResetError."""
@@ -132,19 +134,37 @@ class TestBrokenPipeAfterSentinel:
         result = executor._handle_shell_output(ws, user=None, timeout=None)
         assert result.returncode == 0
         assert result.stdout == "hello"
+        assert result.stderr == ""
 
 
 class TestBrokenPipeWithoutSentinel:
     """Tests for BrokenPipeError before the sentinel is received."""
 
-    def test_broken_pipe_without_sentinel_raises(self) -> None:
-        """BrokenPipe before sentinel → should propagate as-is."""
+    def _make_dead_ws(
+        self, error: Exception,
+    ) -> MagicMock:
         ws = MagicMock(spec=WSClient)
-        ws.is_open.return_value = True
+        # is_open: True (enters loop), False (for get_returncode)
+        ws.is_open.side_effect = [True, False]
         ws.peek_stderr.return_value = b""
-        # update() raises immediately — no frames delivered, no sentinel
-        ws.update.side_effect = BrokenPipeError("socket closed")
+        ws.update.side_effect = error
+        ws.read_channel.return_value = ""
+        return ws
+
+    def test_broken_pipe_without_sentinel_raises(self) -> None:
+        """BrokenPipe before sentinel → break → get_returncode fails."""
+        ws = self._make_dead_ws(BrokenPipeError("socket closed"))
 
         executor = ExecuteOperation(MagicMock())
-        with pytest.raises(BrokenPipeError):
+        with pytest.raises(GetReturncodeError):
+            executor._handle_shell_output(ws, user=None, timeout=None)
+
+    def test_connection_reset_without_sentinel_raises(self) -> None:
+        """ConnectionReset before sentinel → same behavior."""
+        ws = self._make_dead_ws(
+            ConnectionResetError("connection reset"),
+        )
+
+        executor = ExecuteOperation(MagicMock())
+        with pytest.raises(GetReturncodeError):
             executor._handle_shell_output(ws, user=None, timeout=None)
