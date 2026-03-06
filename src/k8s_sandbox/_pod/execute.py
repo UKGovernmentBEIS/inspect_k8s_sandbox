@@ -135,8 +135,8 @@ class ExecuteOperation(PodOperation):
                         frame = ws_client.read_stdout()
                         # Assumption: The sentinel value is written to
                         # stdout in a single frame, not split across frames.
-                        filtered, returncode = (
-                            self._filter_sentinel_and_returncode(frame)
+                        filtered, returncode = self._filter_sentinel_and_returncode(
+                            frame
                         )
                         stdout.append(filtered)
                         if returncode is not None:

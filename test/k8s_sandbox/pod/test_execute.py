@@ -141,7 +141,8 @@ class TestBrokenPipeWithoutSentinel:
     """Tests for BrokenPipeError before the sentinel is received."""
 
     def _make_dead_ws(
-        self, error: Exception,
+        self,
+        error: Exception,
     ) -> MagicMock:
         ws = MagicMock(spec=WSClient)
         # is_open: True (enters loop), False (for get_returncode)
