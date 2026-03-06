@@ -1,8 +1,20 @@
 # Changelog
 
-## Unreleased to PyPI
+## Unreleased
 
-- Support initcontainers
+- Use `--wait=legacy` with Helm 4.x to avoid kstatus treating unscheduled pods as permanently failed
+
+## 2026-03-04 0.4.0
+
+- `INSPECT_SANDBOX_COREDNS_IMAGE` override
+- Detect in-cluster Kubernetes config automatically, falling back to kubeconfig
+- Add `max_pod_ops` to `K8sSandboxEnvironmentConfig`
+- Declare K8sSandboxEnvironment as Docker-compatible (supports `inspect-harbor` and Docker Compose/Dockerfile config files)
+- Pass sample metadata as Helm `--set-string` values
+- Extend compose-to-helm converter: support `allow_entities`, ignore `networks[].internal`, default `networks[].driver` to `bridge`
+- Add `inspectSampleUUID` label to pods
+- Network policy: also allow node-local DNS cache
+- Support initContainers
 
 ## 2025-12-09 0.3.0
 

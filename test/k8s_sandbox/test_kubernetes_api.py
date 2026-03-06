@@ -70,7 +70,7 @@ class TestConfigLoading:
     @patch("k8s_sandbox._kubernetes_api.config")
     def test_falls_back_to_kubeconfig(self, mock_config: MagicMock) -> None:
         """When not in a pod, falls back to load_kube_config()."""
-        from kubernetes.config import ConfigException
+        from kubernetes.config import ConfigException  # type: ignore
 
         typed_config = cast(_ConfigMock, mock_config)
         typed_config.load_incluster_config.side_effect = ConfigException(

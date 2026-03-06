@@ -15,6 +15,8 @@ from k8s_sandbox._helm import (
     Release,
     StaticValuesSource,
     ValuesSource,
+    _get_helm_major_version,
+    _get_wait_flag,
     _helm_escape,
     _run_subprocess,
     get_all_release_names,
@@ -181,6 +183,9 @@ async def test_helm_create_namespace(
         ("test", "Test"),
         ("multi word key", "MultiWordKey"),
         ("camelCaseKey", "CamelCaseKey"),
+        ("eval_name", "EvalName"),
+        ("eval-name", "EvalName"),
+        ("my_camelCase_key", "MyCamelCaseKey"),
     ],
 )
 def test_key_to_pascal(key: str, expected: str) -> None:
@@ -218,6 +223,18 @@ def test_key_to_pascal(key: str, expected: str) -> None:
             {"used": "yes", "unused": "no"},
             "{{ .Values.sampleMetadataUsed }}",
             {"sampleMetadataUsed": "yes"},
+        ),
+        # Underscores are treated as word separators.
+        (
+            {"eval_name": "foo"},
+            "{{ .Values.sampleMetadataEvalName }}",
+            {"sampleMetadataEvalName": "foo"},
+        ),
+        # Hyphens are treated as word separators.
+        (
+            {"eval-name": "bar"},
+            "{{ .Values.sampleMetadataEvalName }}",
+            {"sampleMetadataEvalName": "bar"},
         ),
     ],
 )
@@ -317,6 +334,19 @@ def test_metadata_to_extra_values_skips_invalid_keys(tmp_path: Path) -> None:
         {"good": "ok", "bad.key": "nope", "also=bad": "nope"}, tmp_path, None
     )
     assert result == {"sampleMetadataGood": "ok"}
+
+
+def test_metadata_to_extra_values_skips_clashing_keys(tmp_path: Path) -> None:
+    """Later keys that map to the same Helm key as an earlier key are skipped."""
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "test.yaml").write_text("{{ .Values.sampleMetadataEvalName }}")
+
+    result = _metadata_to_extra_values(
+        {"eval_name": "first", "eval-name": "second"}, tmp_path, None
+    )
+
+    assert result == {"sampleMetadataEvalName": "first"}
 
 
 def test_validate_no_null_values_with_valid_data() -> None:
@@ -447,3 +477,60 @@ def test_static_values_source_with_empty_file() -> None:
             assert values_file == temp_path
     finally:
         temp_path.unlink()
+
+
+@pytest.fixture(autouse=False)
+def _clear_wait_flag_cache() -> None:
+    """Clear the lru_cache on _get_wait_flag before each test that uses it."""
+    _get_wait_flag.cache_clear()
+
+
+@pytest.mark.parametrize(
+    ("version_output", "expected_major"),
+    [
+        ("v3.16.1+gad4f7f0", 3),
+        ("v4.0.0", 4),
+        ("v4.1.2+gabcdef0", 4),
+    ],
+)
+def test_get_helm_major_version(version_output: str, expected_major: int) -> None:
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.stdout = version_output
+        assert _get_helm_major_version() == expected_major
+
+
+def test_get_helm_major_version_returns_none_on_error() -> None:
+    with patch("subprocess.run", side_effect=FileNotFoundError):
+        assert _get_helm_major_version() is None
+
+
+@pytest.mark.usefixtures("_clear_wait_flag_cache")
+def test_get_wait_flag_helm3() -> None:
+    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=3):
+        assert _get_wait_flag() == "--wait"
+
+
+@pytest.mark.usefixtures("_clear_wait_flag_cache")
+def test_get_wait_flag_helm4() -> None:
+    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=4):
+        assert _get_wait_flag() == "--wait=legacy"
+
+
+@pytest.mark.usefixtures("_clear_wait_flag_cache")
+def test_get_wait_flag_helm5() -> None:
+    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=5):
+        assert _get_wait_flag() == "--wait=legacy"
+
+
+@pytest.mark.usefixtures("_clear_wait_flag_cache")
+def test_get_wait_flag_returns_wait_on_failure() -> None:
+    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=None):
+        assert _get_wait_flag() == "--wait"
+
+
+@pytest.mark.usefixtures("_clear_wait_flag_cache")
+def test_get_wait_flag_is_cached() -> None:
+    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=3) as mock:
+        _get_wait_flag()
+        _get_wait_flag()
+        mock.assert_called_once()

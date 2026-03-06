@@ -381,16 +381,18 @@ class K8sError(Exception):
 def _key_to_pascal(key: str) -> str:
     """Convert a metadata key to PascalCase.
 
-    Splits on spaces and camelCase word boundaries, then capitalises each
-    word.  For example::
+    Splits on spaces, hyphens, underscores, and camelCase word boundaries,
+    then capitalises each word.  For example::
 
         "foo bar"     -> "FooBar"
         "fooBar"      -> "FooBar"
         "fooBarBaz"   -> "FooBarBaz"
         "FOO"         -> "Foo"
+        "eval_name"   -> "EvalName"
+        "eval-name"   -> "EvalName"
     """
     words: list[str] = []
-    for segment in key.split(" "):
+    for segment in re.split(r"[ _\-]+", key):
         # Split camelCase: insert boundary between a lowercase/digit and an
         # uppercase letter (e.g. "fooBar" -> ["foo", "Bar"]).
         parts = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", segment).split()
@@ -425,7 +427,7 @@ def _metadata_to_extra_values(
 
     extra_values: dict[str, str] = {}
     for key, value in metadata.items():
-        if not re.fullmatch(r"[a-zA-Z0-9 ]+", key):
+        if not re.fullmatch(r"[a-zA-Z0-9 _\-]+", key):
             log_warn(
                 "Skipping sample metadata key with unsupported characters",
                 key=key,
@@ -433,6 +435,13 @@ def _metadata_to_extra_values(
             continue
         pascal = _key_to_pascal(key)
         helm_key = f"sampleMetadata{pascal}"
+        if helm_key in extra_values:
+            log_warn(
+                "Skipping sample metadata key that clashes with an existing key",
+                key=key,
+                clashes_with=helm_key,
+            )
+            continue
         if helm_key in config_text:
             extra_values[helm_key] = value
     return extra_values

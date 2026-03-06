@@ -6,8 +6,21 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        helm-version: ["3.20.0", "4.1.0"]
+    name: pytest (helm ${{ matrix.helm-version }})
     steps:
       - uses: actions/checkout@v4
       - run: npm install -g @devcontainers/cli@v0.83.2
       - run: devcontainer up --workspace-folder=.
+      - name: Install Helm ${{ matrix.helm-version }}
+        run: |
+          devcontainer exec --workspace-folder=. bash -c "
+            curl -fsSL https://get.helm.sh/helm-v${{ matrix.helm-version }}-linux-amd64.tar.gz | tar xz &&
+            sudo mv linux-amd64/helm /usr/local/bin/helm &&
+            rm -rf linux-amd64 &&
+            helm version --short
+          "
       - run: devcontainer exec --workspace-folder=. uv run pytest -rA -x --color=yes
