@@ -143,6 +143,7 @@ class ExecuteOperation(PodOperation):
                             ws_client.close()
                     self._verify_output_limit(stdout, stderr)
                 except (BrokenPipeError, ConnectionResetError):
+                    ws_client.close()
                     break
             # returncode won't be set if setup commands e.g. `cd` failed.
             if returncode is None:

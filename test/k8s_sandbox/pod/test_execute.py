@@ -145,8 +145,14 @@ class TestBrokenPipeWithoutSentinel:
         error: Exception,
     ) -> MagicMock:
         ws = MagicMock(spec=WSClient)
-        # is_open: True (enters loop), False (for get_returncode)
-        ws.is_open.side_effect = [True, False]
+        closed = False
+
+        def close_ws(**kwargs: object) -> None:
+            nonlocal closed
+            closed = True
+
+        ws.close.side_effect = close_ws
+        ws.is_open.side_effect = lambda: not closed
         ws.peek_stderr.return_value = b""
         ws.update.side_effect = error
         ws.read_channel.return_value = ""
