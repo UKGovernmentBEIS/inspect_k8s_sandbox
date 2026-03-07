@@ -122,23 +122,29 @@ class ExecuteOperation(PodOperation):
             stderr = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
             returncode: int | None = None
             while ws_client.is_open():
-                # `timeout=None` means `update` will block indefinitely until there is
-                # data to read from the socket.
-                ws_client.update(timeout=None)
-                # Note: `peek_*()` and `read_*()` may call `update(timeout=0)`.
-                if ws_client.peek_stderr():
-                    stderr.append(ws_client.read_stderr())
-                # Handle stdout _after_ stderr to guarantee that, if buffered, the
-                # sentinel is actioned before the blocking `ws_client.update(None)`.
-                if ws_client.peek_stdout():
-                    frame = ws_client.read_stdout()
-                    # Assumption: The sentinel value is written to stdout in a single
-                    # frame and not split by other writes to stdout.
-                    filtered, returncode = self._filter_sentinel_and_returncode(frame)
-                    stdout.append(filtered)
-                    if returncode is not None:
-                        ws_client.close()
-                self._verify_output_limit(stdout, stderr)
+                try:
+                    # `timeout=None` means `update` will block
+                    # indefinitely until there is data to read.
+                    ws_client.update(timeout=None)
+                    # Note: `peek_*()` and `read_*()` may call `update(timeout=0)`.
+                    if ws_client.peek_stderr():
+                        stderr.append(ws_client.read_stderr())
+                    # Handle stdout _after_ stderr to guarantee that, if buffered, the
+                    # sentinel is actioned before the blocking `ws_client.update(None)`.
+                    if ws_client.peek_stdout():
+                        frame = ws_client.read_stdout()
+                        # Assumption: The sentinel value is written to
+                        # stdout in a single frame, not split across frames.
+                        filtered, returncode = self._filter_sentinel_and_returncode(
+                            frame
+                        )
+                        stdout.append(filtered)
+                        if returncode is not None:
+                            ws_client.close()
+                    self._verify_output_limit(stdout, stderr)
+                except (BrokenPipeError, ConnectionResetError):
+                    ws_client.close()
+                    break
             # returncode won't be set if setup commands e.g. `cd` failed.
             if returncode is None:
                 returncode = get_returncode(ws_client)
