@@ -2,7 +2,7 @@ import asyncio
 import logging
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -534,3 +534,81 @@ def test_get_wait_flag_is_cached() -> None:
         _get_wait_flag()
         _get_wait_flag()
         mock.assert_called_once()
+
+
+def _make_gpu_scheduling_event(release_name: str) -> MagicMock:
+    event = MagicMock()
+    event.involved_object.name = f"agent-env-{release_name}-default-abc123"
+    event.message = "0/3 nodes available: 3 Insufficient nvidia.com/gpu."
+    return event
+
+
+async def test_watcher_logs_on_gpu_scheduling_event(
+    caplog: LogCaptureFixture,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+    mock_k8s = MagicMock()
+    mock_k8s.list_namespaced_event.return_value.items = [
+        _make_gpu_scheduling_event(release.release_name)
+    ]
+
+    with patch("k8s_sandbox._helm.k8s_client", return_value=mock_k8s):
+        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
+            with caplog.at_level(logging.WARNING):
+                await release._watch_for_scheduling_events()
+
+    assert "GPU node" in caplog.text
+    mock_k8s.list_namespaced_event.assert_called_once()
+
+
+async def test_watcher_does_not_log_for_non_gpu_event(
+    caplog: LogCaptureFixture,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+    event = MagicMock()
+    event.involved_object.name = f"agent-env-{release.release_name}-default-abc123"
+    event.message = "0/3 nodes available: 3 Insufficient memory."
+    mock_k8s = MagicMock()
+    # Return a non-GPU event, then raise to terminate the polling loop.
+    mock_k8s.list_namespaced_event.side_effect = [
+        MagicMock(items=[event]),
+        Exception("terminate"),
+    ]
+
+    with patch("k8s_sandbox._helm.k8s_client", return_value=mock_k8s):
+        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
+            with caplog.at_level(logging.WARNING):
+                await release._watch_for_scheduling_events()
+
+    assert "GPU node" not in caplog.text
+
+
+async def test_watcher_does_not_log_for_different_release(
+    caplog: LogCaptureFixture,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+    mock_k8s = MagicMock()
+    mock_k8s.list_namespaced_event.side_effect = [
+        MagicMock(items=[_make_gpu_scheduling_event("differentrelease")]),
+        Exception("terminate"),
+    ]
+
+    with patch("k8s_sandbox._helm.k8s_client", return_value=mock_k8s):
+        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
+            with caplog.at_level(logging.WARNING):
+                await release._watch_for_scheduling_events()
+
+    assert "GPU node" not in caplog.text
+
+
+async def test_watcher_exits_gracefully_on_k8s_client_error(
+    caplog: LogCaptureFixture,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with patch("k8s_sandbox._helm.k8s_client", side_effect=Exception("no kubeconfig")):
+        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
+            with caplog.at_level(logging.WARNING):
+                await release._watch_for_scheduling_events()  # must not raise
+
+    assert "GPU node" not in caplog.text
