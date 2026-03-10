@@ -1,4 +1,5 @@
 import base64
+import logging
 import re
 import shlex
 from contextlib import contextmanager
@@ -12,6 +13,8 @@ from k8s_sandbox._pod.buffer import LimitedBuffer
 from k8s_sandbox._pod.error import ExecutableNotFoundError
 from k8s_sandbox._pod.get_returncode import get_returncode
 from k8s_sandbox._pod.op import PodOperation
+
+logger = logging.getLogger(__name__)
 
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
@@ -142,7 +145,8 @@ class ExecuteOperation(PodOperation):
                         if returncode is not None:
                             ws_client.close()
                     self._verify_output_limit(stdout, stderr)
-                except (BrokenPipeError, ConnectionResetError):
+                except (BrokenPipeError, ConnectionResetError) as e:
+                    logger.warning(f"WebSocket connection lost during exec: {e}")
                     ws_client.close()
                     break
             # returncode won't be set if setup commands e.g. `cd` failed.
