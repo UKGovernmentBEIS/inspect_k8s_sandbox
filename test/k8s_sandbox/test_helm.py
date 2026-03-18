@@ -647,6 +647,27 @@ async def test_helm_labels_env_var(
 
 @pytest.mark.req_k8s
 @pytest.mark.parametrize(
+    "env_value",
+    [
+        "no-equals-sign",
+        "x=y, a=b",
+    ],
+)
+async def test_helm_labels_misformatted(
+    monkeypatch: pytest.MonkeyPatch,
+    env_value: str,
+) -> None:
+    """Misformatted INSPECT_HELM_LABELS are passed through to Helm, which
+    fails with a Kubernetes label validation error."""
+    monkeypatch.setenv("INSPECT_HELM_LABELS", env_value)
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with pytest.raises(RuntimeError, match="Invalid value"):
+        await release.install()
+
+
+@pytest.mark.req_k8s
+@pytest.mark.parametrize(
     ("env_value", "expected_labels"),
     [
         ("ci-branch=test-label", {"ci-branch": "test-label"}),
