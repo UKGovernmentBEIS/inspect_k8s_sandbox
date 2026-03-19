@@ -669,31 +669,15 @@ async def test_helm_labels_misformatted(
         await release.install()
 
 
-@pytest.mark.req_k8s
 async def test_helm_labels_cannot_override_inspect_sandbox(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """User-specified labels must not override the inspectSandbox=true label.
-
-    Helm accepts duplicate keys and last-write-wins, so without validation
-    a user could set inspectSandbox=false and break cleanup tooling.
-    """
+    """User-specified labels must not set the inspectSandbox label."""
     monkeypatch.setenv(INSPECT_HELM_LABELS, "inspectSandbox=false")
-    namespace = get_default_namespace(context_name=None)
     release = Release(__file__, None, ValuesSource.none(), None)
-    try:
+
+    with pytest.raises(ValueError, match="inspectSandbox"):
         await release.install()
-        secrets = k8s_client(None).list_namespaced_secret(
-            namespace,
-            label_selector=f"owner=helm,name={release.release_name}",
-        )
-        assert len(secrets.items) == 1
-        metadata = secrets.items[0].metadata
-        assert metadata is not None
-        assert metadata.labels is not None
-        assert metadata.labels["inspectSandbox"] == "true"
-    finally:
-        await release.uninstall(quiet=True)
 
 
 @pytest.mark.req_k8s

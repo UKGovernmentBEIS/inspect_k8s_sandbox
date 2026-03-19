@@ -582,6 +582,13 @@ def _labels_arg() -> str:
     """
     extra = os.getenv(INSPECT_HELM_LABELS)
     if extra:
+        for item in extra.split(","):
+            key = item.split("=", maxsplit=1)[0]
+            if key == "inspectSandbox":
+                raise ValueError(
+                    f"{INSPECT_HELM_LABELS} must not set the 'inspectSandbox' label "
+                    f"(it is always set to 'true' automatically)."
+                )
         labels = extra + ",inspectSandbox=true"
     else:
         labels = "inspectSandbox=true"
