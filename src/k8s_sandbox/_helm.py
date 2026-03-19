@@ -29,6 +29,7 @@ MAX_INSTALL_ATTEMPTS = 3
 _SCHEDULING_POLL_INTERVAL = 10  # seconds between k8s event polls during helm install
 INSTALL_RETRY_DELAY_SECONDS = 5
 INSPECT_HELM_TIMEOUT = "INSPECT_HELM_TIMEOUT"
+INSPECT_HELM_LABELS = "INSPECT_HELM_LABELS"
 INSPECT_SANDBOX_COREDNS_IMAGE = "INSPECT_SANDBOX_COREDNS_IMAGE"
 HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
     "https://k8s-sandbox.aisi.org.uk/tips/troubleshooting/"
@@ -580,7 +581,7 @@ def _labels_arg() -> str:
     ``helm list --selector key=value``.
     """
     labels = "inspectSandbox=true"
-    extra = os.getenv("INSPECT_HELM_LABELS")
+    extra = os.getenv(INSPECT_HELM_LABELS)
     if extra:
         labels += "," + extra
     return f"--labels={labels}"

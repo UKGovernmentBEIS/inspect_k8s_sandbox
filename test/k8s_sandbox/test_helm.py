@@ -10,6 +10,7 @@ from inspect_ai.util import ExecResult
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._helm import (
+    INSPECT_HELM_LABELS,
     INSPECT_HELM_TIMEOUT,
     INSPECT_SANDBOX_COREDNS_IMAGE,
     Release,
@@ -632,9 +633,9 @@ async def test_helm_labels_env_var(
     expected_labels_arg: str,
 ) -> None:
     if env_value is None:
-        monkeypatch.delenv("INSPECT_HELM_LABELS", raising=False)
+        monkeypatch.delenv(INSPECT_HELM_LABELS, raising=False)
     else:
-        monkeypatch.setenv("INSPECT_HELM_LABELS", env_value)
+        monkeypatch.setenv(INSPECT_HELM_LABELS, env_value)
 
     release = Release(__file__, None, ValuesSource.none(), None)
     with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
@@ -657,9 +658,11 @@ async def test_helm_labels_misformatted(
     monkeypatch: pytest.MonkeyPatch,
     env_value: str,
 ) -> None:
-    """Misformatted INSPECT_HELM_LABELS are passed through to Helm, which
-    fails with a Kubernetes label validation error."""
-    monkeypatch.setenv("INSPECT_HELM_LABELS", env_value)
+    """Misformatted INSPECT_HELM_LABELS are passed through to Helm.
+
+    Helm fails with a Kubernetes label validation error.
+    """
+    monkeypatch.setenv(INSPECT_HELM_LABELS, env_value)
     release = Release(__file__, None, ValuesSource.none(), None)
 
     with pytest.raises(RuntimeError, match="Invalid value"):
@@ -683,7 +686,7 @@ async def test_helm_labels_appear_on_release_secret(
     expected_labels: dict[str, str],
 ) -> None:
     """Verify that INSPECT_HELM_LABELS labels are stored on the Helm release secret."""
-    monkeypatch.setenv("INSPECT_HELM_LABELS", env_value)
+    monkeypatch.setenv(INSPECT_HELM_LABELS, env_value)
     namespace = get_default_namespace(context_name=None)
     release = Release(__file__, None, ValuesSource.none(), None)
     try:
