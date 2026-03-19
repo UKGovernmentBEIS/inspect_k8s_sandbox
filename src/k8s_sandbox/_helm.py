@@ -580,10 +580,11 @@ def _labels_arg() -> str:
     These are added as Helm release labels, queryable via
     ``helm list --selector key=value``.
     """
-    labels = "inspectSandbox=true"
     extra = os.getenv(INSPECT_HELM_LABELS)
     if extra:
-        labels += "," + extra
+        labels = extra + ",inspectSandbox=true"
+    else:
+        labels = "inspectSandbox=true"
     return f"--labels={labels}"
 
 
