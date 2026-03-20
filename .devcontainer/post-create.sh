@@ -1,6 +1,15 @@
 # Exit immediately if a command exits with a non-zero status, and print each command.
 set -e -x
 
+CLUSTER=true
+for arg in "$@"; do
+  case "$arg" in
+    --no-cluster) CLUSTER=false ;;
+  esac
+done
+
+if [ "$CLUSTER" = true ]; then
+
 echo "Setting up Minikube..."
 minikube delete
 # github actions runner has 2 cpus, 8G memory
@@ -41,6 +50,8 @@ echo "Installing Cilium..."
 cilium install
 cilium status --wait
 cilium hubble enable --ui
+
+fi # CLUSTER
 
 echo "Installing uv environment..."
 uv sync --extra dev
