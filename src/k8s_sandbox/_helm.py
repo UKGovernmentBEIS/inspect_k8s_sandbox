@@ -29,6 +29,7 @@ MAX_INSTALL_ATTEMPTS = 3
 _SCHEDULING_POLL_INTERVAL = 10  # seconds between k8s event polls during helm install
 INSTALL_RETRY_DELAY_SECONDS = 5
 INSPECT_HELM_TIMEOUT = "INSPECT_HELM_TIMEOUT"
+INSPECT_HELM_LABELS = "INSPECT_HELM_LABELS"
 INSPECT_SANDBOX_COREDNS_IMAGE = "INSPECT_SANDBOX_COREDNS_IMAGE"
 HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
     "https://k8s-sandbox.aisi.org.uk/tips/troubleshooting/"
@@ -305,7 +306,7 @@ class Release:
                     # handled by asyncio.create_subprocess_exec.
                     f"--set=annotations.inspectTaskName={self.task_name}",
                     # Include a label to identify releases created by Inspect.
-                    "--labels=inspectSandbox=true",
+                    _labels_arg(),
                 ]
                 + (
                     [f"--set=labels.inspectSampleUUID={self.sample_uuid}"]
@@ -568,6 +569,30 @@ def _get_environ_int(name: str, default: int) -> int:
         return default
     except ValueError as e:
         raise ValueError(f"{name} must be an int: '{os.environ[name]}'.") from e
+
+
+def _labels_arg() -> str:
+    """Formats a single --labels argument combining default and user-specified labels.
+
+    Combines the default inspectSandbox=true label with any extra labels from the
+    INSPECT_HELM_LABELS environment variable. INSPECT_HELM_LABELS should be a
+    comma-separated list of key=value pairs, e.g. ``ci-branch=my-feature,run-id=42``.
+    These are added as Helm release labels, queryable via
+    ``helm list --selector key=value``.
+    """
+    extra = os.getenv(INSPECT_HELM_LABELS)
+    if extra:
+        for item in extra.split(","):
+            key = item.split("=", maxsplit=1)[0]
+            if key == "inspectSandbox":
+                raise ValueError(
+                    f"{INSPECT_HELM_LABELS} must not set the 'inspectSandbox' label "
+                    f"(it is always set to 'true' automatically)."
+                )
+        labels = extra + ",inspectSandbox=true"
+    else:
+        labels = "inspectSandbox=true"
+    return f"--labels={labels}"
 
 
 def _coredns_image_args() -> list[str]:

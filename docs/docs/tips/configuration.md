@@ -11,6 +11,18 @@ export INSPECT_HELM_TIMEOUT=21600   # 6 hours
 ```
 
 
+## Helm release labels { #helm-release-labels }
+
+You can add custom labels to Helm releases by setting the `INSPECT_HELM_LABELS`
+environment variable to a comma-separated list of `key=value` pairs. These are added as
+Helm release labels alongside the default `inspectSandbox=true` label, and are queryable
+via `helm list --selector`.
+
+```sh
+export INSPECT_HELM_LABELS="ci-branch=my-feature,run-id=42"
+```
+
+
 ## Targeting specific or multiple kubeconfig contexts
 
 Your

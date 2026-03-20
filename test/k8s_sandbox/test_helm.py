@@ -10,6 +10,7 @@ from inspect_ai.util import ExecResult
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._helm import (
+    INSPECT_HELM_LABELS,
     INSPECT_HELM_TIMEOUT,
     INSPECT_SANDBOX_COREDNS_IMAGE,
     Release,
@@ -23,7 +24,7 @@ from k8s_sandbox._helm import (
     uninstall,
     validate_no_null_values,
 )
-from k8s_sandbox._kubernetes_api import get_default_namespace
+from k8s_sandbox._kubernetes_api import get_default_namespace, k8s_client
 from k8s_sandbox._sandbox_environment import _key_to_pascal, _metadata_to_extra_values
 
 
@@ -612,3 +613,105 @@ async def test_watcher_exits_gracefully_on_k8s_client_error(
                 await release._watch_for_scheduling_events()  # must not raise
 
     assert "GPU node" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("env_value", "expected_labels_arg"),
+    [
+        ("ci-branch=my-feature", "--labels=ci-branch=my-feature,inspectSandbox=true"),
+        (
+            "ci-branch=my-feature,run-id=42",
+            "--labels=ci-branch=my-feature,run-id=42,inspectSandbox=true",
+        ),
+        (None, "--labels=inspectSandbox=true"),
+        ("", "--labels=inspectSandbox=true"),
+    ],
+)
+async def test_helm_labels_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+    env_value: str | None,
+    expected_labels_arg: str,
+) -> None:
+    if env_value is None:
+        monkeypatch.delenv(INSPECT_HELM_LABELS, raising=False)
+    else:
+        monkeypatch.setenv(INSPECT_HELM_LABELS, env_value)
+
+    release = Release(__file__, None, ValuesSource.none(), None)
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        await release.install()
+
+    mock_run.assert_called_once()
+    args = mock_run.call_args[0][1]
+    assert expected_labels_arg in args
+
+
+@pytest.mark.req_k8s
+@pytest.mark.parametrize(
+    "env_value",
+    [
+        "no-equals-sign",
+        "x=y, a=b",
+    ],
+)
+async def test_helm_labels_misformatted(
+    monkeypatch: pytest.MonkeyPatch,
+    env_value: str,
+) -> None:
+    """Misformatted INSPECT_HELM_LABELS are passed through to Helm.
+
+    Helm fails with a Kubernetes label validation error.
+    """
+    monkeypatch.setenv(INSPECT_HELM_LABELS, env_value)
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with pytest.raises(RuntimeError, match="Invalid value"):
+        await release.install()
+
+
+async def test_helm_labels_cannot_override_inspect_sandbox(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """User-specified labels must not set the inspectSandbox label."""
+    monkeypatch.setenv(INSPECT_HELM_LABELS, "inspectSandbox=false")
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with pytest.raises(ValueError, match="inspectSandbox"):
+        await release.install()
+
+
+@pytest.mark.req_k8s
+@pytest.mark.parametrize(
+    ("env_value", "expected_labels"),
+    [
+        ("ci-branch=test-label", {"ci-branch": "test-label"}),
+        (
+            "ci-branch=test-label,run-id=42",
+            {"ci-branch": "test-label", "run-id": "42"},
+        ),
+    ],
+)
+async def test_helm_labels_appear_on_release_secret(
+    monkeypatch: pytest.MonkeyPatch,
+    env_value: str,
+    expected_labels: dict[str, str],
+) -> None:
+    """Verify that INSPECT_HELM_LABELS labels are stored on the Helm release secret."""
+    monkeypatch.setenv(INSPECT_HELM_LABELS, env_value)
+    namespace = get_default_namespace(context_name=None)
+    release = Release(__file__, None, ValuesSource.none(), None)
+    try:
+        await release.install()
+        secrets = k8s_client(None).list_namespaced_secret(
+            namespace,
+            label_selector=f"owner=helm,name={release.release_name}",
+        )
+        assert len(secrets.items) == 1
+        secret_labels = secrets.items[0].metadata
+        assert secret_labels is not None
+        assert secret_labels.labels is not None
+        assert secret_labels.labels.get("inspectSandbox") == "true"
+        for key, value in expected_labels.items():
+            assert secret_labels.labels.get(key) == value
+    finally:
+        await release.uninstall(quiet=True)
