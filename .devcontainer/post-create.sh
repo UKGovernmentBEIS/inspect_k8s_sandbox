@@ -51,7 +51,10 @@ cilium install
 cilium status --wait
 cilium hubble enable --ui
 
-fi # CLUSTER
+else
+echo "Skipping cluster setup (--no-cluster)"
+fi
 
+# Everything below runs regardless of --no-cluster.
 echo "Installing uv environment..."
 uv sync --extra dev
