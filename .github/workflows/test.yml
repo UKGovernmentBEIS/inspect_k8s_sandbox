@@ -16,6 +16,8 @@ jobs:
             cluster: true
           - helm-version: "3.20.0"
             cluster: false
+          - helm-version: "4.1.0"
+            cluster: false
     name: pytest (helm ${{ matrix.helm-version }}${{ matrix.cluster && ', k8s' || '' }})
     steps:
       - uses: actions/checkout@v4
