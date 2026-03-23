@@ -9,18 +9,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        helm-version: ["3.20.0", "4.1.0"]
-    name: pytest (helm ${{ matrix.helm-version }})
+        include:
+          - helm-version: "3.20.0"
+            cluster: true
+          - helm-version: "4.1.0"
+            cluster: true
+          - helm-version: "3.20.0"
+            cluster: false
+          - helm-version: "4.1.0"
+            cluster: false
+    name: pytest (helm ${{ matrix.helm-version }}${{ matrix.cluster && ', k8s' || '' }})
     steps:
       - uses: actions/checkout@v4
+      - name: Configure Helm version in devcontainer.json
+        run: |
+          sed -i 's/"helm": "[^"]*"/"helm": "${{ matrix.helm-version }}"/' .devcontainer/devcontainer.json
+      - name: Skip cluster setup
+        if: ${{ !matrix.cluster }}
+        run: |
+          sed -i 's|bash .devcontainer/post-create.sh|bash .devcontainer/post-create.sh --no-cluster|' .devcontainer/devcontainer.json
       - run: npm install -g @devcontainers/cli@v0.83.2
       - run: devcontainer up --workspace-folder=.
-      - name: Install Helm ${{ matrix.helm-version }}
-        run: |
-          devcontainer exec --workspace-folder=. bash -c "
-            curl -fsSL https://get.helm.sh/helm-v${{ matrix.helm-version }}-linux-amd64.tar.gz | tar xz &&
-            sudo mv linux-amd64/helm /usr/local/bin/helm &&
-            rm -rf linux-amd64 &&
-            helm version --short
-          "
-      - run: devcontainer exec --workspace-folder=. uv run pytest -rA -x --color=yes
+      - run: devcontainer exec --workspace-folder=. helm version --short
+      - run: |
+          devcontainer exec --workspace-folder=. \
+            uv run pytest -rA -x --color=yes --durations=10 \
+            ${{ matrix.cluster && '-m req_k8s' || '-m "not req_k8s"' }}

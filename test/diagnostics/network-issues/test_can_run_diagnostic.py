@@ -1,6 +1,8 @@
+import pytest
 from run import run_diagnostic_eval
 
 
+@pytest.mark.req_k8s
 def test_can_run_diagnostic_network_issues() -> None:
     score = run_diagnostic_eval(epochs=1, post_curl_sleep=0)
 
