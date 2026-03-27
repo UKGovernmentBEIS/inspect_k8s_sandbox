@@ -1,5 +1,4 @@
 import base64
-import logging
 import re
 import shlex
 from contextlib import contextmanager
@@ -10,11 +9,9 @@ from inspect_ai.util import SandboxEnvironmentLimits as limits
 from kubernetes.stream.ws_client import WSClient  # type: ignore[import-untyped]
 
 from k8s_sandbox._pod.buffer import LimitedBuffer
-from k8s_sandbox._pod.error import ExecutableNotFoundError
+from k8s_sandbox._pod.error import ExecutableNotFoundError, PodError
 from k8s_sandbox._pod.get_returncode import get_returncode
 from k8s_sandbox._pod.op import PodOperation
-
-logger = logging.getLogger(__name__)
 
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
@@ -146,9 +143,15 @@ class ExecuteOperation(PodOperation):
                             ws_client.close()
                     self._verify_output_limit(stdout, stderr)
                 except (BrokenPipeError, ConnectionResetError) as e:
-                    logger.warning(f"WebSocket connection lost during exec: {e}")
-                    ws_client.close()
-                    break
+                    if returncode is not None:
+                        # Sentinel already received — we have the result.
+                        # This commonly happens after ws_client.close() when
+                        # the next update() hits the closed socket.
+                        break
+                    raise PodError(
+                        "WebSocket connection lost during exec",
+                        pod=self._pod.name,
+                    ) from e
             # returncode won't be set if setup commands e.g. `cd` failed.
             if returncode is None:
                 returncode = get_returncode(ws_client)
