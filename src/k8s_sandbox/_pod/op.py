@@ -119,53 +119,56 @@ class PodOperation(ABC):
         ws_client._all = _IgnoredIO()
 
     def _check_for_pod_restart(self):
-        client = k8s_client(self._pod.context_name)
-        pod = client.read_namespaced_pod(
-            name=self._pod.name, namespace=self._pod.namespace
+        check_for_pod_restart(self._pod)
+
+
+def check_for_pod_restart(pod: PodInfo) -> None:
+    """Check if the pod has been replaced or its container has restarted."""
+    api = k8s_client(pod.context_name)
+    k8s_pod = api.read_namespaced_pod(name=pod.name, namespace=pod.namespace)
+    assert k8s_pod.metadata is not None
+    assert k8s_pod.status is not None
+    if k8s_pod.metadata.uid != pod.uid:
+        message = (
+            f"Pod UID mismatch: expected {pod.uid}, got {k8s_pod.metadata.uid} "
+            f"for {k8s_pod.metadata.name}"
         )
-        assert pod.metadata is not None
-        assert pod.status is not None
-        if pod.metadata.uid != self._pod.uid:
-            message = (
-                f"Pod UID mismatch: expected {self._pod.uid}, got {pod.metadata.uid} "
-                f"for {pod.metadata.name}"
-            )
-            if self._pod.restarted_container_behavior == "warn":
-                logger.warning(message)
-            else:
-                raise RuntimeError(message)
-        assert pod.status.container_statuses is not None
-        status = next(
-            (
-                container_status
-                for container_status in pod.status.container_statuses
-                if container_status.name == self._pod.default_container_name
-            ),
-            None,
+        if pod.restarted_container_behavior == "warn":
+            logger.warning(message)
+        else:
+            raise RuntimeError(message)
+    assert k8s_pod.status.container_statuses is not None
+    status = next(
+        (
+            container_status
+            for container_status in k8s_pod.status.container_statuses
+            if container_status.name == pod.default_container_name
+        ),
+        None,
+    )
+    if status is None:
+        message = (
+            f"Pod '{k8s_pod.metadata.name}' does not have a container named "
+            f"'{pod.default_container_name}'"
         )
-        if status is None:
-            message = (
-                f"Pod '{pod.metadata.name}' does not have a container named "
-                f"'{self._pod.default_container_name}'"
-            )
-            if self._pod.restarted_container_behavior == "warn":
-                logger.warning(message)
-                return
-            else:
-                raise RuntimeError(message)
-        if status.restart_count > self._pod.initial_restart_count:
-            last_state = status.last_state
-            terminated = last_state.terminated if last_state else None
-            last_reason = terminated.reason if terminated else "unknown"
-            message = (
-                f"Container '{status.name}' in pod '{pod.metadata.name}' has restarted "
-                f"{status.restart_count} time(s) (last reason: {last_reason}); "
-                "pod state is no longer guaranteed."
-            )
-            if self._pod.restarted_container_behavior == "warn":
-                logger.warning(message)
-            else:
-                raise RuntimeError(message)
+        if pod.restarted_container_behavior == "warn":
+            logger.warning(message)
+            return
+        else:
+            raise RuntimeError(message)
+    if status.restart_count > pod.initial_restart_count:
+        last_state = status.last_state
+        terminated = last_state.terminated if last_state else None
+        last_reason = terminated.reason if terminated else "unknown"
+        message = (
+            f"Container '{status.name}' in pod '{k8s_pod.metadata.name}' has restarted "
+            f"{status.restart_count} time(s) (last reason: {last_reason}); "
+            "pod state is no longer guaranteed."
+        )
+        if pod.restarted_container_behavior == "warn":
+            logger.warning(message)
+        else:
+            raise RuntimeError(message)
 
 
 def _send_keepalive(ws_client: WSClient, stop: threading.Event) -> None:
