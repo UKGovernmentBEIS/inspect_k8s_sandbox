@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
-from k8s_sandbox._pod.error import GetReturncodeError
+from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.execute import ExecuteOperation
 
 
@@ -145,33 +145,24 @@ class TestBrokenPipeWithoutSentinel:
         error: Exception,
     ) -> MagicMock:
         ws = MagicMock(spec=WSClient)
-        closed = False
-
-        def close_ws(**kwargs: object) -> None:
-            nonlocal closed
-            closed = True
-
-        ws.close.side_effect = close_ws
-        ws.is_open.side_effect = lambda: not closed
-        ws.peek_stderr.return_value = b""
+        ws.is_open.return_value = True
         ws.update.side_effect = error
-        ws.read_channel.return_value = ""
         return ws
 
     def test_broken_pipe_without_sentinel_raises(self) -> None:
-        """BrokenPipe before sentinel → break → get_returncode fails."""
+        """BrokenPipe before sentinel → PodError."""
         ws = self._make_dead_ws(BrokenPipeError("socket closed"))
 
         executor = ExecuteOperation(MagicMock())
-        with pytest.raises(GetReturncodeError):
+        with pytest.raises(PodError, match="WebSocket connection lost"):
             executor._handle_shell_output(ws, user=None, timeout=None)
 
     def test_connection_reset_without_sentinel_raises(self) -> None:
-        """ConnectionReset before sentinel → same behavior."""
+        """ConnectionReset before sentinel → PodError."""
         ws = self._make_dead_ws(
             ConnectionResetError("connection reset"),
         )
 
         executor = ExecuteOperation(MagicMock())
-        with pytest.raises(GetReturncodeError):
+        with pytest.raises(PodError, match="WebSocket connection lost"):
             executor._handle_shell_output(ws, user=None, timeout=None)

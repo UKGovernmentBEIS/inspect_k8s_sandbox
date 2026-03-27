@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generator, Literal, cast, overload
 
+import websocket
 from inspect_ai.solver._task_state import sample_state
 from inspect_ai.util import (
     ComposeConfig,
@@ -20,7 +21,10 @@ from inspect_ai.util import (
     is_dockerfile,
     sandboxenv,
 )
+from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel, TypeAdapter
+from tenacity import retry_if_exception, stop_after_attempt, wait_exponential_jitter
+from tenacity.asyncio import AsyncRetrying
 
 from k8s_sandbox._helm import (
     DEFAULT_CHART,
@@ -42,6 +46,7 @@ from k8s_sandbox._manager import (
     uninstall_unmanaged_release,
 )
 from k8s_sandbox._pod import Pod
+from k8s_sandbox._pod.error import ExecutableNotFoundError, GetReturncodeError, PodError
 from k8s_sandbox._pod.executor import PodOpExecutor
 from k8s_sandbox._prereqs import validate_prereqs
 from k8s_sandbox.compose._compose import (
@@ -52,6 +57,36 @@ from k8s_sandbox.compose._compose import (
 )
 
 MIN_DESIRED_SOFT = 100000
+
+_TRANSIENT_TYPES = (
+    ApiException,
+    websocket.WebSocketException,
+    ConnectionError,
+    OSError,
+    PodError,
+    GetReturncodeError,
+)
+
+# ExecutableNotFoundError and RuntimeError don't match _TRANSIENT_TYPES today,
+# but are listed defensively: if _TRANSIENT_TYPES ever gains a parent class they
+# inherit from, these entries prevent accidental retries of permanent failures.
+# PermissionError and TimeoutError are OSError subclasses and MUST be excluded.
+_PERMANENT_TYPES = (
+    ExecutableNotFoundError,
+    RuntimeError,
+    PermissionError,
+    TimeoutError,
+)
+
+_exec_retry = AsyncRetrying(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential_jitter(initial=1, max=10),
+    retry=retry_if_exception(
+        lambda e: isinstance(e, _TRANSIENT_TYPES)
+        and not isinstance(e, _PERMANENT_TYPES)
+    ),
+    reraise=True,
+)
 
 
 @sandboxenv(name="k8s")
@@ -223,9 +258,14 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         )
         if user is None:
             user = self._config.default_user
+
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
-            result = await self._pod.exec(cmd, input, cwd, env or {}, user, timeout)
+            async for attempt in _exec_retry:
+                with attempt:
+                    result = await self._pod.exec(
+                        cmd, input, cwd, env or {}, user, timeout
+                    )
             log_trace(f"Completed: {op}.", **(log_kwargs | {"result": result}))
             return result
 
