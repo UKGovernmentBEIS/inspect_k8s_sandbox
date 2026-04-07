@@ -63,6 +63,7 @@ convention = "google"
 
 [tool.mypy]
 check_untyped_defs = true
+exclude = ["test/diagnostics/"]
 
 
 [tool.pytest.ini_options]
