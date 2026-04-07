@@ -96,7 +96,7 @@ harder in a standalone script.
 
 ```bash
 sudo -n true  # verify passwordless sudo works
-uv run python test/diagnostics/exec-retry/run.py
+uv run python test/diagnostics/exec_retry/run.py
 ```
 
 Expected results:

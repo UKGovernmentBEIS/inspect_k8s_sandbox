@@ -11,7 +11,7 @@ Requires: Linux, minikube running (Docker driver), sudo, nftables.
 
 Usage:
     sudo -n true  # verify passwordless sudo
-    uv run python test/diagnostics/exec-retry/run.py
+    uv run python test/diagnostics/exec_retry/run.py
 """
 
 import asyncio
