@@ -86,7 +86,7 @@ class TestConfigLoading:
 
     @patch("k8s_sandbox._kubernetes_api.config")
     def test_raises_when_no_config_available(self, mock_config: MagicMock) -> None:
-        """Raises ConfigException when neither kubeconfig nor in-cluster config exists."""
+        """Raises ConfigException when neither config source exists."""
         from kubernetes.config import ConfigException
 
         typed_config = cast(_ConfigMock, mock_config)
