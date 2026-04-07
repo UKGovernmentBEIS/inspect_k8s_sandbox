@@ -104,31 +104,28 @@ def _nft_block(ip: str, port: int) -> None:
     # Block outgoing packets — REJECT sends RST/ICMP so local sockets get
     # an immediate error when they try to send.
     _nft(
-        f"add chain inet {TABLE_NAME} output "
-        "{ type filter hook output priority 0 ; }"
+        f"add chain inet {TABLE_NAME} output {{ type filter hook output priority 0 ; }}"
     )
-    _nft(
-        f"add rule inet {TABLE_NAME} output "
-        f"ip daddr {ip} tcp dport {port} reject"
-    )
+    _nft(f"add rule inet {TABLE_NAME} output ip daddr {ip} tcp dport {port} reject")
     # Block incoming packets — DROP silently discards server responses so
     # reads on established connections hang (then fail when the local side
     # tries to ACK and hits the output REJECT).
-    _nft(
-        f"add chain inet {TABLE_NAME} input "
-        "{ type filter hook input priority 0 ; }"
-    )
-    _nft(
-        f"add rule inet {TABLE_NAME} input "
-        f"ip saddr {ip} tcp sport {port} drop"
-    )
+    _nft(f"add chain inet {TABLE_NAME} input {{ type filter hook input priority 0 ; }}")
+    _nft(f"add rule inet {TABLE_NAME} input ip saddr {ip} tcp sport {port} drop")
     # Kill existing TCP connections using ss. The nftables rules only affect
     # new packets — established connections with data in flight may survive
     # until a send/recv hits the firewall. Force-closing with ss ensures
     # the local socket gets an immediate error.
     subprocess.run(
-        ["sudo", "ss", "--kill", "state", "established",
-         f"dst {ip}", f"dport = {port}"],
+        [
+            "sudo",
+            "ss",
+            "--kill",
+            "state",
+            "established",
+            f"dst {ip}",
+            f"dport = {port}",
+        ],
         capture_output=True,
     )
 
@@ -156,10 +153,16 @@ def nft_block(ip: str, port: int):
 def get_api_server_address() -> tuple[str, int]:
     result = subprocess.run(
         [
-            "kubectl", "config", "view", "--minify",
-            "-o", "jsonpath={.clusters[0].cluster.server}",
+            "kubectl",
+            "config",
+            "view",
+            "--minify",
+            "-o",
+            "jsonpath={.clusters[0].cluster.server}",
         ],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     parsed = urlparse(result.stdout.strip())
     host = parsed.hostname
@@ -171,7 +174,8 @@ def get_api_server_address() -> tuple[str, int]:
 def assert_block_effective() -> None:
     probe = subprocess.run(
         ["kubectl", "get", "pods", "--request-timeout=2s"],
-        capture_output=True, timeout=5,
+        capture_output=True,
+        timeout=5,
     )
     assert probe.returncode != 0, "nftables block not effective"
     print("  Block verified")
@@ -203,9 +207,10 @@ async def install_sandbox() -> tuple[K8sSandboxEnvironment, dict]:
 async def test_transient_fault(
     sandbox: K8sSandboxEnvironment, ip: str, port: int
 ) -> bool:
-    """Start a long-running exec, let it establish, then briefly block to kill
-    the websocket mid-stream. With retry logic, the exec retries after the
-    block is lifted and succeeds. Without retry, it fails.
+    """Start a long-running exec, then briefly block to kill the websocket.
+
+    With retry logic, the exec retries after the block is lifted and
+    succeeds. Without retry, it fails.
 
     Timeline:
       t=0s    exec(["sleep 5 && echo hello"]) starts
@@ -215,7 +220,10 @@ async def test_transient_fault(
       t=15+s  tenacity retries → new exec → sleep 5 → echo hello
       ~t=25s  exec succeeds
     """
-    print(f"\n--- Test: transient fault (settle {SETTLE_TIME}s, block {BLOCK_DURATION}s) ---")
+    print(
+        f"\n--- Test: transient fault "
+        f"(settle {SETTLE_TIME}s, block {BLOCK_DURATION}s) ---"
+    )
     print("  Expected: PASS with exec retry logic, FAIL without it")
 
     t0 = time.time()
@@ -260,8 +268,10 @@ async def test_transient_fault(
 async def test_sustained_fault(
     sandbox: K8sSandboxEnvironment, ip: str, port: int
 ) -> bool:
-    """Start a long-running exec, let it establish, then block permanently.
-    The websocket dies and the exec should raise K8sError."""
+    """Start a long-running exec, then block permanently.
+
+    The websocket dies and the exec should raise K8sError.
+    """
     print("\n--- Test: sustained fault (block after websocket established) ---")
     print("  Expected: PASS (K8sError raised)")
 
@@ -289,7 +299,10 @@ async def test_sustained_fault(
         return True
     except Exception as e:
         elapsed = time.time() - t0
-        print(f"  FAIL: raised {type(e).__name__} (expected K8sError) after {elapsed:.1f}s")
+        print(
+            f"  FAIL: raised {type(e).__name__} "
+            f"(expected K8sError) after {elapsed:.1f}s"
+        )
         return False
     finally:
         if not fault_task.done():
@@ -325,10 +338,12 @@ async def main() -> None:
 
     # Report config
     from kubernetes import client as _k8s_client
+
     _cfg = _k8s_client.Configuration.get_default_copy()
     print(f"kubernetes Configuration.retries = {_cfg.retries!r}")
     try:
         from k8s_sandbox._sandbox_environment import _exec_retry  # type: ignore
+
         print(f"tenacity _exec_retry: stop={_exec_retry.stop}, wait={_exec_retry.wait}")
     except ImportError:
         print("tenacity _exec_retry: NOT PRESENT (no retry logic)")
