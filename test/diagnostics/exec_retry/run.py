@@ -30,7 +30,7 @@ logging.basicConfig(
 )
 
 # ---- Debug instrumentation ----
-import kubernetes.stream.ws_client as _wsc  # noqa: E402
+import kubernetes.stream.ws_client as _wsc  # type: ignore  # noqa: E402
 
 _orig_websocket_call = _wsc.websocket_call
 
@@ -52,9 +52,9 @@ def _timed_websocket_call(*args, **kwargs):
 
 _wsc.websocket_call = _timed_websocket_call
 
-import kubernetes.client.rest as _rest  # noqa: E402
+import kubernetes.client.rest as _rest  # type: ignore  # noqa: E402
 
-_orig_request = _rest.RESTClientObject.request
+_orig_request = _rest.RESTClientObject.request  # type: ignore[attr-defined]
 
 
 @functools.wraps(_orig_request)
@@ -73,7 +73,7 @@ def _timed_request(self, method, url, **kwargs):
         raise
 
 
-_rest.RESTClientObject.request = _timed_request
+_rest.RESTClientObject.request = _timed_request  # type: ignore[attr-defined]
 # ---- End debug instrumentation ----
 
 from k8s_sandbox._sandbox_environment import (  # noqa: E402
@@ -199,6 +199,7 @@ async def install_sandbox() -> tuple[K8sSandboxEnvironment, dict]:
     config = K8sSandboxEnvironmentConfig(values=values_path)
     envs = await K8sSandboxEnvironment.sample_init("exec-retry-diag", config, {})
     sandbox = next(iter(envs.values()))
+    assert isinstance(sandbox, K8sSandboxEnvironment)
     result = await sandbox.exec(["echo", "ready"])
     assert result.success, "Sandbox not healthy after install"
     return sandbox, envs
@@ -339,7 +340,7 @@ async def main() -> None:
     # Report config
     from kubernetes import client as _k8s_client
 
-    _cfg = _k8s_client.Configuration.get_default_copy()
+    _cfg = _k8s_client.Configuration.get_default_copy()  # type: ignore[attr-defined]
     print(f"kubernetes Configuration.retries = {_cfg.retries!r}")
     try:
         from k8s_sandbox._sandbox_environment import _exec_retry  # type: ignore
