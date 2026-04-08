@@ -13,39 +13,14 @@ from pathlib import Path
 
 from inspect_ai import Task, eval
 from inspect_ai.dataset import MemoryDataset, Sample
-from inspect_ai.model import ChatMessage, GenerateConfig, ModelOutput, get_model
+from inspect_ai.model import ModelOutput, get_model
 from inspect_ai.scorer import match
 from inspect_ai.solver import generate, use_tools
-from inspect_ai.tool import ToolChoice, ToolInfo, bash
+from inspect_ai.tool import bash
 from inspect_ai.util import SandboxEnvironmentSpec
 
 from k8s_sandbox import K8sSandboxEnvironmentConfig
 from k8s_sandbox._kubernetes_api import _Config
-
-# ---------------------------------------------------------------------------
-# Mock model outputs: one bash tool call, then echo the tool result
-# ---------------------------------------------------------------------------
-
-_made_tool_call = False
-
-
-def _mock_generate(
-    input: list[ChatMessage],
-    tools: list[ToolInfo],
-    tool_choice: ToolChoice,
-    config: GenerateConfig,
-) -> ModelOutput:
-    global _made_tool_call
-    if not _made_tool_call:
-        _made_tool_call = True
-        return ModelOutput.for_tool_call(
-            model="mockllm",
-            tool_name="bash",
-            tool_arguments={"cmd": "echo hello"},
-        )
-    last_tool_output = input[-1].text.strip()
-    return ModelOutput.from_content("mockllm", last_tool_output)
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -71,7 +46,17 @@ def main() -> None:
     # ------------------------------------------------------------------
     # 2. Run a minimal Inspect eval through k8s sandbox
     # ------------------------------------------------------------------
-    model = get_model("mockllm/model", custom_outputs=_mock_generate)
+    model = get_model(
+        "mockllm/model",
+        custom_outputs=[
+            ModelOutput.for_tool_call(
+                model="mockllm/model",
+                tool_name="bash",
+                tool_arguments={"cmd": "echo hello"},
+            ),
+            ModelOutput.from_content(model="mockllm/model", content="hello"),
+        ],
+    )
 
     values_path = Path("/app/test/diagnostics/two-cluster-config/values.yaml")
     sandbox_config = K8sSandboxEnvironmentConfig(values=values_path)
