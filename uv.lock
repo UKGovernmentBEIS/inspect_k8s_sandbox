@@ -871,6 +871,7 @@ dependencies = [
     { name = "inspect-ai" },
     { name = "jsonschema" },
     { name = "kubernetes" },
+    { name = "tenacity" },
 ]
 
 [package.optional-dependencies]
@@ -900,6 +901,7 @@ requires-dist = [
     { name = "pytest-env", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "pytest-repeat", marker = "extra == 'dev'", specifier = ">=0.9.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.6" },
+    { name = "tenacity", specifier = ">=8.0.0" },
     { name = "types-jsonschema", marker = "extra == 'dev'", specifier = ">=4.23.0.20241208" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
 ]
