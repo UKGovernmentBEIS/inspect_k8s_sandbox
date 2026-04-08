@@ -497,9 +497,14 @@ async def test_write_file_transient_fault(
     await _setup_slow_fifo(sandbox, fifo_path, "write", cleanup_delay)
     await asyncio.sleep(1)
 
-    # 2MB payload: the slow reader drains at ~8KB/s, so the pod-side head
-    # blocks after filling the 64KB pipe buffer, keeping the websocket open.
-    payload = "A" * (2 * 1024 * 1024)
+    # 196KB payload: large enough that the pod-side head -c takes >10s to
+    # write through the slow FIFO reader (~8KB/s), keeping the websocket open
+    # past SETTLE_TIME. But small enough to fit in TCP/websocket buffers so
+    # _write_data_to_stdin() returns quickly and run_forever() handles the
+    # recv loop — which properly detects the websocket close when ss --kill
+    # fires. A 2MB payload would cause TCP backpressure, blocking write_stdin
+    # indefinitely when the remote process dies.
+    payload = "A" * (196 * 1024)
 
     t0 = time.time()
 
