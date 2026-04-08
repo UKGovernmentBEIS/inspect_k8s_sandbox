@@ -76,6 +76,8 @@ _PERMANENT_TYPES = (
     RuntimeError,
     PermissionError,
     TimeoutError,
+    FileNotFoundError,
+    IsADirectoryError,
 )
 
 _exec_retry = AsyncRetrying(
@@ -282,7 +284,10 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             # Do not log these at error level or re-raise as enriched K8sError.
             expected_exceptions = (PermissionError, IsADirectoryError)
             with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
-                await self._pod.write_file(temp_file.file, Path(file))
+                async for attempt in _exec_retry:
+                    with attempt:
+                        temp_file.seek(0)
+                        await self._pod.write_file(temp_file.file, Path(file))
 
     @overload
     async def read_file(self, file: str, text: Literal[True] = True) -> str: ...
@@ -303,7 +308,11 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 OutputLimitExceededError,
             )
             with self._log_op("K8s read file from Pod", expected_exceptions, file=file):
-                await self._pod.read_file(Path(file), temp_file)
+                async for attempt in _exec_retry:
+                    with attempt:
+                        temp_file.seek(0)
+                        temp_file.truncate()
+                        await self._pod.read_file(Path(file), temp_file)
                 temp_file.seek(0)
                 return (
                     temp_file.read() if not text else temp_file.read().decode("utf-8")

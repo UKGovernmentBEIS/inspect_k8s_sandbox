@@ -1,11 +1,10 @@
-"""E2E diagnostic for exec retry under real network faults.
-
-SLOP ALERT: Entire program written by Claude
+"""E2E diagnostic for retry under real network faults.
 
 Uses nftables REJECT/DROP rules plus ``ss --kill`` to sever the connection
 between the test process and the K8s API server, then verifies that
-K8sSandboxEnvironment.exec() retries and recovers (or fails without retry
-logic). See README.md for details on the fault injection approach.
+K8sSandboxEnvironment.exec(), read_file(), and write_file() retry and recover
+(or fail without retry logic). See README.md for details on the fault
+injection approach.
 
 Requires: Linux, minikube running (Docker driver), sudo, nftables.
 
@@ -315,6 +314,230 @@ async def test_sustained_fault(
         _nft_cleanup()
 
 
+async def _setup_slow_fifo(
+    sandbox: K8sSandboxEnvironment,
+    fifo_path: str,
+    mode: str,
+    cleanup_delay: int,
+) -> None:
+    """Set up a FIFO with a slow peer and a timed self-cleanup on the pod.
+
+    Args:
+        sandbox: The sandbox environment to set up the FIFO in.
+        fifo_path: Path for the FIFO on the pod.
+        mode: "read" — slow writer feeds the FIFO (~8KB/s).
+              "write" — slow reader drains the FIFO (~8KB/s).
+        cleanup_delay: Seconds after which the pod kills the slow peer,
+            removes the FIFO, and (for read mode) replaces it with a small
+            regular file. This runs entirely on the pod so it works even
+            while the K8s API is blocked by nftables.
+    """
+    if mode == "read":
+        # Slow writer: 4KB every 0.5s. Outer loop re-opens FIFO after
+        # reader disconnects (SIGPIPE breaks inner loop).
+        peer_cmd = (
+            'while true; do '
+            '  for i in $(seq 1 200); do '
+            '    dd if=/dev/zero bs=4096 count=1 2>/dev/null || break; '
+            '    sleep 0.5; '
+            f'  done > {fifo_path}; '
+            'done'
+        )
+        # After cleanup_delay: kill the writer, replace FIFO with a small
+        # regular file so the retried read_file() completes quickly.
+        cleanup_cmd = (
+            f"sleep {cleanup_delay}; "
+            f"pkill -f '{fifo_path}' 2>/dev/null; "
+            f"rm -f {fifo_path}; "
+            f"echo retry-ok > {fifo_path}"
+        )
+    else:
+        # Slow reader: 4KB every 0.5s.
+        peer_cmd = (
+            'while true; do '
+            f'  while dd if={fifo_path} of=/dev/null '
+            '    bs=4096 count=1 2>/dev/null; do '
+            '    sleep 0.5; '
+            '  done; '
+            'done'
+        )
+        # After cleanup_delay: kill the reader and remove the FIFO so the
+        # retried write_file() creates a regular file at the path.
+        cleanup_cmd = (
+            f"sleep {cleanup_delay}; "
+            f"pkill -f '{fifo_path}' 2>/dev/null; "
+            f"rm -f {fifo_path}"
+        )
+
+    result = await sandbox.exec(
+        [
+            "bash",
+            "-c",
+            f"mkfifo {fifo_path} 2>/dev/null; ({peer_cmd}) & ({cleanup_cmd}) &",
+        ],
+    )
+    assert result.success, f"Failed to set up FIFO: {result.stderr}"
+
+
+async def test_read_file_transient_fault(
+    sandbox: K8sSandboxEnvironment, ip: str, port: int
+) -> bool:
+    """Start read_file on a slow FIFO, then block to kill the websocket.
+
+    A slow writer feeds the FIFO at ~8KB/s, keeping the websocket open.
+    After the block is lifted, a pod-side timed cleanup replaces the FIFO
+    with a small regular file so the retried read_file() completes quickly.
+
+    Timeline:
+      t=0s     FIFO writer + timed cleanup started on pod
+      t=1s     read_file() starts, head reads slowly from FIFO
+      t=10s    block applied + ss --kill (websocket dies mid-stream)
+      t=15s    block removed
+      t=18s    pod-side cleanup: kills writer, replaces FIFO with regular file
+      t=~20s   tenacity retry connects, reads regular file, succeeds
+    """
+    print(
+        f"\n--- Test: read_file transient fault "
+        f"(settle {SETTLE_TIME}s, block {BLOCK_DURATION}s) ---"
+    )
+    print("  Expected: PASS with read_file retry logic, FAIL without it")
+
+    fifo_path = "/tmp/slow_read_fifo"
+    cleanup_delay = SETTLE_TIME + BLOCK_DURATION + 3
+    await _setup_slow_fifo(sandbox, fifo_path, "read", cleanup_delay)
+    await asyncio.sleep(1)
+
+    t0 = time.time()
+
+    async def block_then_unblock():
+        await asyncio.sleep(SETTLE_TIME)
+        print(f"  Applying block + ss --kill at t={time.time() - t0:.1f}s")
+        _nft_block(ip, port)
+        assert_block_effective()
+        await asyncio.sleep(BLOCK_DURATION)
+        _nft_unblock()
+        print(f"  Unblocked at t={time.time() - t0:.1f}s")
+
+    fault_task = asyncio.create_task(block_then_unblock())
+
+    try:
+        contents = await asyncio.wait_for(
+            sandbox.read_file(fifo_path, text=False),
+            timeout=120,
+        )
+        elapsed = time.time() - t0
+        assert len(contents) > 0, "read_file returned empty"
+        print(
+            f"  PASS: read_file succeeded in {elapsed:.1f}s "
+            f"({len(contents)} bytes)"
+        )
+        return True
+    except Exception as e:
+        elapsed = time.time() - t0
+        print(f"  FAIL: read_file raised {type(e).__name__} after {elapsed:.1f}s: {e}")
+        return False
+    finally:
+        if not fault_task.done():
+            fault_task.cancel()
+            try:
+                await fault_task
+            except asyncio.CancelledError:
+                pass
+        _nft_cleanup()
+        try:
+            await sandbox.exec(
+                ["bash", "-c", f"pkill -f '{fifo_path}' 2>/dev/null; "
+                 f"rm -f {fifo_path}"]
+            )
+        except Exception:
+            pass
+
+
+async def test_write_file_transient_fault(
+    sandbox: K8sSandboxEnvironment, ip: str, port: int
+) -> bool:
+    """Start write_file to a slow FIFO, then block to kill the websocket.
+
+    A slow reader drains the FIFO at ~8KB/s, so the pod-side
+    ``head -c <size> > fifo`` blocks on the full pipe buffer and the
+    websocket stays open. After unblocking, a pod-side timed cleanup
+    removes the FIFO so the retry writes to a regular file.
+
+    Timeline:
+      t=0s     FIFO reader + timed cleanup started on pod
+      t=1s     write_file() starts, sends 2MB; pod head blocks on FIFO
+      t=10s    block applied + ss --kill (websocket dies mid-transfer)
+      t=15s    block removed
+      t=18s    pod-side cleanup: kills reader, removes FIFO
+      t=~20s   tenacity retry connects, head writes to regular file, succeeds
+    """
+    print(
+        f"\n--- Test: write_file transient fault "
+        f"(settle {SETTLE_TIME}s, block {BLOCK_DURATION}s) ---"
+    )
+    print("  Expected: PASS with write_file retry logic, FAIL without it")
+
+    fifo_path = "/tmp/slow_write_fifo"
+    cleanup_delay = SETTLE_TIME + BLOCK_DURATION + 3
+    await _setup_slow_fifo(sandbox, fifo_path, "write", cleanup_delay)
+    await asyncio.sleep(1)
+
+    # 2MB payload: the slow reader drains at ~8KB/s, so the pod-side head
+    # blocks after filling the 64KB pipe buffer, keeping the websocket open.
+    payload = "A" * (2 * 1024 * 1024)
+
+    t0 = time.time()
+
+    async def block_then_unblock():
+        await asyncio.sleep(SETTLE_TIME)
+        print(f"  Applying block + ss --kill at t={time.time() - t0:.1f}s")
+        _nft_block(ip, port)
+        assert_block_effective()
+        await asyncio.sleep(BLOCK_DURATION)
+        _nft_unblock()
+        print(f"  Unblocked at t={time.time() - t0:.1f}s")
+
+    fault_task = asyncio.create_task(block_then_unblock())
+
+    try:
+        await asyncio.wait_for(
+            sandbox.write_file(fifo_path, payload),
+            timeout=120,
+        )
+        elapsed = time.time() - t0
+        print(f"  write_file succeeded in {elapsed:.1f}s, verifying...")
+
+        result = await sandbox.exec(
+            ["bash", "-c", f"wc -c < {fifo_path}"]
+        )
+        print(
+            f"  PASS: write_file succeeded in {elapsed:.1f}s "
+            f"(size on pod: {result.stdout.strip()})"
+        )
+        return True
+    except Exception as e:
+        elapsed = time.time() - t0
+        print(
+            f"  FAIL: write_file raised {type(e).__name__} after {elapsed:.1f}s: {e}"
+        )
+        return False
+    finally:
+        if not fault_task.done():
+            fault_task.cancel()
+            try:
+                await fault_task
+            except asyncio.CancelledError:
+                pass
+        _nft_cleanup()
+        try:
+            await sandbox.exec(
+                ["bash", "-c", f"pkill -f '{fifo_path}' 2>/dev/null; "
+                 f"rm -f {fifo_path}"]
+            )
+        except Exception:
+            pass
+
+
 async def test_recovery(sandbox: K8sSandboxEnvironment) -> bool:
     """Verify sandbox still works after fault tests."""
     print("\n--- Test: recovery ---")
@@ -351,8 +574,14 @@ async def main() -> None:
 
     results: dict[str, bool] = {}
     try:
-        results["transient"] = await test_transient_fault(sandbox, ip, port)
-        results["sustained"] = await test_sustained_fault(sandbox, ip, port)
+        results["exec_transient"] = await test_transient_fault(sandbox, ip, port)
+        results["exec_sustained"] = await test_sustained_fault(sandbox, ip, port)
+        results["read_file_transient"] = await test_read_file_transient_fault(
+            sandbox, ip, port
+        )
+        results["write_file_transient"] = await test_write_file_transient_fault(
+            sandbox, ip, port
+        )
         results["recovery"] = await test_recovery(sandbox)
     finally:
         _nft_cleanup()

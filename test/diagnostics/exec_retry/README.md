@@ -1,9 +1,8 @@
 # exec-retry diagnostic
 
-SLOP ALERT: Entire document written by Claude
-
-E2E test for `K8sSandboxEnvironment.exec()` retry logic under real network
-faults, using nftables to block the K8s API server.
+E2E test for `K8sSandboxEnvironment` retry logic under real network faults,
+using nftables to block the K8s API server. Covers `exec()`, `read_file()`,
+and `write_file()`.
 
 ## Prerequisites
 
@@ -16,15 +15,24 @@ Designed for AISI dev VMs. Will not work on macOS or in CI.
 
 ## What it tests
 
-1. **Transient fault**: blocks the API server, then unblocks after
-   `BLOCK_DURATION` seconds. With tenacity retry, exec should recover on the
-   next attempt. Without retry logic, exec fails — this is expected on main
-   before the retry PR lands.
+1. **exec transient fault**: blocks the API server mid-exec, then unblocks
+   after `BLOCK_DURATION` seconds. With tenacity retry, exec should recover on
+   the next attempt. Without retry logic, exec fails.
 
-2. **Sustained fault**: blocks the API server for the entire exec attempt.
+2. **exec sustained fault**: blocks the API server for the entire exec attempt.
    Expects `K8sError` (with or without retry logic).
 
-3. **Recovery**: confirms the sandbox still works after faults are cleared.
+3. **read_file transient fault**: reads from a FIFO with a slow writer
+   (~8KB/s) so the websocket stays open long enough to inject the fault.
+   After unblocking, the FIFO writer is killed so the retried read gets
+   EOF quickly.
+
+4. **write_file transient fault**: writes to a FIFO with a slow reader
+   (~8KB/s). The pod-side `head -c <size> > fifo` blocks on the full
+   pipe buffer, keeping the websocket open. After unblocking, the FIFO
+   is replaced with a regular file path so the retry completes quickly.
+
+5. **Recovery**: confirms the sandbox still works after faults are cleared.
 
 ## How it works
 
@@ -71,6 +79,24 @@ alternative would be to monkeypatch `check_for_pod_restart` to inject the
 fault at the right moment (as explored in the original spec), but that's
 harder in a standalone script.
 
+### Slow FIFOs for read_file / write_file
+
+`read_file()` and `write_file()` don't run long-lived commands like `exec()`
+does with `sleep 30`. To keep their websocket open long enough for the fault,
+the tests use a named pipe (FIFO) with a slow peer:
+
+- **read_file**: a background process slowly writes ~8KB/s into the FIFO.
+  `head -c <limit> /tmp/fifo` blocks reading, keeping the websocket alive.
+- **write_file**: a background process slowly reads ~8KB/s from the FIFO.
+  The pod-side `head -c <size> > /tmp/fifo` blocks after filling the 64KB
+  pipe buffer.
+
+After the fault, the retry needs to complete quickly. A **pod-side timed
+cleanup** (scheduled via `sleep <N> && pkill ... && rm ...` before the test
+starts) replaces the FIFO with a regular file (for read) or removes it
+(for write, so the shell redirection creates a regular file). This runs
+entirely on the pod, so it works even while nftables blocks the K8s API.
+
 ## What this doesn't test
 
 - **Mid-stream disconnection on an idle WebSocket**: REJECT blocks new
@@ -80,8 +106,8 @@ harder in a standalone script.
 - **API server 503s**: REJECT produces `ConnectionRefusedError`, not
   `ApiException(status=503)`. Simulating 503s would require a proxy.
   The retry logic treats both as transient.
-- **Helm install/uninstall under faults**: only `exec()` is tested. The
-  sandbox is installed before faults begin.
+- **Helm install/uninstall under faults**: not tested. The sandbox is
+  installed before faults begin.
 
 ## Safety
 
@@ -100,5 +126,6 @@ uv run python test/diagnostics/exec_retry/run.py
 ```
 
 Expected results:
-- **With exec retry PR**: all 3 tests PASS
-- **Without exec retry PR (main)**: transient FAIL, sustained PASS, recovery PASS
+- **With retry on exec, read_file, write_file**: all 5 tests PASS
+- **With retry on exec only**: exec tests PASS, read_file/write_file FAIL, recovery PASS
+- **Without retry logic**: exec_transient FAIL, read_file/write_file FAIL, exec_sustained PASS, recovery PASS
