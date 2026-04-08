@@ -39,7 +39,7 @@ def main() -> None:
     print(f"_Config.in_cluster = {cfg.in_cluster}")
     if cfg.in_cluster:
         print("FAIL: in-cluster config was loaded instead of kubeconfig.")
-        print("This means load_incluster_config() took priority — the PR #177 fix is not applied.")
+        print("load_incluster_config() took priority — PR #177 fix is not applied.")
         sys.exit(1)
     print("PASS: kubeconfig was preferred over in-cluster config.")
 
