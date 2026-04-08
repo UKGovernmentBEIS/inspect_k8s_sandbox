@@ -6,6 +6,10 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[options]
+exclude-newer = "2026-03-31T15:02:42.760834741Z"
+exclude-newer-span = "P1W"
+
 [[package]]
 name = "aioboto3"
 version = "15.5.0"

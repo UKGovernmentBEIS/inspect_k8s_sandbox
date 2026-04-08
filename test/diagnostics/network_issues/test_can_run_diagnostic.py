@@ -1,4 +1,4 @@
-from run import run_diagnostic_eval
+from .run import run_diagnostic_eval
 
 
 def test_can_run_diagnostic_network_issues() -> None:
