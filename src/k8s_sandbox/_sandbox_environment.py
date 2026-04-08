@@ -26,13 +26,13 @@ from pydantic import BaseModel, TypeAdapter
 from tenacity import retry_if_exception, stop_after_attempt, wait_exponential_jitter
 from tenacity.asyncio import AsyncRetrying
 
-from k8s_sandbox._helm import (
+from k8s_sandbox_core._helm import (
     DEFAULT_CHART,
     Release,
     StaticValuesSource,
     ValuesSource,
 )
-from k8s_sandbox._kubernetes_api import validate_context_name
+from k8s_sandbox_core._kubernetes_api import validate_context_name
 from k8s_sandbox._logger import (
     format_log_message,
     inspect_trace_action,
@@ -40,14 +40,14 @@ from k8s_sandbox._logger import (
     log_trace,
     log_warn,
 )
-from k8s_sandbox._manager import (
+from k8s_sandbox_core._manager import (
     HelmReleaseManager,
     uninstall_all_unmanaged_releases,
     uninstall_unmanaged_release,
 )
-from k8s_sandbox._pod import Pod
-from k8s_sandbox._pod.error import ExecutableNotFoundError, GetReturncodeError, PodError
-from k8s_sandbox._pod.executor import PodOpExecutor
+from k8s_sandbox_core._pod import Pod
+from k8s_sandbox_core._pod.error import ExecutableNotFoundError, GetReturncodeError, PodError
+from k8s_sandbox_core._pod.executor import PodOpExecutor
 from k8s_sandbox._prereqs import validate_prereqs
 from k8s_sandbox.compose._compose import (
     ComposeConfigValuesSource,

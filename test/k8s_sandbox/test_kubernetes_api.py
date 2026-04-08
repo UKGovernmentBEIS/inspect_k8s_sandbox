@@ -9,7 +9,7 @@ import pytest
 
 from k8s_sandbox._kubernetes_api import get_default_namespace
 
-_KUBE_API = importlib.import_module("k8s_sandbox._kubernetes_api")
+_KUBE_API = importlib.import_module("k8s_sandbox_core._kubernetes_api")
 
 
 class _ConfigProtocol(Protocol):
@@ -53,7 +53,7 @@ class TestConfigLoading:
 
     # Singleton reset handled by _reset_config autouse fixture.
 
-    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox_core._kubernetes_api.config")
     def test_loads_incluster_config_when_available(
         self, mock_config: MagicMock
     ) -> None:
@@ -67,7 +67,7 @@ class TestConfigLoading:
         typed_config.load_kube_config.assert_not_called()
         assert instance.in_cluster is True
 
-    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox_core._kubernetes_api.config")
     def test_falls_back_to_kubeconfig(self, mock_config: MagicMock) -> None:
         """When not in a pod, falls back to load_kube_config()."""
         from kubernetes.config import ConfigException  # type: ignore
@@ -88,7 +88,7 @@ class TestConfigLoading:
         typed_config.load_kube_config.assert_called_once()
         assert instance.in_cluster is False
 
-    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox_core._kubernetes_api.config")
     def test_incluster_get_context_returns_none_context_name(
         self, mock_config: MagicMock
     ) -> None:
@@ -101,7 +101,7 @@ class TestConfigLoading:
 
         assert context["name"] == "in-cluster"
 
-    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox_core._kubernetes_api.config")
     def test_incluster_rejects_named_context(self, mock_config: MagicMock) -> None:
         """In-cluster mode: get_context('some-name') raises ValueError."""
         typed_config = cast(_ConfigMock, mock_config)
@@ -118,7 +118,7 @@ class TestGetDefaultNamespace:
 
     # Singleton reset handled by _reset_config autouse fixture.
 
-    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox_core._kubernetes_api.config")
     def test_incluster_reads_namespace_from_sa_token(
         self, mock_config: MagicMock, tmp_path: Path
     ) -> None:
@@ -133,13 +133,13 @@ class TestGetDefaultNamespace:
         setattr(Config, "_instance", instance)
 
         with patch(
-            "k8s_sandbox._kubernetes_api._INCLUSTER_NAMESPACE_PATH", str(ns_file)
+            "k8s_sandbox_core._kubernetes_api._INCLUSTER_NAMESPACE_PATH", str(ns_file)
         ):
             namespace = get_default_namespace(context_name=None)
 
         assert namespace == "researcher"
 
-    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox_core._kubernetes_api.config")
     def test_incluster_defaults_to_default_namespace(
         self, mock_config: MagicMock
     ) -> None:
@@ -151,14 +151,14 @@ class TestGetDefaultNamespace:
         setattr(Config, "_instance", instance)
 
         with patch(
-            "k8s_sandbox._kubernetes_api._INCLUSTER_NAMESPACE_PATH",
+            "k8s_sandbox_core._kubernetes_api._INCLUSTER_NAMESPACE_PATH",
             "/nonexistent/path",
         ):
             namespace = get_default_namespace(context_name=None)
 
         assert namespace == "default"
 
-    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox_core._kubernetes_api.config")
     def test_kubeconfig_reads_namespace_from_context(
         self, mock_config: MagicMock
     ) -> None:

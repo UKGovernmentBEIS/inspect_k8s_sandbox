@@ -34,7 +34,7 @@ def task() -> Task:
 
 
 def test_with_cleanup(model: Model, task: Task) -> None:
-    with patch("k8s_sandbox._helm.uninstall", wraps=uninstall) as spy:
+    with patch("k8s_sandbox_core._helm.uninstall", wraps=uninstall) as spy:
         run_and_verify_inspect_eval(task=task, model=model)
 
     assert spy.call_count == 1
@@ -44,10 +44,10 @@ def test_without_cleanup(model: Model, task: Task) -> None:
     release = "no-clean"
 
     with patch(
-        "k8s_sandbox._helm.Release._generate_release_name",
+        "k8s_sandbox_core._helm.Release._generate_release_name",
         return_value=release,
     ):
-        with patch("k8s_sandbox._helm.uninstall", wraps=uninstall) as spy:
+        with patch("k8s_sandbox_core._helm.uninstall", wraps=uninstall) as spy:
             run_and_verify_inspect_eval(task=task, model=model, sandbox_cleanup=False)
 
     assert spy.call_count == 0
@@ -57,12 +57,12 @@ def test_without_cleanup(model: Model, task: Task) -> None:
 def test_cli_cleanup_all_gets_user_confirmation(model: Model, task: Task) -> None:
     release = "no-clean"
     with patch(
-        "k8s_sandbox._helm.Release._generate_release_name",
+        "k8s_sandbox_core._helm.Release._generate_release_name",
         return_value=release,
     ):
         run_and_verify_inspect_eval(task=task, model=model, sandbox_cleanup=False)
 
-    with patch("k8s_sandbox._helm.uninstall", wraps=uninstall) as spy:
+    with patch("k8s_sandbox_core._helm.uninstall", wraps=uninstall) as spy:
         # We don't want to actually uninstall all releases in this test (the test could
         # be run on a production cluster).
         with patch("rich.prompt.Confirm.ask", return_value=False) as confirm:

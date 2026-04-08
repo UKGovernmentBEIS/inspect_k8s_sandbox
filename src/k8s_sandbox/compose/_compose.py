@@ -15,7 +15,7 @@ from inspect_ai.util import (
     parse_compose_yaml,
 )
 
-from k8s_sandbox._helm import ValuesSource, validate_no_null_values
+from k8s_sandbox_core._helm import ValuesSource, validate_no_null_values
 from k8s_sandbox.compose._converter import convert_compose_to_helm_values
 
 

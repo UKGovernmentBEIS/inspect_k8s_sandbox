@@ -6,6 +6,10 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[options]
+exclude-newer = "2026-04-01T14:39:21.631188773Z"
+exclude-newer-span = "P1W"
+
 [[package]]
 name = "aioboto3"
 version = "15.5.0"
@@ -868,14 +872,17 @@ name = "inspect-k8s-sandbox"
 version = "0.4.1"
 source = { editable = "." }
 dependencies = [
-    { name = "inspect-ai" },
     { name = "jsonschema" },
     { name = "kubernetes" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "shortuuid" },
     { name = "tenacity" },
 ]
 
 [package.optional-dependencies]
 dev = [
+    { name = "inspect-ai" },
     { name = "kubernetes-stubs-elephant-fork" },
     { name = "mypy" },
     { name = "pre-commit" },
@@ -887,10 +894,14 @@ dev = [
     { name = "types-jsonschema" },
     { name = "types-pyyaml" },
 ]
+inspect = [
+    { name = "inspect-ai" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "inspect-ai", specifier = ">=0.3.161" },
+    { name = "inspect-ai", marker = "extra == 'dev'", specifier = ">=0.3.161" },
+    { name = "inspect-ai", marker = "extra == 'inspect'", specifier = ">=0.3.161" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "kubernetes", specifier = ">=35.0.0" },
     { name = "kubernetes-stubs-elephant-fork", marker = "extra == 'dev'", specifier = ">=35.0.0" },
@@ -900,12 +911,15 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.7" },
     { name = "pytest-env", marker = "extra == 'dev'", specifier = ">=1.2.0" },
     { name = "pytest-repeat", marker = "extra == 'dev'", specifier = ">=0.9.3" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
+    { name = "rich" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.6" },
+    { name = "shortuuid", specifier = ">=1.0.0" },
     { name = "tenacity", specifier = ">=8.0.0" },
     { name = "types-jsonschema", marker = "extra == 'dev'", specifier = ">=4.23.0.20241208" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["inspect", "dev"]
 
 [[package]]
 name = "jmespath"

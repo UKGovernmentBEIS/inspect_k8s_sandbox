@@ -48,7 +48,7 @@ def log_err(caplog: LogCaptureFixture) -> LogCaptureFixture:
 async def test_helm_install_error(
     uninstallable_release: Release, log_err: LogCaptureFixture
 ) -> None:
-    with patch("k8s_sandbox._helm._run_subprocess", wraps=_run_subprocess) as spy:
+    with patch("k8s_sandbox_core._helm._run_subprocess", wraps=_run_subprocess) as spy:
         with pytest.raises(RuntimeError) as excinfo:
             await uninstallable_release.install()
 
@@ -59,7 +59,7 @@ async def test_helm_install_error(
 
 async def test_cancelling_install_uninstalls():
     release = Release(__file__, None, ValuesSource.none(), None)
-    with patch("k8s_sandbox._helm.uninstall", wraps=uninstall) as spy:
+    with patch("k8s_sandbox_core._helm.uninstall", wraps=uninstall) as spy:
         task = asyncio.create_task(release.install())
         await asyncio.sleep(0.5)
 
@@ -104,9 +104,9 @@ async def test_helm_resourcequota_retries(uninstallable_release: Release) -> Non
         "modified; please apply your changes to the latest version and try again\n",
     )
 
-    with patch("k8s_sandbox._helm.INSTALL_RETRY_DELAY_SECONDS", 0):
+    with patch("k8s_sandbox_core._helm.INSTALL_RETRY_DELAY_SECONDS", 0):
         with patch(
-            "k8s_sandbox._helm._run_subprocess", return_value=fail_result
+            "k8s_sandbox_core._helm._run_subprocess", return_value=fail_result
         ) as mock:
             with pytest.raises(Exception) as excinfo:
                 await uninstallable_release.install()
@@ -164,7 +164,7 @@ async def test_helm_create_namespace(
         monkeypatch.setenv("INSPECT_HELM_CREATE_NAMESPACE", value)
 
     release = Release(__file__, None, ValuesSource.none(), None)
-    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+    with patch("k8s_sandbox_core._helm._run_subprocess", autospec=True) as mock_run:
         await release.install()
 
     mock_run.assert_called_once()
@@ -279,7 +279,7 @@ async def test_helm_install_extra_values() -> None:
     extra = {"sampleMetadataTestName": "abc", "sampleMetadataTest": "5"}
     release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
 
-    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+    with patch("k8s_sandbox_core._helm._run_subprocess", autospec=True) as mock_run:
         await release.install()
 
     mock_run.assert_called_once()
@@ -291,7 +291,7 @@ async def test_helm_install_extra_values() -> None:
 async def test_helm_install_no_extra_values() -> None:
     release = Release(__file__, None, ValuesSource.none(), None)
 
-    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+    with patch("k8s_sandbox_core._helm._run_subprocess", autospec=True) as mock_run:
         await release.install()
 
     mock_run.assert_called_once()
@@ -318,7 +318,7 @@ async def test_helm_install_extra_values_escaped() -> None:
     extra = {"sampleMetadataKey": "val,with.special=chars"}
     release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
 
-    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+    with patch("k8s_sandbox_core._helm._run_subprocess", autospec=True) as mock_run:
         await release.install()
 
     args = mock_run.call_args[0][1]
@@ -435,7 +435,7 @@ async def test_coredns_image_env_var(
         monkeypatch.setenv(INSPECT_SANDBOX_COREDNS_IMAGE, env_value)
 
     release = Release(__file__, None, ValuesSource.none(), None)
-    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+    with patch("k8s_sandbox_core._helm._run_subprocess", autospec=True) as mock_run:
         await release.install()
 
     mock_run.assert_called_once()
@@ -507,31 +507,31 @@ def test_get_helm_major_version_returns_none_on_error() -> None:
 
 @pytest.mark.usefixtures("_clear_wait_flag_cache")
 def test_get_wait_flag_helm3() -> None:
-    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=3):
+    with patch("k8s_sandbox_core._helm._get_helm_major_version", return_value=3):
         assert _get_wait_flag() == "--wait"
 
 
 @pytest.mark.usefixtures("_clear_wait_flag_cache")
 def test_get_wait_flag_helm4() -> None:
-    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=4):
+    with patch("k8s_sandbox_core._helm._get_helm_major_version", return_value=4):
         assert _get_wait_flag() == "--wait=legacy"
 
 
 @pytest.mark.usefixtures("_clear_wait_flag_cache")
 def test_get_wait_flag_helm5() -> None:
-    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=5):
+    with patch("k8s_sandbox_core._helm._get_helm_major_version", return_value=5):
         assert _get_wait_flag() == "--wait=legacy"
 
 
 @pytest.mark.usefixtures("_clear_wait_flag_cache")
 def test_get_wait_flag_returns_wait_on_failure() -> None:
-    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=None):
+    with patch("k8s_sandbox_core._helm._get_helm_major_version", return_value=None):
         assert _get_wait_flag() == "--wait"
 
 
 @pytest.mark.usefixtures("_clear_wait_flag_cache")
 def test_get_wait_flag_is_cached() -> None:
-    with patch("k8s_sandbox._helm._get_helm_major_version", return_value=3) as mock:
+    with patch("k8s_sandbox_core._helm._get_helm_major_version", return_value=3) as mock:
         _get_wait_flag()
         _get_wait_flag()
         mock.assert_called_once()
@@ -553,8 +553,8 @@ async def test_watcher_logs_on_gpu_scheduling_event(
         _make_gpu_scheduling_event(release.release_name)
     ]
 
-    with patch("k8s_sandbox._helm.k8s_client", return_value=mock_k8s):
-        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
+    with patch("k8s_sandbox_core._helm.k8s_client", return_value=mock_k8s):
+        with patch("k8s_sandbox_core._helm._SCHEDULING_POLL_INTERVAL", 0):
             with caplog.at_level(logging.WARNING):
                 await release._watch_for_scheduling_events()
 
@@ -576,8 +576,8 @@ async def test_watcher_does_not_log_for_non_gpu_event(
         Exception("terminate"),
     ]
 
-    with patch("k8s_sandbox._helm.k8s_client", return_value=mock_k8s):
-        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
+    with patch("k8s_sandbox_core._helm.k8s_client", return_value=mock_k8s):
+        with patch("k8s_sandbox_core._helm._SCHEDULING_POLL_INTERVAL", 0):
             with caplog.at_level(logging.WARNING):
                 await release._watch_for_scheduling_events()
 
@@ -594,8 +594,8 @@ async def test_watcher_does_not_log_for_different_release(
         Exception("terminate"),
     ]
 
-    with patch("k8s_sandbox._helm.k8s_client", return_value=mock_k8s):
-        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
+    with patch("k8s_sandbox_core._helm.k8s_client", return_value=mock_k8s):
+        with patch("k8s_sandbox_core._helm._SCHEDULING_POLL_INTERVAL", 0):
             with caplog.at_level(logging.WARNING):
                 await release._watch_for_scheduling_events()
 
@@ -607,8 +607,8 @@ async def test_watcher_exits_gracefully_on_k8s_client_error(
 ) -> None:
     release = Release(__file__, None, ValuesSource.none(), None)
 
-    with patch("k8s_sandbox._helm.k8s_client", side_effect=Exception("no kubeconfig")):
-        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
+    with patch("k8s_sandbox_core._helm.k8s_client", side_effect=Exception("no kubeconfig")):
+        with patch("k8s_sandbox_core._helm._SCHEDULING_POLL_INTERVAL", 0):
             with caplog.at_level(logging.WARNING):
                 await release._watch_for_scheduling_events()  # must not raise
 
@@ -638,7 +638,7 @@ async def test_helm_labels_env_var(
         monkeypatch.setenv(INSPECT_HELM_LABELS, env_value)
 
     release = Release(__file__, None, ValuesSource.none(), None)
-    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+    with patch("k8s_sandbox_core._helm._run_subprocess", autospec=True) as mock_run:
         await release.install()
 
     mock_run.assert_called_once()

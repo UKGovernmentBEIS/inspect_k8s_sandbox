@@ -531,7 +531,7 @@ async def test_exec_timeout_which_ignores_sigterm(
 async def test_api_timeout_is_not_triggered_by_long_running_commands(
     sandbox: K8sSandboxEnvironment,
 ) -> None:
-    with patch("k8s_sandbox._pod.op.API_TIMEOUT", 1):
+    with patch("k8s_sandbox_core._pod.op.API_TIMEOUT", 1):
         result = await sandbox.exec(["sleep", "3"])
 
     assert result.success

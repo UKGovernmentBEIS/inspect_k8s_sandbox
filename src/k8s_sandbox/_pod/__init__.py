@@ -1,6 +1,6 @@
-from k8s_sandbox._pod.error import PodError
-from k8s_sandbox._pod.get_returncode import GetReturncodeError
-from k8s_sandbox._pod.pod import Pod
+"""Re-export from k8s_sandbox_core for backward compatibility."""
+
+from k8s_sandbox_core._pod import GetReturncodeError, Pod, PodError
 
 __all__ = [
     "GetReturncodeError",
