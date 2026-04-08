@@ -10,75 +10,41 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from uuid import uuid4
 
 from inspect_ai import Task, eval
 from inspect_ai.dataset import MemoryDataset, Sample
-from inspect_ai.model import (
-    ChatCompletionChoice,
-    ChatMessage,
-    ChatMessageAssistant,
-    GenerateConfig,
-    Model,
-    ModelAPI,
-    ModelOutput,
-    modelapi,
-)
+from inspect_ai.model import ChatMessage, GenerateConfig, ModelOutput, get_model
 from inspect_ai.scorer import match
 from inspect_ai.solver import generate, use_tools
-from inspect_ai.tool import ToolCall, ToolChoice, ToolInfo, bash
+from inspect_ai.tool import ToolChoice, ToolInfo, bash
 from inspect_ai.util import SandboxEnvironmentSpec
 
 from k8s_sandbox import K8sSandboxEnvironmentConfig
 from k8s_sandbox._kubernetes_api import _Config
 
-
 # ---------------------------------------------------------------------------
-# Inline mock model (same pattern as the repo's test suite)
+# Mock model outputs: one bash tool call, then echo the tool result
 # ---------------------------------------------------------------------------
 
-
-def _tool_call(function: str, arguments: dict[str, str]) -> ToolCall:
-    return ToolCall(
-        id=uuid4().hex,
-        function=function,
-        arguments=arguments,
-        type="function",
-    )
+_made_tool_call = False
 
 
-def _output_from_tool_call(tc: ToolCall) -> ModelOutput:
-    return ModelOutput(
-        choices=[
-            ChatCompletionChoice(
-                message=ChatMessageAssistant(
-                    content="I'd like to use a tool.",
-                    tool_calls=[tc],
-                    source="generate",
-                ),
-                stop_reason="tool_calls",
-            )
-        ]
-    )
-
-
-@modelapi(name="e2e_mock")
-class _MockModelAPI(ModelAPI):
-    def __init__(self, tool_calls: list[ToolCall]) -> None:
-        super().__init__("e2e_mock", None, config=GenerateConfig())
-        self._tool_calls = list(tool_calls)
-
-    async def generate(
-        self,
-        input: list[ChatMessage],
-        tools: list[ToolInfo],
-        tool_choice: ToolChoice,
-        config: GenerateConfig,
-    ) -> ModelOutput:
-        if self._tool_calls:
-            return _output_from_tool_call(self._tool_calls.pop(0))
-        last_tool_output = input[-1].text.strip()
-        return ModelOutput.from_content("e2e_mock", last_tool_output)
+def _mock_generate(
+    input: list[ChatMessage],
+    tools: list[ToolInfo],
+    tool_choice: ToolChoice,
+    config: GenerateConfig,
+) -> ModelOutput:
+    global _made_tool_call
+    if not _made_tool_call:
+        _made_tool_call = True
+        return ModelOutput.for_tool_call(
+            model="mockllm",
+            tool_name="bash",
+            tool_arguments={"cmd": "echo hello"},
+        )
+    last_tool_output = input[-1].text.strip()
+    return ModelOutput.from_content("mockllm", last_tool_output)
 
 
 # ---------------------------------------------------------------------------
@@ -105,8 +71,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     # 2. Run a minimal Inspect eval through k8s sandbox
     # ------------------------------------------------------------------
-    tool_calls = [_tool_call("bash", {"cmd": "echo hello"})]
-    model = Model(_MockModelAPI(tool_calls), GenerateConfig())
+    model = get_model("mockllm/model", custom_outputs=_mock_generate)
 
     values_path = Path("/app/test/diagnostics/two-cluster-config/values.yaml")
     sandbox_config = K8sSandboxEnvironmentConfig(values=values_path)
