@@ -1,6 +1,7 @@
 services:
   default:
     workingDir: "/root"
+    runtimeClassName: CLUSTER_DEFAULT
     resources:
       limits:
         memory: "128Mi"

@@ -332,40 +332,54 @@ async def _setup_slow_fifo(
             regular file. This runs entirely on the pod so it works even
             while the K8s API is blocked by nftables.
     """
+    stop_file = f"{fifo_path}.stop"
+
     if mode == "read":
-        # Slow writer: 4KB every 0.5s. Outer loop re-opens FIFO after
-        # reader disconnects (SIGPIPE breaks inner loop).
+        # Slow writer: 4KB every 0.5s. The output redirection on the for
+        # loop keeps the FIFO write end open across dd invocations. When
+        # the reader dies (SIGPIPE), dd fails, the inner loop breaks, the
+        # subshell exits, and the outer loop reopens the FIFO for the next
+        # reader.
+        #
+        # The stop file check allows clean shutdown: when the file appears,
+        # the writer exits the loop, closing the FIFO write end. The
+        # retried head process sees EOF and returns cleanly. We avoid
+        # pkill because it would also kill the retry's head process (which
+        # has the FIFO path in its args).
         peer_cmd = (
-            'while true; do '
-            '  for i in $(seq 1 200); do '
+            f'while [ ! -f {stop_file} ]; do '
+            f'  while [ ! -f {stop_file} ]; do '
             '    dd if=/dev/zero bs=4096 count=1 2>/dev/null || break; '
             '    sleep 0.5; '
             f'  done > {fifo_path}; '
             'done'
         )
-        # After cleanup_delay: kill the writer, replace FIFO with a small
-        # regular file so the retried read_file() completes quickly.
         cleanup_cmd = (
             f"sleep {cleanup_delay}; "
-            f"pkill -f '{fifo_path}' 2>/dev/null; "
-            f"rm -f {fifo_path}; "
-            f"echo retry-ok > {fifo_path}"
+            f"touch {stop_file}"
         )
     else:
-        # Slow reader: 4KB every 0.5s.
+        # Slow reader: 4KB every 0.5s. The input redirection on the for
+        # loop keeps the FIFO read end open across dd invocations — this
+        # is critical, otherwise each dd opens/closes the FIFO and the
+        # writer gets SIGPIPE immediately.
+        #
+        # When the stop file appears, the reader exits. The FIFO read end
+        # closes, giving the pod-side head a SIGPIPE (exit 141). Tenacity
+        # retries, and by then the FIFO has been removed so head writes to
+        # a regular file.
         peer_cmd = (
-            'while true; do '
-            f'  while dd if={fifo_path} of=/dev/null '
-            '    bs=4096 count=1 2>/dev/null; do '
+            f'while [ ! -f {stop_file} ]; do '
+            f'  while [ ! -f {stop_file} ]; do '
+            '    dd of=/dev/null bs=4096 count=1 2>/dev/null || break; '
             '    sleep 0.5; '
-            '  done; '
+            f'  done < {fifo_path}; '
             'done'
         )
-        # After cleanup_delay: kill the reader and remove the FIFO so the
-        # retried write_file() creates a regular file at the path.
         cleanup_cmd = (
             f"sleep {cleanup_delay}; "
-            f"pkill -f '{fifo_path}' 2>/dev/null; "
+            f"touch {stop_file}; "
+            f"sleep 2; "
             f"rm -f {fifo_path}"
         )
 
@@ -373,7 +387,8 @@ async def _setup_slow_fifo(
         [
             "bash",
             "-c",
-            f"mkfifo {fifo_path} 2>/dev/null; ({peer_cmd}) & ({cleanup_cmd}) &",
+            f"rm -f {stop_file}; mkfifo {fifo_path} 2>/dev/null; "
+            f"({peer_cmd}) & ({cleanup_cmd}) &",
         ],
     )
     assert result.success, f"Failed to set up FIFO: {result.stderr}"
@@ -403,7 +418,7 @@ async def test_read_file_transient_fault(
     print("  Expected: PASS with read_file retry logic, FAIL without it")
 
     fifo_path = "/tmp/slow_read_fifo"
-    cleanup_delay = SETTLE_TIME + BLOCK_DURATION + 3
+    cleanup_delay = SETTLE_TIME + BLOCK_DURATION + 15
     await _setup_slow_fifo(sandbox, fifo_path, "read", cleanup_delay)
     await asyncio.sleep(1)
 
@@ -446,8 +461,8 @@ async def test_read_file_transient_fault(
         _nft_cleanup()
         try:
             await sandbox.exec(
-                ["bash", "-c", f"pkill -f '{fifo_path}' 2>/dev/null; "
-                 f"rm -f {fifo_path}"]
+                ["bash", "-c",
+                 f"touch {fifo_path}.stop; sleep 1; rm -f {fifo_path} {fifo_path}.stop"]
             )
         except Exception:
             pass
@@ -478,7 +493,7 @@ async def test_write_file_transient_fault(
     print("  Expected: PASS with write_file retry logic, FAIL without it")
 
     fifo_path = "/tmp/slow_write_fifo"
-    cleanup_delay = SETTLE_TIME + BLOCK_DURATION + 3
+    cleanup_delay = SETTLE_TIME + BLOCK_DURATION + 15
     await _setup_slow_fifo(sandbox, fifo_path, "write", cleanup_delay)
     await asyncio.sleep(1)
 
@@ -531,8 +546,8 @@ async def test_write_file_transient_fault(
         _nft_cleanup()
         try:
             await sandbox.exec(
-                ["bash", "-c", f"pkill -f '{fifo_path}' 2>/dev/null; "
-                 f"rm -f {fifo_path}"]
+                ["bash", "-c",
+                 f"touch {fifo_path}.stop; sleep 1; rm -f {fifo_path} {fifo_path}.stop"]
             )
         except Exception:
             pass
