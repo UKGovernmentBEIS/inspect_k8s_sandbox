@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,25 +25,47 @@ def _no_retry_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_exec_retry, "wait", wait_none())
 
 
-def _make_sandbox_with_mock_pod() -> tuple[K8sSandboxEnvironment, AsyncMock]:
-    """Create a K8sSandboxEnvironment with a mocked _pod.exec.
+def _make_sandbox() -> tuple[K8sSandboxEnvironment, MagicMock]:
+    """Create a K8sSandboxEnvironment with mocked internals.
 
-    Returns the sandbox and the mock _pod.exec coroutine for configuring
-    side_effect and asserting call_count.
+    Returns the sandbox and the mock pod (MagicMock) so callers can assign
+    specific AsyncMock methods without mypy method-assign errors.
     """
     sandbox = object.__new__(K8sSandboxEnvironment)
-    sandbox._pod = MagicMock()
-    sandbox._pod.info = MagicMock()
-    sandbox._pod.info.name = "test-pod"
+    mock_pod = MagicMock()
+    sandbox._pod = mock_pod
+    mock_pod.info = MagicMock()
+    mock_pod.info.name = "test-pod"
     sandbox._config = MagicMock()
     sandbox._config.default_user = None
     sandbox.release = MagicMock()
     sandbox.release.task_name = "test-task"
+    mock_pod.check_for_pod_restart = AsyncMock()
+    return sandbox, mock_pod
 
-    sandbox._pod.check_for_pod_restart = AsyncMock()
+
+def _make_sandbox_with_mock_pod() -> tuple[K8sSandboxEnvironment, AsyncMock]:
+    """Create a K8sSandboxEnvironment with a mocked _pod.exec."""
+    sandbox, mock_pod = _make_sandbox()
     mock_exec = AsyncMock()
-    sandbox._pod.exec = mock_exec
+    mock_pod.exec = mock_exec
     return sandbox, mock_exec
+
+
+def _make_sandbox_with_mock_read() -> tuple[K8sSandboxEnvironment, AsyncMock]:
+    """Create a K8sSandboxEnvironment with a mocked _pod.read_file."""
+    sandbox, mock_pod = _make_sandbox()
+    mock_read = AsyncMock()
+    mock_pod.read_file = mock_read
+    return sandbox, mock_read
+
+
+def _make_sandbox_with_mock_write() -> tuple[K8sSandboxEnvironment, AsyncMock]:
+    """Create a K8sSandboxEnvironment with a mocked _pod.write_file."""
+    sandbox, mock_pod = _make_sandbox()
+    mock_write = AsyncMock()
+    mock_pod.write_file = mock_write
+    return sandbox, mock_write
 
 
 def _success_result() -> ExecResult[str]:
@@ -178,3 +201,160 @@ class TestExecRetryExhausted:
             await sandbox.exec(["echo", "hello"])
 
         assert mock_exec.call_count == 5
+
+
+# -- read_file retry tests --
+
+
+def _read_file_side_effect(error: Exception, content: bytes = b"file-content"):
+    """Return a side_effect that fails once then writes content to dst."""
+    calls = 0
+
+    async def impl(src: Path, dst):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise error
+        dst.write(content)
+
+    return impl
+
+
+class TestReadFileRetryTransient:
+    """Transient errors during read_file should be retried."""
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(
+                ApiException(status=503, reason="Service Unavailable"),
+                id="ApiException",
+            ),
+            pytest.param(
+                websocket.WebSocketConnectionClosedException("gone"),
+                id="WebSocketException",
+            ),
+            pytest.param(
+                ConnectionError("connection refused"),
+                id="ConnectionError",
+            ),
+            pytest.param(
+                PodError("WebSocket connection lost", pod="test-pod"),
+                id="PodError",
+            ),
+        ],
+    )
+    async def test_transient_error_is_retried(self, error: Exception) -> None:
+        sandbox, mock_read = _make_sandbox_with_mock_read()
+        mock_read.side_effect = _read_file_side_effect(error)
+
+        contents = await sandbox.read_file("/tmp/test.txt")
+
+        assert contents == "file-content"
+        assert mock_read.call_count == 2
+
+
+class TestReadFileRetryPermanent:
+    """Permanent errors during read_file should NOT be retried."""
+
+    async def test_permission_error_not_retried(self) -> None:
+        sandbox, mock_read = _make_sandbox_with_mock_read()
+        mock_read.side_effect = PermissionError("permission denied")
+
+        with pytest.raises(PermissionError):
+            await sandbox.read_file("/tmp/test.txt")
+
+        assert mock_read.call_count == 1
+
+    async def test_file_not_found_not_retried(self) -> None:
+        sandbox, mock_read = _make_sandbox_with_mock_read()
+        mock_read.side_effect = FileNotFoundError("no such file")
+
+        with pytest.raises(FileNotFoundError):
+            await sandbox.read_file("/tmp/test.txt")
+
+        assert mock_read.call_count == 1
+
+
+class TestReadFileRetryExhausted:
+    """After 5 failed attempts, read_file should propagate the error."""
+
+    async def test_retries_exhausted_raises_k8s_error(self) -> None:
+        sandbox, mock_read = _make_sandbox_with_mock_read()
+        mock_read.side_effect = ApiException(status=503, reason="Service Unavailable")
+
+        with pytest.raises(K8sError):
+            await sandbox.read_file("/tmp/test.txt")
+
+        assert mock_read.call_count == 5
+
+
+# -- write_file retry tests --
+
+
+class TestWriteFileRetryTransient:
+    """Transient errors during write_file should be retried."""
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(
+                ApiException(status=503, reason="Service Unavailable"),
+                id="ApiException",
+            ),
+            pytest.param(
+                websocket.WebSocketConnectionClosedException("gone"),
+                id="WebSocketException",
+            ),
+            pytest.param(
+                ConnectionError("connection refused"),
+                id="ConnectionError",
+            ),
+            pytest.param(
+                PodError("WebSocket connection lost", pod="test-pod"),
+                id="PodError",
+            ),
+        ],
+    )
+    async def test_transient_error_is_retried(self, error: Exception) -> None:
+        sandbox, mock_write = _make_sandbox_with_mock_write()
+        mock_write.side_effect = [error, None]
+
+        await sandbox.write_file("/tmp/test.txt", "hello")
+
+        assert mock_write.call_count == 2
+
+
+class TestWriteFileRetryPermanent:
+    """Permanent errors during write_file should NOT be retried."""
+
+    async def test_permission_error_not_retried(self) -> None:
+        sandbox, mock_write = _make_sandbox_with_mock_write()
+        mock_write.side_effect = PermissionError("permission denied")
+
+        with pytest.raises(PermissionError):
+            await sandbox.write_file("/tmp/test.txt", "hello")
+
+        assert mock_write.call_count == 1
+
+    async def test_is_a_directory_not_retried(self) -> None:
+        sandbox, mock_write = _make_sandbox_with_mock_write()
+        mock_write.side_effect = IsADirectoryError("is a directory")
+
+        with pytest.raises(IsADirectoryError):
+            await sandbox.write_file("/tmp/test.txt", "hello")
+
+        assert mock_write.call_count == 1
+
+
+class TestWriteFileRetryExhausted:
+    """After 5 failed attempts, write_file should propagate the error."""
+
+    async def test_retries_exhausted_raises_k8s_error(self) -> None:
+        sandbox, mock_write = _make_sandbox_with_mock_write()
+        mock_write.side_effect = ApiException(status=503, reason="Service Unavailable")
+
+        with pytest.raises(K8sError):
+            await sandbox.write_file("/tmp/test.txt", "hello")
+
+        assert mock_write.call_count == 5
