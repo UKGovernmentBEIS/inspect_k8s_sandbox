@@ -9,6 +9,7 @@ dependencies = [
   "inspect-ai>=0.3.161",
   "kubernetes>=35.0.0",
   "jsonschema>=4.23.0",
+  "tenacity>=8.0.0",
 ]
 
 [project.optional-dependencies]

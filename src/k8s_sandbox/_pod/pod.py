@@ -7,7 +7,7 @@ from inspect_ai.util import ExecResult
 
 from k8s_sandbox._pod.execute import ExecuteOperation
 from k8s_sandbox._pod.executor import PodOpExecutor
-from k8s_sandbox._pod.op import PodInfo
+from k8s_sandbox._pod.op import PodInfo, check_for_pod_restart
 from k8s_sandbox._pod.read import ReadFileOperation
 from k8s_sandbox._pod.write import WriteFileOperation
 
@@ -34,6 +34,10 @@ class Pod:
             initial_restart_count,
             restarted_container_behavior,
         )
+
+    async def check_for_pod_restart(self) -> None:
+        """Check if the pod has been replaced or its container has restarted."""
+        await self._run_async(lambda: check_for_pod_restart(self.info))
 
     async def exec(
         self,
