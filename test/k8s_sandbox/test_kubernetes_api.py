@@ -176,3 +176,66 @@ class TestGetDefaultNamespace:
         namespace = get_default_namespace(context_name=None)
 
         assert namespace == "my-namespace"
+
+
+class TestInspectK8sDefaultNamespace:
+    """Tests for INSPECT_K8S_DEFAULT_NAMESPACE env var override."""
+
+    def test_env_var_overrides_incluster(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Env var takes precedence over in-cluster namespace."""
+        monkeypatch.setenv("INSPECT_K8S_DEFAULT_NAMESPACE", "sandbox-ns")
+        assert get_default_namespace(context_name=None) == "sandbox-ns"
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    def test_env_var_overrides_kubeconfig(
+        self, mock_config: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Env var takes precedence over kubeconfig context namespace."""
+        from kubernetes.config import ConfigException
+
+        typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_incluster_config.side_effect = ConfigException()
+        typed_config.load_kube_config.return_value = None
+        typed_config.list_kube_config_contexts.return_value = (
+            [{"name": "test", "context": {"namespace": "kubeconfig-ns"}}],
+            {"name": "test", "context": {"namespace": "kubeconfig-ns"}},
+        )
+        monkeypatch.setenv("INSPECT_K8S_DEFAULT_NAMESPACE", "override-ns")
+
+        assert get_default_namespace(context_name=None) == "override-ns"
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    def test_unset_falls_through(
+        self, mock_config: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When unset, existing behavior is preserved."""
+        from kubernetes.config import ConfigException
+
+        monkeypatch.delenv("INSPECT_K8S_DEFAULT_NAMESPACE", raising=False)
+        typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_incluster_config.side_effect = ConfigException()
+        typed_config.load_kube_config.return_value = None
+        typed_config.list_kube_config_contexts.return_value = (
+            [{"name": "test", "context": {"namespace": "kubeconfig-ns"}}],
+            {"name": "test", "context": {"namespace": "kubeconfig-ns"}},
+        )
+
+        assert get_default_namespace(context_name=None) == "kubeconfig-ns"
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    def test_empty_string_falls_through(
+        self, mock_config: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty string is treated as unset."""
+        from kubernetes.config import ConfigException
+
+        monkeypatch.setenv("INSPECT_K8S_DEFAULT_NAMESPACE", "")
+        typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_incluster_config.side_effect = ConfigException()
+        typed_config.load_kube_config.return_value = None
+        typed_config.list_kube_config_contexts.return_value = (
+            [{"name": "test", "context": {"namespace": "kubeconfig-ns"}}],
+            {"name": "test", "context": {"namespace": "kubeconfig-ns"}},
+        )
+
+        assert get_default_namespace(context_name=None) == "kubeconfig-ns"
