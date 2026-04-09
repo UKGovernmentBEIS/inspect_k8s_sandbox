@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from pathlib import Path
 from typing import TypedDict, cast
 
@@ -16,6 +17,20 @@ logger = logging.getLogger(__name__)
 _thread_local = threading.local()
 
 _INCLUSTER_NAMESPACE_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+
+INSPECT_K8S_CLIENT_REFRESH_SECONDS = "INSPECT_K8S_CLIENT_REFRESH_SECONDS"
+
+
+def _get_client_refresh_seconds() -> int:
+    name = INSPECT_K8S_CLIENT_REFRESH_SECONDS
+    raw = os.environ.get(name, "0")
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be a non-negative int: '{raw}'.")
+    if value < 0:
+        raise ValueError(f"{name} must be a non-negative int: '{value}'.")
+    return value
 
 
 class _KubeContext(TypedDict):
@@ -177,32 +192,46 @@ class _Config:
 
 
 class _ThreadLocalClientFactory:
-    """Each instance of this class assumes that only one thread may access it."""
+    """Each instance of this class assumes that only one thread may access it.
+
+    When INSPECT_K8S_CLIENT_REFRESH_SECONDS is set to a positive value, cached
+    clients are discarded and re-created after that many seconds. This causes
+    the kubernetes library to re-read the token file from disk, picking up
+    tokens rotated by the kubelet.
+    """
 
     def __init__(self) -> None:
-        self._current_context_client: client.CoreV1Api | None = None
-        self._clients: dict[str, client.CoreV1Api] = {}
+        self._clients: dict[str | None, client.CoreV1Api] = {}
+        self._created_at: dict[str | None, float] = {}
 
     def get_client(self, context_name: str | None) -> client.CoreV1Api:
+        self._maybe_refresh(context_name)
+        if context_name not in self._clients:
+            self._clients[context_name] = self._create_client(context_name)
+            self._created_at[context_name] = time.monotonic()
+        return self._clients[context_name]
+
+    def _maybe_refresh(self, context_name: str | None) -> None:
+        refresh_seconds = _get_client_refresh_seconds()
+        if refresh_seconds <= 0:
+            return
+        if context_name not in self._created_at:
+            return
+        age = time.monotonic() - self._created_at[context_name]
+        if age < refresh_seconds:
+            return
+        old_client = self._clients.pop(context_name, None)
+        del self._created_at[context_name]
+        if old_client is not None:
+            old_client.api_client.close()  # type: ignore[attr-defined]
+
+    def _create_client(self, context_name: str | None) -> client.CoreV1Api:
         if context_name is None:
-            return self._get_or_create_client_for_current_context()
-        return self._get_or_create_client_for_named_context(context_name)
-
-    def _get_or_create_client_for_current_context(self) -> client.CoreV1Api:
-        if self._current_context_client is None:
-            self._current_context_client = client.CoreV1Api()
-        return self._current_context_client
-
-    def _get_or_create_client_for_named_context(
-        self, context_name: str
-    ) -> client.CoreV1Api:
-        if context_name in self._clients:
-            return self._clients[context_name]
-        api_client = self._create_client_for_named_context(context_name)
-        self._clients[context_name] = api_client
-        return api_client
-
-    def _create_client_for_named_context(self, context_name: str) -> client.CoreV1Api:
+            if _Config.get_instance().in_cluster:
+                # In-cluster config sets up the global default Configuration with
+                # built-in token refresh (re-reads every 60s). Use it directly.
+                return client.CoreV1Api()
+            return client.CoreV1Api(api_client=config.new_client_from_config())
         return client.CoreV1Api(
             api_client=config.new_client_from_config(context=context_name)
         )
