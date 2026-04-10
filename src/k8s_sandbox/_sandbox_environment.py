@@ -32,10 +32,11 @@ from k8s_sandbox._helm import (
     StaticValuesSource,
     ValuesSource,
 )
-from k8s_sandbox._kubernetes_api import validate_context_name
+from k8s_sandbox._kubernetes_api import k8s_client, validate_context_name
 from k8s_sandbox._logger import (
     format_log_message,
     inspect_trace_action,
+    log_debug,
     log_error,
     log_trace,
     log_warn,
@@ -47,6 +48,7 @@ from k8s_sandbox._manager import (
 )
 from k8s_sandbox._pod import Pod
 from k8s_sandbox._pod.error import ExecutableNotFoundError, GetReturncodeError, PodError
+from k8s_sandbox._pod.op import PodInfo
 from k8s_sandbox._pod.executor import PodOpExecutor
 from k8s_sandbox._prereqs import validate_prereqs
 from k8s_sandbox.compose._compose import (
@@ -57,6 +59,84 @@ from k8s_sandbox.compose._compose import (
 )
 
 MIN_DESIRED_SOFT = 100000
+
+
+def _log_pod_diagnostics(pod_info: PodInfo) -> None:
+    """Best-effort: query K8s API for pod status and events, log at WARNING level."""
+    try:
+        api = k8s_client(pod_info.context_name)
+    except Exception as e:
+        log_debug("Pod diagnostics: could not get k8s client.", error=e)
+        return
+
+    diag: dict[str, Any] = {"pod": pod_info.name}
+
+    # 1. Pod status
+    try:
+        k8s_pod = api.read_namespaced_pod(
+            name=pod_info.name, namespace=pod_info.namespace
+        )
+        status = k8s_pod.status
+        diag["phase"] = status.phase if status else "unknown"
+
+        if status and status.container_statuses:
+            for cs in status.container_statuses:
+                container_diag: dict[str, Any] = {
+                    "name": cs.name,
+                    "ready": cs.ready,
+                    "restart_count": cs.restart_count,
+                }
+                if cs.state:
+                    if cs.state.terminated:
+                        t = cs.state.terminated
+                        container_diag["state"] = "Terminated"
+                        container_diag["reason"] = t.reason
+                        container_diag["exit_code"] = t.exit_code
+                        container_diag["message"] = t.message
+                    elif cs.state.waiting:
+                        container_diag["state"] = "Waiting"
+                        container_diag["reason"] = cs.state.waiting.reason
+                    elif cs.state.running:
+                        container_diag["state"] = "Running"
+                if cs.last_state and cs.last_state.terminated:
+                    lt = cs.last_state.terminated
+                    container_diag["last_terminated_reason"] = lt.reason
+                    container_diag["last_terminated_exit_code"] = lt.exit_code
+                diag.setdefault("containers", []).append(container_diag)
+
+        if status and status.conditions:
+            diag["conditions"] = [
+                {"type": c.type, "status": c.status, "reason": c.reason}
+                for c in status.conditions
+            ]
+    except ApiException as e:
+        if e.status == 404:
+            diag["pod_status"] = "NotFound (pod already deleted)"
+        else:
+            diag["pod_status_error"] = f"ApiException {e.status}: {e.reason}"
+    except Exception as e:
+        diag["pod_status_error"] = str(e)
+
+    # 2. Pod events
+    try:
+        events = api.list_namespaced_event(
+            pod_info.namespace,
+            field_selector=f"involvedObject.name={pod_info.name}",
+        )
+        if events.items:
+            diag["events"] = [
+                {
+                    "reason": ev.reason,
+                    "message": ev.message,
+                    "count": ev.count,
+                    "last_timestamp": str(ev.last_timestamp) if ev.last_timestamp else None,
+                }
+                for ev in events.items
+            ]
+    except Exception as e:
+        diag["events_error"] = str(e)
+
+    log_warn("Pod diagnostics after error.", **diag)
 
 _TRANSIENT_TYPES = (
     ApiException,
@@ -352,6 +432,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 # Whilst Inspect's trace_action will have logged the exception, log it
                 # at ERROR level here for user visibility.
                 log_error(f"Error during: {op}.", cause=e, **log_kwargs)
+                _log_pod_diagnostics(self._pod.info)
                 # Enrich the unexpected exception with additional context.
                 raise K8sError(f"Error during: {op}.", **log_kwargs) from e
 
