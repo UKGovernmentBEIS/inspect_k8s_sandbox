@@ -23,6 +23,19 @@ export INSPECT_HELM_LABELS="ci-branch=my-feature,run-id=42"
 ```
 
 
+## Default namespace override { #default-namespace }
+
+By default, the namespace for sandbox pods is determined from the kubeconfig context or
+the service account token mount (when running in-cluster). You can override this by
+setting the `INSPECT_K8S_DEFAULT_NAMESPACE` environment variable.
+
+```sh
+export INSPECT_K8S_DEFAULT_NAMESPACE=my-sandbox-namespace
+```
+
+When set, this takes precedence over both kubeconfig and in-cluster namespace resolution.
+
+
 ## Targeting specific or multiple kubeconfig contexts
 
 Your
