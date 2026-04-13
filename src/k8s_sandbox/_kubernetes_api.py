@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from pathlib import Path
 from typing import TypedDict, cast
@@ -51,6 +52,9 @@ def get_default_namespace(context_name: str | None) -> str:
 
     If the namespace is not specified, "default" is returned.
     """
+    env_namespace = os.environ.get("INSPECT_K8S_DEFAULT_NAMESPACE", "").strip()
+    if env_namespace:
+        return env_namespace
     instance = _Config.get_instance()
     if instance.in_cluster:
         try:
