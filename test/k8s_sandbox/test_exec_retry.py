@@ -6,6 +6,7 @@ from inspect_ai.util import ExecResult, OutputLimitExceededError
 from kubernetes.client.exceptions import ApiException
 from tenacity import wait_none
 
+from k8s_sandbox import _sandbox_environment
 from k8s_sandbox._pod.error import (
     ExecutableNotFoundError,
     GetReturncodeError,
@@ -14,14 +15,20 @@ from k8s_sandbox._pod.error import (
 from k8s_sandbox._sandbox_environment import (
     K8sError,
     K8sSandboxEnvironment,
-    _exec_retry,
 )
 
 
 @pytest.fixture(autouse=True)
 def _no_retry_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable tenacity's exponential backoff in tests."""
-    monkeypatch.setattr(_exec_retry, "wait", wait_none())
+    original = _sandbox_environment._exec_retry
+
+    def _fast_retry():
+        r = original()
+        r.wait = wait_none()
+        return r
+
+    monkeypatch.setattr(_sandbox_environment, "_exec_retry", _fast_retry)
 
 
 def _make_sandbox_with_mock_pod() -> tuple[K8sSandboxEnvironment, AsyncMock]:
