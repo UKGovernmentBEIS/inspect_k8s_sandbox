@@ -1,0 +1,1813 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../helm/">
+      
+      
+        <link rel="next" href="../compose-to-helm/">
+      
+      
+      <link rel="icon" href="../../assets/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Built-in Helm Chart - Inspect K8s Sandbox Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Funnel+Sans:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Funnel Sans";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue-grey" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#built-in-helm-chart" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Inspect K8s Sandbox Documentation" class="md-header__button md-logo" aria-label="Inspect K8s Sandbox Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon-white.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Inspect K8s Sandbox Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Built-in Helm Chart
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Inspect K8s Sandbox Documentation" class="md-nav__button md-logo" aria-label="Inspect K8s Sandbox Documentation" data-md-component="logo">
+      
+  <img src="../../assets/icon-white.png" alt="logo">
+
+    </a>
+    Inspect K8s Sandbox Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introduction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/what-is-k8s/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    What is K8s?
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/prerequisites/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Prerequisites
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/local-cluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Local Cluster
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/remote-cluster/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Remote Cluster
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Helm Charts
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Helm Charts
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../helm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    What is Helm?
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Built-in Helm Chart
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Built-in Helm Chart
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#about-the-chart" class="md-nav__link">
+    <span class="md-ellipsis">
+      About the chart
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#container-runtime-class-gvisor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container runtime class (gVisor)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#internet-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      Internet access
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dns" class="md-nav__link">
+    <span class="md-ellipsis">
+      DNS
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#headless-services" class="md-nav__link">
+    <span class="md-ellipsis">
+      Headless services
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#readiness-probes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Readiness probes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#init-containers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Init containers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-requests-and-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource requests and limits
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#volumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Volumes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#networks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Networks
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ports" class="md-nav__link">
+    <span class="md-ellipsis">
+      Ports
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Additional resources
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#annotations-and-labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      Annotations and labels
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#render-chart-without-installing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Render chart without installing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#manual-chart-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      Install chart manually
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generate-docs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Generate docs
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../compose-to-helm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Compose to Helm
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../custom-chart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Custom Helm Chart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Security
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Security
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/container-runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Container Runtime
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/network-access/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Network Access
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Tips
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Tips
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/debugging-k8s-sandboxes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Debugging K8s Sandboxes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Troubleshooting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/cleanup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cleanup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/images/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Docker Images
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/hubble/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Hubble (Cilium UI)
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/concurrency/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Concurrency
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tips/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Advanced Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Design Notes
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Design Notes
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/limitations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Limitations
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design/complexities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Complexities
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#about-the-chart" class="md-nav__link">
+    <span class="md-ellipsis">
+      About the chart
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#container-runtime-class-gvisor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Container runtime class (gVisor)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#internet-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      Internet access
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dns" class="md-nav__link">
+    <span class="md-ellipsis">
+      DNS
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#headless-services" class="md-nav__link">
+    <span class="md-ellipsis">
+      Headless services
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#readiness-probes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Readiness probes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#init-containers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Init containers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-requests-and-limits" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource requests and limits
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#volumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Volumes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#networks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Networks
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ports" class="md-nav__link">
+    <span class="md-ellipsis">
+      Ports
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Additional resources
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#annotations-and-labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      Annotations and labels
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#render-chart-without-installing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Render chart without installing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#manual-chart-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      Install chart manually
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generate-docs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Generate docs
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/edit/main/docs/docs/helm/built-in-chart.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="built-in-helm-chart">Built-in Helm Chart<a class="headerlink" href="#built-in-helm-chart" title="Permanent link">&para;</a></h1>
+<p>The <code>k8s_sandbox</code> package includes a built-in Helm chart named <code>agent-env</code> in
+<code>resources/helm/</code>.</p>
+<h2 id="about-the-chart">About the chart<a class="headerlink" href="#about-the-chart" title="Permanent link">&para;</a></h2>
+<p>The built-in Helm chart is designed to take a <code>values.yaml</code> (or <code>helm-values.yaml</code>) file
+which is structured much like a Docker <code>compose.yaml</code> file.</p>
+<p>This is to simplify the complexities of Kubernetes manifests for users who are not
+familiar with them.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><a href="../compose-to-helm/">Automatic translation</a> from basic <code>compose.yaml</code> files is
+supported.</p>
+</div>
+<p>In addition to the info below, see <code>agent-env/README.md</code> and <code>agent-env/values.yaml</code> for
+a full list of configurable options.</p>
+<h2 id="container-runtime-class-gvisor">Container runtime class (gVisor)<a class="headerlink" href="#container-runtime-class-gvisor" title="Permanent link">&para;</a></h2>
+<p>The default container runtime class name for every service is <code>gvisor</code> which, (depending
+on your cluster - see <a href="../../getting-started/remote-cluster/">remote cluster setup page</a>)
+should map to the <code>runsc</code> runtime handler. You can override this if required.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">runtimeClassName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">runc</span>
+</code></pre></div>
+<p>The above example assumes you have a <code>RuntimeClass</code> named <code>runc</code> deployed to your
+cluster which maps to the <code>runc</code> runtime handler.</p>
+<p>See the <a href="../../security/container-runtime/">gVisor page</a> for considerations and
+limitations on using gVisor versus <code>runc</code>.</p>
+<details class="tip">
+<summary>Use the cluster's default runtime class</summary>
+<p>You can cause the runtime class in the Pod spec to not be set at all by setting
+<code>runtimeClassName</code> to the <code>CLUSTER_DEFAULT</code> magic string in the relevant services.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">runtimeClassName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CLUSTER_DEFAULT</span>
+</code></pre></div>
+<p>This has the effect of using your cluster's default runtime class.</p>
+<p>This approach is <strong>not recommended</strong> as it makes your evals cluster-dependent and
+therefore less portable. It is preferable to explicitly state which runtime class
+you require if it is not gVisor. See the <a href="../../getting-started/remote-cluster/">remote cluster
+setup</a> page for more information on installing
+runtimes and deploying <code>RuntimeClass</code> objects which map a name to a runtime handler.</p>
+</details>
+<details class="tip">
+<summary>View your cluster's runtime classes</summary>
+<p>You can view the runtime classes available in your cluster by running the following
+command:</p>
+<div class="highlight"><pre><span></span><code>kubectl<span class="w"> </span>get<span class="w"> </span>runtimeclass
+</code></pre></div>
+<div class="highlight"><pre><span></span><code>NAME     HANDLER   AGE
+gvisor   runsc     42d
+runc     runc      42d
+</code></pre></div>
+</details>
+<details class="question">
+<summary>Aren't containerd or CRI-O the container runtimes?</summary>
+<p>There are multiple "levels" of container runtime in Kubernetes. containerd or CRI-O
+are the "high level" CRI implementations which Kubernetes uses to manage containers.
+The discussion in this section concerning <code>runtimeClassName</code> field on Pod spec is
+about the "lower level" OCI runtimes (like <code>runc</code> or <code>runsc</code>) which are used to
+actually run the container processes.</p>
+</details>
+<h2 id="internet-access">Internet access<a class="headerlink" href="#internet-access" title="Permanent link">&para;</a></h2>
+<p>By default, containers will not be able to access the internet which is an important
+security measure when running untrusted LLM-generated code. If you wish to allow limited
+internet access, there are 3 methods, each of which influence the Cilium Network Policy.</p>
+<ol>
+<li>
+<p>Populate the <code>allowDomains</code> list in your <code>values.yaml</code> with one or more Fully
+Qualified Domain Names. The following example list allows agents to install packages
+from a variety of sources:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="nt">allowDomains</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;pypi.org&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;files.pythonhosted.org&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;bitbucket.org&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;github.com&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;raw.githubusercontent.com&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;*.debian.org&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;*.kali.org&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;kali.download&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;archive.ubuntu.com&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;security.ubuntu.com&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;mirror.vinehost.net&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;*.rubygems.org&quot;</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>An entry of e.g. <code>aisi.org</code> won't allow access to the subdomain of
+<code>www.aisi.org</code>. Either also include <code>www.aisi.org</code>, or if you want to provide
+access to all subdomains, use a wildcard: <code>*.aisi.org</code>.</p>
+</div>
+</li>
+<li>
+<p>Populate the <code>allowCIDR</code> list with one or more <a href="https://docs.cilium.io/en/stable/security/policy/language/#cidr-based">CIDR
+ranges</a>. These
+are translated to <code>toCIDRs</code> entries in the Cilium Network Policy:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">allowCIDR</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;8.8.8.8/32&quot;</span>
+</code></pre></div>
+</li>
+<li>
+<p>Populate the <code>allowEntities</code> list with one or more
+<a href="https://docs.cilium.io/en/stable/security/policy/language/#entities-based">entities</a>.
+These get translated to <code>toEntities</code> entries in the Cilium Network Policy:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">allowEntities</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;world&quot;</span>
+</code></pre></div>
+</li>
+</ol>
+<h2 id="dns">DNS<a class="headerlink" href="#dns" title="Permanent link">&para;</a></h2>
+<p>The built-in Helm chart is designed to allow services to communicate with each other
+using their service names e.g. <code>curl nginx</code>, much like you would in Docker Compose.</p>
+<p>To make services discoverable by their service name, set the <code>dnsRecord</code> key to <code>true</code>.</p>
+<p>Additionally, you can specify a list of domains that resolve to a given service e.g.
+<code>curl example.com</code> could resolve to your <code>nginx</code> service.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">nginx</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nginx:1.27.2</span>
+<span class="w">    </span><span class="nt">dnsRecord</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">additionalDnsRecords</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example.com</span>
+</code></pre></div>
+<p>To achieve this, whilst maintaining support for deploying multiple instances of the same
+chart in a given namespace, a CoreDNS "sidecar" container is deployed in each service
+Pod.</p>
+<details class="question">
+<summary>Why not deploy CoreDNS as its own Pod?</summary>
+<p>Because of the way that Cilium caches DNS responses to determine which IP addresses
+correspond to the FQDN allowlist, CoreDNS service must be co-located on the same
+node which the container making the DNS request are on.</p>
+</details>
+<details class="question">
+<summary>Why not use <code>hostAliases</code> to edit <code>/etc/hosts</code>?</summary>
+<p>Instead of using DNS, the <code>/etc/hosts</code> file could be modified using
+<a href="https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods">HostAliases</a>.
+However, some tools which an agent might try to use (e.g. <code>nslookup</code>) do not respect
+<code>/etc/hosts</code> and will use DNS instead. Therefore, we chose to use a DNS-based
+approach.</p>
+</details>
+<p>For the containers within your release to use this, rather than the default Kubernetes
+DNS service, the <code>/etc/resolv.conf</code> of your containers is modified to use <code>127.0.0.1</code> as
+the nameserver.</p>
+<p>Note that the CoreDNS sidecar only binds to <code>127.0.0.1</code> so won't be accessible from
+outside the Pod.</p>
+<p>CoreDNS is used over Dnsmasq for 2 reasons:</p>
+<ul>
+<li>CoreDNS is the default DNS server in Kubernetes.</li>
+<li>It allows you to map domains to known service names whilst delegating resolving the
+  actual IP address to the default Kubernetes DNS service.</li>
+</ul>
+<h2 id="headless-services">Headless services<a class="headerlink" href="#headless-services" title="Permanent link">&para;</a></h2>
+<p>Any entry under the <code>services</code> key in <code>values.yaml</code> which sets <code>dnsRecord: true</code> or
+<code>additionalDnsRecords</code> will have a
+<a href="https://kubernetes.io/docs/concepts/services-networking/service/#headless-services">headless</a>
+<code>Service</code> created for it.</p>
+<p>This creates a DNS record in the Kubernetes cluster which resolves to the Pod's IP
+addresses directly. This allows agents to use tools like <code>netcat</code> or <code>ping</code> to explore
+their environment. If the service were not headless (i.e. it had a ClusterIP), tools
+like <code>netcat</code> would only be able to connect to the ports explicitly exposed by the
+service.</p>
+<h2 id="readiness-probes">Readiness probes<a class="headerlink" href="#readiness-probes" title="Permanent link">&para;</a></h2>
+<p>Avoid making assumptions about the order in which your containers will start, or the
+time it will take for them to become ready.</p>
+<p>Kubernetes knows when a container has started, but it does not know when the container
+is ready to accept traffic. In the case of containers such as web servers, there may be
+a delay between the container starting and the web server being ready to accept traffic.</p>
+<p>Use <a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes">readiness
+probes</a>
+as a test to determine if your container is ready to accept traffic. The eval will not
+begin until all readiness probes have passed.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">nginx</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nginx:1.27.2</span>
+<span class="w">    </span><span class="nt">readinessProbe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">httpGet</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/</span>
+<span class="w">        </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">80</span>
+<span class="w">      </span><span class="nt">initialDelaySeconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<span class="w">      </span><span class="nt">periodSeconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+</code></pre></div>
+<p>You do not need to specify a <code>readinessProbe</code> on containers which have a trivial
+entrypoint (e.g. <code>sleep infinity</code> or <code>tail -f /dev/null</code>).</p>
+<h2 id="init-containers">Init containers<a class="headerlink" href="#init-containers" title="Permanent link">&para;</a></h2>
+<p>Init containers run before the main container starts. Use them to wait for dependencies
+or perform setup tasks. They support <code>resources</code>, <code>securityContext</code>, <code>imagePullPolicy</code>,
+and <code>workingDir</code> fields. The <code>$AGENT_ENV</code> environment variable is automatically injected.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">database</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres:16</span>
+<span class="w">    </span><span class="nt">dnsRecord</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">app</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">myapp:latest</span>
+<span class="w">    </span><span class="nt">initContainers</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">wait-for-db</span>
+<span class="w">        </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">busybox:1.36</span>
+<span class="w">        </span><span class="nt">command</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sh</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-c</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">until nc -z $AGENT_ENV-database 5432; do sleep 2; done</span>
+<span class="w">        </span><span class="nt">resources</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">limits</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;64Mi&quot;</span>
+<span class="w">            </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;50m&quot;</span>
+</code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Init containers cannot access external domains from <code>allowDomains</code></p>
+<p>The CoreDNS sidecar (which handles <code>allowDomains</code>) starts after init containers
+complete. Use <code>$AGENT_ENV-servicename</code> for internal services or <code>allowCIDR</code> with IP
+addresses for external access.</p>
+</div>
+<p><strong>Limitations:</strong> Init containers cannot currently access <code>volumes</code> or custom <code>env</code> vars
+from the service definition. See the <a href="https://kubernetes.io/docs/concepts/workloads/pods/init-containers/">Kubernetes init container
+docs</a> for details.</p>
+<h2 id="resource-requests-and-limits">Resource requests and limits<a class="headerlink" href="#resource-requests-and-limits" title="Permanent link">&para;</a></h2>
+<p>Default resource limits are assigned for each <code>service</code> within the Helm chart. The
+limits and requests are equal such that the Pods have a <code>Guaranteed</code> <a href="https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/">QoS
+class</a>.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">resources</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">limits</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2Gi&quot;</span>
+<span class="w">    </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;500m&quot;</span>
+<span class="w">  </span><span class="nt">requests</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2Gi&quot;</span>
+<span class="w">    </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;500m&quot;</span>
+</code></pre></div>
+<p>These can optionally be overridden for each service.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">resources</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">limits</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1Gi&quot;</span>
+<span class="w">        </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;250m&quot;</span>
+<span class="w">      </span><span class="nt">requests</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1Gi&quot;</span>
+<span class="w">        </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;250m&quot;</span>
+</code></pre></div>
+<p>If overriding them, do consider the implications on the QoS class of the Pods and
+cluster utilization.</p>
+<h2 id="volumes">Volumes<a class="headerlink" href="#volumes" title="Permanent link">&para;</a></h2>
+<p>The built-in Helm chart aims to provide a simple way to define and mount volumes in your
+containers, much like you can in Docker Compose. The following example creates an empty
+volume which is mounted in both containers.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;my-volume:/my-volume-mount-path&quot;</span>
+<span class="w">  </span><span class="nt">worker</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;my-volume:/my-volume-mount-path&quot;</span>
+<span class="nt">volumes</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my-volume</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+</code></pre></div>
+<p>Note that this does not allow you to mount directories from the client system (your
+machine) into the containers.</p>
+<p>This requires that your cluster has a Storage Class named <code>nfs-csi</code> which supports the
+<code>ReadWriteMany</code> access mode for <code>PersistentVolumeClaim</code>. See <a href="../../getting-started/remote-cluster/">Remote
+Cluster</a>.</p>
+<p>You can override the <code>spec</code> of the <code>PersistentVolumeClaim</code> to suit your needs.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my-volume</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">storageClassName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azurefile</span>
+<span class="w">      </span><span class="nt">accessModes</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ReadWriteOnce</span>
+<span class="w">      </span><span class="nt">resources</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">requests</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">storage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1Gi</span>
+</code></pre></div>
+<h2 id="networks">Networks<a class="headerlink" href="#networks" title="Permanent link">&para;</a></h2>
+<p>By default, all Pods in a Kubernetes cluster can communicate with each other. Network
+policies are used to restrict this communication. The built-in Helm chart restricts Pods
+to only communicate with other Pods in the same Helm release.</p>
+<p>Additional restrictions can be put in place, for example, to simulate networks within
+your eval.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">networks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">a</span>
+<span class="w">  </span><span class="nt">intermediate</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">dnsRecord</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">networks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">a</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">b</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ubuntu:24.04</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;tail&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;-f&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;/dev/null&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">dnsRecord</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">networks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">b</span>
+<span class="nt">networks</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">a</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+<span class="w">  </span><span class="nt">b</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+</code></pre></div>
+<p>In the example above, the <code>default</code> service can communicate with the <code>intermediate</code>
+service, but not the <code>target</code> service. The <code>intermediate</code> service can communicate with
+the <code>target</code> service.</p>
+<p>When no networks are specified all Pods within a Helm release can communicate with each
+other. If any networks are specified, any Pod which does not specify a network will not
+be able to communicate with any other Pod.</p>
+<h2 id="ports">Ports<a class="headerlink" href="#ports" title="Permanent link">&para;</a></h2>
+<p>By default all ports are open between services (provided they are on the same network)
+you may want to open only specific ports for certain evaluations (for example to test
+a model can hack a particular service to gain access to others). You may do this by
+specifying <code>ports</code> in the service definition.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">services</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">alpine:3.20</span>
+<span class="w">    </span><span class="nt">networks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">challenge-network</span>
+<span class="w">  </span><span class="nt">target</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python:3.12-slim</span>
+<span class="w">    </span><span class="c1"># Start TCP listner on both ports so checks in the test can recognise an available service</span>
+<span class="w">    </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;sh&quot;</span><span class="p p-Indicator">,</span><span class="s">&quot;-c&quot;</span><span class="p p-Indicator">,</span><span class="s">&quot;python3</span><span class="nv"> </span><span class="s">-m</span><span class="nv"> </span><span class="s">http.server</span><span class="nv"> </span><span class="s">\&quot;8080\&quot;</span><span class="nv"> </span><span class="s">--bind</span><span class="nv"> </span><span class="s">0.0.0.0</span><span class="nv"> </span><span class="s">&amp;</span><span class="nv"> </span><span class="s">python3</span><span class="nv"> </span><span class="s">-m</span><span class="nv"> </span><span class="s">http.server</span><span class="nv"> </span><span class="s">\&quot;9090\&quot;</span><span class="nv"> </span><span class="s">--bind</span><span class="nv"> </span><span class="s">0.0.0.0</span><span class="nv"> </span><span class="s">&amp;</span><span class="nv"> </span><span class="s">wait&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">ports</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">protocol</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TCP</span>
+<span class="w">      </span><span class="nt">port</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8080</span>
+<span class="w">    </span><span class="nt">networks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">challenge-network</span>
+<span class="nt">networks</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">challenge-network</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}</span>
+</code></pre></div>
+<p>From the default service port 8080 should be reachable but port 9090 should be inaccessable.</p>
+<p>If no ports are specified on the host it will allow ingress on any port</p>
+<p>Specifying ports in Cillium means that <em>all other L4 protocols are blocked</em>. The default helm chart manually exposes echo ICMP requests so tools like <code>ping</code> still work. If you want to expose some other protocol we recommend you use additionalResources.</p>
+<h2 id="additional-resources">Additional resources<a class="headerlink" href="#additional-resources" title="Permanent link">&para;</a></h2>
+<p>You can pass arbitrary Kubernetes resources to the Helm chart using the
+<code>additionalResources</code> key in the <code>values.yaml</code> file.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">additionalResources</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Secret</span>
+<span class="w">    </span><span class="nt">metadata</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-secret</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Opaque</span>
+<span class="w">    </span><span class="nt">data</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">password</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-password</span>
+</code></pre></div>
+<p>You can also use Helm templating in <code>additionalResources</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">additionalResources</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Secret</span>
+<span class="w">    </span><span class="nt">metadata</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{{</span><span class="nv"> </span><span class="s">template</span><span class="nv"> </span><span class="s">&quot;agentEnv.fullname&quot;</span><span class="nv"> </span><span class="s">$</span><span class="nv"> </span><span class="s">}}-secret&#39;</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Opaque</span>
+<span class="w">    </span><span class="nt">data</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">password</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-password</span>
+</code></pre></div>
+<p>For more complex resources which are not valid standalone YAML, you can use a string
+block. The following example creates a Cilium Network Policy which allows ingress from
+all entities to the default service on port 2222.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">additionalResources</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">|</span>
+<span class="w">  </span><span class="no">apiVersion: cilium.io/v2</span>
+<span class="w">  </span><span class="no">kind: CiliumNetworkPolicy</span>
+<span class="w">  </span><span class="no">metadata:</span>
+<span class="w">    </span><span class="no">name: {{ template &quot;agentEnv.fullname&quot; $ }}-sandbox-default-external-ingress</span>
+<span class="w">    </span><span class="no">annotations:</span>
+<span class="w">      </span><span class="no">{{- toYaml $.Values.annotations | nindent 6 }}</span>
+<span class="w">  </span><span class="no">spec:</span>
+<span class="w">    </span><span class="no">description: |</span>
+<span class="w">      </span><span class="no">Allow external ingress from all entities to the default service on port 2222.</span>
+<span class="w">    </span><span class="no">endpointSelector:</span>
+<span class="w">      </span><span class="no">matchLabels:</span>
+<span class="w">        </span><span class="no">io.kubernetes.pod.namespace: {{ $.Release.Namespace }}</span>
+<span class="w">        </span><span class="no">{{- include &quot;agentEnv.selectorLabels&quot; $ | nindent 6 }}</span>
+<span class="w">        </span><span class="no">inspect/service: default</span>
+<span class="w">    </span><span class="no">ingress:</span>
+<span class="w">      </span><span class="no">- fromEntities:</span>
+<span class="w">        </span><span class="no">- all</span>
+<span class="w">        </span><span class="no">toPorts:</span>
+<span class="w">        </span><span class="no">- ports:</span>
+<span class="w">          </span><span class="no">- port: &quot;2222&quot;</span>
+<span class="w">            </span><span class="no">protocol: TCP</span>
+</code></pre></div>
+<h2 id="annotations-and-labels">Annotations and labels<a class="headerlink" href="#annotations-and-labels" title="Permanent link">&para;</a></h2>
+<p>You can pass arbitrary annotations and labels to the Helm chart using the top-level
+<code>annotations</code> and <code>labels</code> keys in the <code>values.yaml</code> file. These will be added as
+annotations and labels to the Pods, PVCs and network policies.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my-annotation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-value</span>
+<span class="nt">labels</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my-label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-value</span>
+</code></pre></div>
+<p>The <code>k8s_sandbox</code> package automatically includes the Inspect task name as an annotation.
+This may be useful for determining which task a Pod belongs to.</p>
+<h2 id="render-chart-without-installing">Render chart without installing<a class="headerlink" href="#render-chart-without-installing" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>helm<span class="w"> </span>template<span class="w"> </span>./resources/helm/agent-env<span class="w"> </span>&gt;<span class="w"> </span>scratch/rendered.yaml
+</code></pre></div>
+<h2 id="manual-chart-install">Install chart manually<a class="headerlink" href="#manual-chart-install" title="Permanent link">&para;</a></h2>
+<p>Normally, the Helm chart is installed by the <code>k8s_sandbox</code> package. However, you can
+install it manually which might be useful for debugging.</p>
+<div class="highlight"><pre><span></span><code>helm<span class="w"> </span>install<span class="w"> </span>my-release<span class="w"> </span>./resources/helm/agent-env<span class="w"> </span>-f<span class="w"> </span>path/to/helm-values.yaml
+</code></pre></div>
+<p><code>my-release</code> is the release name. Consider using your name or initials.</p>
+<p><code>./resources/helm/agent-env</code> is the path to the Helm chart. If you are outside the
+<code>k8s_sandbox</code> repository, pass the path to the chart in the <code>k8s_sandbox</code> repository, or
+the path to the chart within your virtual environment's <code>k8s_package/</code> directory.</p>
+<div class="highlight"><pre><span></span><code>helm<span class="w"> </span>install<span class="w"> </span>my-release<span class="w"> </span>~/repos/k8s_sandbox/resources/helm/agent-env<span class="w"> </span>-f<span class="w"> </span>...
+helm<span class="w"> </span>install<span class="w"> </span>my-release<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>.venv/lib/python3.12/site-packages/k8s_sandbox/resources/helm/agent-env<span class="w"> </span>-f<span class="w"> </span>...
+</code></pre></div>
+<p>Remember to uninstall the release when you are done.</p>
+<div class="highlight"><pre><span></span><code>helm<span class="w"> </span>uninstall<span class="w"> </span>my-release
+</code></pre></div>
+<h2 id="generate-docs">Generate docs<a class="headerlink" href="#generate-docs" title="Permanent link">&para;</a></h2>
+<p>You can regenerate docs using <a href="https://github.com/norwoodj/helm-docs">helm-docs</a> after
+changing the default <code>values.yaml</code>.</p>
+<div class="highlight"><pre><span></span><code>brew<span class="w"> </span>install<span class="w"> </span>norwoodj/tap/helm-docs
+helm-docs<span class="w"> </span>./resources/helm/agent-env
+</code></pre></div>
+<p>This is done automatically by a pre-commit hook.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.action.edit"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
