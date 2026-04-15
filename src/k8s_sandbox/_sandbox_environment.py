@@ -81,7 +81,7 @@ _PERMANENT_TYPES = (
 )
 
 
-def _exec_retry() -> AsyncRetrying:
+def _retry() -> AsyncRetrying:
     # Must create a new instance per call: AsyncRetrying.__aiter__ returns
     # `self` and mutates _retry_state, so a shared instance is not safe for
     # concurrent use.
@@ -269,7 +269,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
             await self._pod.check_for_pod_restart()
-            async for attempt in _exec_retry():
+            async for attempt in _retry():
                 with attempt:
                     result = await self._pod.exec(
                         cmd, input, cwd, env or {}, user, timeout
@@ -289,7 +289,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             # Do not log these at error level or re-raise as enriched K8sError.
             expected_exceptions = (PermissionError, IsADirectoryError)
             with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
-                async for attempt in _exec_retry:
+                async for attempt in _retry():
                     with attempt:
                         temp_file.seek(0)
                         await self._pod.write_file(temp_file.file, Path(file))
@@ -313,7 +313,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 OutputLimitExceededError,
             )
             with self._log_op("K8s read file from Pod", expected_exceptions, file=file):
-                async for attempt in _exec_retry:
+                async for attempt in _retry():
                     with attempt:
                         temp_file.seek(0)
                         temp_file.truncate()

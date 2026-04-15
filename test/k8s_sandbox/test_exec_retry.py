@@ -22,14 +22,14 @@ from k8s_sandbox._sandbox_environment import (
 @pytest.fixture(autouse=True)
 def _no_retry_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable tenacity's exponential backoff in tests."""
-    original = _sandbox_environment._exec_retry
+    original = _sandbox_environment._retry
 
     def _fast_retry():
         r = original()
         r.wait = wait_none()
         return r
 
-    monkeypatch.setattr(_sandbox_environment, "_exec_retry", _fast_retry)
+    monkeypatch.setattr(_sandbox_environment, "_retry", _fast_retry)
 
 
 def _make_sandbox() -> tuple[K8sSandboxEnvironment, MagicMock]:
