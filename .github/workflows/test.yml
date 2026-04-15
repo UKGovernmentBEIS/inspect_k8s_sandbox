@@ -24,10 +24,12 @@ jobs:
       - name: Configure Helm version in devcontainer.json
         run: |
           sed -i 's/"helm": "[^"]*"/"helm": "${{ matrix.helm-version }}"/' .devcontainer/devcontainer.json
+          grep -q '"helm": "${{ matrix.helm-version }}"' .devcontainer/devcontainer.json
       - name: Skip cluster setup
         if: ${{ !matrix.cluster }}
         run: |
           sed -i 's|bash .devcontainer/post-create.sh|bash .devcontainer/post-create.sh --no-cluster|' .devcontainer/devcontainer.json
+          grep -q 'post-create.sh --no-cluster' .devcontainer/devcontainer.json
       - run: npm install -g @devcontainers/cli@v0.83.2
       - run: devcontainer up --workspace-folder=.
       - run: devcontainer exec --workspace-folder=. helm version --short
