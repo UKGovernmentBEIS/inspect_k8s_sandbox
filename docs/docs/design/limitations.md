@@ -153,7 +153,7 @@ the `hostAliases` field in the Pod spec
 
 ## Transient errors are automatically retried
 
-Transient network or infrastructure errors during `exec()`, `read_file()`, and `write_file()` are automatically retried. These are typically caused by issues such as a node becoming unhealthy, a Pod being rescheduled, or the Kubernetes control plane being overloaded.
+Transient network or infrastructure errors during `exec()`, `read_file()`, and `write_file()` are automatically retried (up to 5 times). These are typically caused by issues such as a node becoming unhealthy, a Pod being rescheduled, or the Kubernetes control plane being overloaded.
 
 Note that retries cannot guarantee idempotency — if a command partially executed before the error, it may run again on retry.
 
