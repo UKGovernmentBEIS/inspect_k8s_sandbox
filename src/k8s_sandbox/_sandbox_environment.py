@@ -80,15 +80,20 @@ _PERMANENT_TYPES = (
     IsADirectoryError,
 )
 
-_exec_retry = AsyncRetrying(
-    stop=stop_after_attempt(5),
-    wait=wait_exponential_jitter(initial=1, max=10),
-    retry=retry_if_exception(
-        lambda e: isinstance(e, _TRANSIENT_TYPES)
-        and not isinstance(e, _PERMANENT_TYPES)
-    ),
-    reraise=True,
-)
+
+def _exec_retry() -> AsyncRetrying:
+    # Must create a new instance per call: AsyncRetrying.__aiter__ returns
+    # `self` and mutates _retry_state, so a shared instance is not safe for
+    # concurrent use.
+    return AsyncRetrying(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential_jitter(initial=1, max=10),
+        retry=retry_if_exception(
+            lambda e: isinstance(e, _TRANSIENT_TYPES)
+            and not isinstance(e, _PERMANENT_TYPES)
+        ),
+        reraise=True,
+    )
 
 
 @sandboxenv(name="k8s")
@@ -264,7 +269,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
             await self._pod.check_for_pod_restart()
-            async for attempt in _exec_retry:
+            async for attempt in _exec_retry():
                 with attempt:
                     result = await self._pod.exec(
                         cmd, input, cwd, env or {}, user, timeout
