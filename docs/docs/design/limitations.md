@@ -151,6 +151,12 @@ chart](../helm/built-in-chart.md#dns). Or, if using a custom Helm chart, conside
 the `hostAliases` field in the Pod spec
 ([docs](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/)).
 
+## Transient errors are automatically retried
+
+Transient network or infrastructure errors during `exec()`, `read_file()`, and `write_file()` are automatically retried. These are typically caused by issues such as a node becoming unhealthy, a Pod being rescheduled, or the Kubernetes control plane being overloaded.
+
+Note that retries cannot guarantee idempotency — if a command partially executed before the error, it may run again on retry.
+
 ## Must run as root to use the `user` parameter in `exec()` { #exec-user }
 
 In Kubernetes, a container runs as a single user. The user can be specified in the
