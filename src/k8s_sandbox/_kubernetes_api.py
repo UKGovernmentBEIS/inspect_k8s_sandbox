@@ -134,22 +134,31 @@ class _Config:
 
     @classmethod
     def _load(cls) -> _Config:
-        # Try in-cluster config first (running inside a pod).
+        # Try kubeconfig file first (preserves configured namespace/context).
+        try:
+            config.load_kube_config()
+            contexts, current = config.list_kube_config_contexts()
+            typed_contexts = cast(list[_KubeContext], contexts)
+            typed_current = cast(_KubeContext | None, current)
+            logger.info("Loaded kubeconfig Kubernetes configuration.")
+            return _Config(
+                contexts=typed_contexts,
+                current_context=typed_current,
+                in_cluster=False,
+            )
+        except ConfigException:
+            pass
+
+        # Fall back to in-cluster config (running inside a pod without kubeconfig).
         try:
             config.load_incluster_config()
             logger.info("Loaded in-cluster Kubernetes configuration.")
             return _Config(contexts=None, current_context=None, in_cluster=True)
         except ConfigException:
-            pass
-
-        # Fall back to kubeconfig file.
-        config.load_kube_config()
-        contexts, current = config.list_kube_config_contexts()
-        typed_contexts = cast(list[_KubeContext], contexts)
-        typed_current = cast(_KubeContext | None, current)
-        return _Config(
-            contexts=typed_contexts, current_context=typed_current, in_cluster=False
-        )
+            raise ConfigException(
+                "Unable to load Kubernetes configuration. "
+                "No kubeconfig file found and not running inside a Kubernetes pod."
+            )
 
     @classmethod
     def ensure_loaded(cls) -> None:
