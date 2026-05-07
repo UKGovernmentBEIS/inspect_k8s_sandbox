@@ -116,10 +116,11 @@ class ExecuteOperation(PodOperation):
     def _handle_shell_output(
         self, ws_client: WSClient, user: str | None, timeout: int | None
     ) -> ExecResult[str]:
-        def stream_output() -> ExecResult[str]:
+        def stream_output() -> tuple[ExecResult[str], bool]:
             stdout = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
             stderr = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
             returncode: int | None = None
+            sentinel_received = False
             while ws_client.is_open():
                 try:
                     # `timeout=None` means `update` will block
@@ -139,6 +140,7 @@ class ExecuteOperation(PodOperation):
                         )
                         stdout.append(filtered)
                         if returncode is not None:
+                            sentinel_received = True
                             ws_client.close()
                     self._verify_output_limit(stdout, stderr)
                 except (BrokenPipeError, ConnectionResetError) as e:
@@ -159,9 +161,9 @@ class ExecuteOperation(PodOperation):
                 returncode=returncode,
                 stdout=str(stdout),
                 stderr=str(stderr),
-            )
+            ), sentinel_received
 
-        result = stream_output()
+        result, sentinel_received = stream_output()
         # 124 is the exit code for the `timeout` command.
         if timeout is not None and result.returncode == 124:
             raise TimeoutError(f"Command timed out after {timeout}s. {result}")
@@ -169,9 +171,10 @@ class ExecuteOperation(PodOperation):
         # PermissionError for exit code 126 and stderr containing "permission denied".
         if result.returncode == 126 and "permission denied" in result.stderr.casefold():
             raise PermissionError(f"Permission denied executing command. {result}")
-        # Only parse runuser errors if the user parameter was set. Don't raise errors if
-        # the user-supplied command happened to use `runuser` itself.
-        if result.returncode != 0 and user is not None:
+        # Only parse runuser errors if the scaffold shell failed before it wrote the
+        # sentinel. If the sentinel was received, any runuser stderr came from the
+        # user-supplied command and should be returned as normal command output.
+        if result.returncode != 0 and user is not None and not sentinel_received:
             self._check_for_runuser_error(result.stderr, user)
         return result
 

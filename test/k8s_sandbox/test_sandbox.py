@@ -256,6 +256,27 @@ async def test_exec_user(sandbox: K8sSandboxEnvironment, cmd: list[str]) -> None
     assert result.stdout.strip() == "nobody"
 
 
+async def test_exec_user_returns_payload_runuser_error(
+    sandbox: K8sSandboxEnvironment,
+) -> None:
+    # This mirrors bash-tool usage where the scaffold runs the shell as `coder`, but
+    # the payload command itself tries to invoke runuser.
+    create_user = await sandbox.exec(
+        ["bash", "-c", "id -u coder >/dev/null 2>&1 || useradd -m coder"],
+    )
+    assert create_user.success
+
+    result = await sandbox.exec(
+        ["bash", "-c", "runuser -u nobody -- echo 'hello'"],
+        user="coder",
+    )
+
+    assert not result.success
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "runuser: may not be used by non-root users" in result.stderr.casefold()
+
+
 async def test_exec_user_when_specified_user_does_not_exist(
     sandbox: K8sSandboxEnvironment,
 ) -> None:

@@ -1,3 +1,5 @@
+import shlex
+from typing import Generator
 from unittest.mock import MagicMock
 
 import pytest
@@ -5,6 +7,22 @@ from kubernetes.stream.ws_client import WSClient  # type: ignore
 
 from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.execute import ExecuteOperation
+
+RUNUSER_NON_ROOT_ERROR = b"runuser: may not be used by non-root users\n"
+RUNUSER_MISSING_USER_ERROR = b"runuser: user foo does not exist\n"
+
+
+class RecordingExecuteOperation(ExecuteOperation):
+    def __init__(self, ws_client: WSClient):
+        super().__init__(MagicMock())
+        self.ws_client = ws_client
+        self.exec_kwargs: dict[str, object] | None = None
+
+    def create_websocket_client_for_exec(
+        self, **kwargs: object
+    ) -> Generator[WSClient, None, None]:
+        self.exec_kwargs = kwargs
+        yield self.ws_client
 
 
 def _make_ws_client(
@@ -89,6 +107,46 @@ def _make_ws_client(
     return ws
 
 
+def _make_ws_client_without_sentinel(stderr_frame: bytes) -> WSClient:
+    ws = MagicMock(spec=WSClient)
+    current_stderr: bytes | None = None
+    stderr_delivered = False
+
+    def is_open() -> bool:
+        return not stderr_delivered
+
+    ws.is_open.side_effect = is_open
+
+    def update(timeout: float | None = None) -> None:
+        nonlocal current_stderr, stderr_delivered
+        current_stderr = stderr_frame
+        stderr_delivered = True
+
+    ws.update.side_effect = update
+
+    def peek_stderr(**kwargs: object) -> bytes:
+        return current_stderr or b""
+
+    ws.peek_stderr.side_effect = peek_stderr
+
+    def read_stderr(**kwargs: object) -> bytes:
+        nonlocal current_stderr
+        data = current_stderr or b""
+        current_stderr = None
+        return data
+
+    ws.read_stderr.side_effect = read_stderr
+    ws.peek_stdout.return_value = b""
+    ws.read_channel.return_value = """
+status: Failure
+details:
+  causes:
+    - reason: ExitCode
+      message: "1"
+"""
+    return ws
+
+
 class TestBrokenPipeAfterSentinel:
     """Tests for BrokenPipeError/ConnectionResetError after the sentinel is received.
 
@@ -135,6 +193,76 @@ class TestBrokenPipeAfterSentinel:
         assert result.returncode == 0
         assert result.stdout == "hello"
         assert result.stderr == ""
+
+
+class TestRunuserErrors:
+    def test_exec_with_user_returns_payload_runuser_error(self) -> None:
+        cmd = ["bash", "-c", "runuser -u nobody -- echo 'hello'"]
+        ws = _make_ws_client(
+            stdout_frames=[b"<completed-sentinel-value-1>"],
+            stderr_frames=[RUNUSER_NON_ROOT_ERROR],
+        )
+
+        executor = RecordingExecuteOperation(ws)
+        result = executor.exec(
+            cmd,
+            stdin=None,
+            cwd=None,
+            env={},
+            user="coder",
+            timeout=None,
+        )
+
+        assert executor.exec_kwargs is not None
+        assert executor.exec_kwargs["command"] == ["runuser", "-u", "coder", "/bin/sh"]
+        ws.write_stdin.assert_called_once()
+        shell_script = ws.write_stdin.call_args.args[0]
+        assert shlex.join(cmd) in shell_script
+        assert not result.success
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert result.stderr == RUNUSER_NON_ROOT_ERROR.decode()
+
+    @pytest.mark.parametrize(
+        "stderr_frame",
+        [RUNUSER_NON_ROOT_ERROR, RUNUSER_MISSING_USER_ERROR],
+    )
+    def test_runuser_error_after_sentinel_is_user_command_output(
+        self, stderr_frame: bytes
+    ) -> None:
+        ws = _make_ws_client(
+            stdout_frames=[b"<completed-sentinel-value-1>"],
+            stderr_frames=[stderr_frame],
+        )
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user="coder", timeout=None)
+
+        assert not result.success
+        assert result.returncode == 1
+        assert result.stderr == stderr_frame.decode()
+
+    @pytest.mark.parametrize(
+        ("stderr_frame", "message"),
+        [
+            (
+                RUNUSER_NON_ROOT_ERROR,
+                "the container must be running as root",
+            ),
+            (
+                RUNUSER_MISSING_USER_ERROR,
+                "does not appear to exist in the container",
+            ),
+        ],
+    )
+    def test_runuser_error_before_sentinel_is_scaffold_setup_error(
+        self, stderr_frame: bytes, message: str
+    ) -> None:
+        ws = _make_ws_client_without_sentinel(stderr_frame)
+
+        executor = ExecuteOperation(MagicMock())
+        with pytest.raises(RuntimeError, match=message):
+            executor._handle_shell_output(ws, user="coder", timeout=None)
 
 
 class TestBrokenPipeWithoutSentinel:
