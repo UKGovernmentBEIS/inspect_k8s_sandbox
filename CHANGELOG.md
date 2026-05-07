@@ -1,10 +1,17 @@
 # Changelog
 
-## Unreleased
+## 2026-05-07 0.5.0
 
-- Use `--wait=legacy` with Helm 4.x to avoid kstatus treating unscheduled pods as permanently failed
-- Log a warning when no GPU node is available during `helm install`, so users know the wait is expected rather than a hang
-- Pass comma-separated `key=value` labels from env var `INSPECT_HELM_LABELS` to `helm install --labels`
+- Use `--wait=legacy` with Helm 4.x (avoids kstatus treating unscheduled pods as permanently failed)
+- Warn when `helm install` is waiting on GPU node provisioning, so users know it's not a hang
+- Add `INSPECT_HELM_LABELS` env var to apply `key=value` labels to Helm releases
+- Send WebSocket keepalive frames during `exec()` to prevent idle-timeout disconnects
+- Catch `BrokenPipeError`/`ConnectionResetError` when streaming exec output
+- Retry transient K8s API errors in `exec()`
+- Retry transient errors in `read_file` and `write_file`
+- Add `INSPECT_K8S_DEFAULT_NAMESPACE` env var to override the default namespace
+- Configurable K8s client token refresh
+- Prefer kubeconfig over in-cluster config to preserve the configured namespace
 
 ## 2026-03-04 0.4.0
 
