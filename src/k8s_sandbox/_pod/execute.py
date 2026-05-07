@@ -116,7 +116,7 @@ class ExecuteOperation(PodOperation):
     def _handle_shell_output(
         self, ws_client: WSClient, user: str | None, timeout: int | None
     ) -> ExecResult[str]:
-        def stream_output() -> ExecResult[str]:
+        def stream_output() -> tuple[ExecResult[str], bool]:
             stdout = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
             stderr = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
             returncode: int | None = None
@@ -151,17 +151,21 @@ class ExecuteOperation(PodOperation):
                         "WebSocket connection lost during exec",
                         pod=self._pod.name,
                     ) from e
+            saw_completed_sentinel = returncode is not None
             # returncode won't be set if setup commands e.g. `cd` failed.
             if returncode is None:
                 returncode = get_returncode(ws_client)
-            return ExecResult(
-                success=returncode == 0,
-                returncode=returncode,
-                stdout=str(stdout),
-                stderr=str(stderr),
+            return (
+                ExecResult(
+                    success=returncode == 0,
+                    returncode=returncode,
+                    stdout=str(stdout),
+                    stderr=str(stderr),
+                ),
+                saw_completed_sentinel,
             )
 
-        result = stream_output()
+        result, saw_completed_sentinel = stream_output()
         # 124 is the exit code for the `timeout` command.
         if timeout is not None and result.returncode == 124:
             raise TimeoutError(f"Command timed out after {timeout}s. {result}")
@@ -169,9 +173,10 @@ class ExecuteOperation(PodOperation):
         # PermissionError for exit code 126 and stderr containing "permission denied".
         if result.returncode == 126 and "permission denied" in result.stderr.casefold():
             raise PermissionError(f"Permission denied executing command. {result}")
-        # Only parse runuser errors if the user parameter was set. Don't raise errors if
-        # the user-supplied command happened to use `runuser` itself.
-        if result.returncode != 0 and user is not None:
+        # Only parse runuser errors if the wrapper failed before it could run the
+        # shell script and write our sentinel. If the sentinel was seen, any runuser
+        # stderr came from the user-supplied command.
+        if result.returncode != 0 and user is not None and not saw_completed_sentinel:
             self._check_for_runuser_error(result.stderr, user)
         return result
 

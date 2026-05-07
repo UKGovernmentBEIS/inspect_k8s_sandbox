@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from kubernetes.stream.ws_client import WSClient  # type: ignore
@@ -157,11 +157,67 @@ class TestBrokenPipeWithoutSentinel:
         with pytest.raises(PodError, match="WebSocket connection lost"):
             executor._handle_shell_output(ws, user=None, timeout=None)
 
+
+class TestRunuserErrors:
+    def test_user_command_runuser_error_with_sentinel_returns_result(self) -> None:
+        ws = _make_ws_client(
+            stdout_frames=[b"<completed-sentinel-value-1>"],
+            stderr_frames=[b"runuser: user foo does not exist\n"],
+        )
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user="nobody", timeout=None)
+
+        assert result.returncode == 1
+        assert result.stderr == "runuser: user foo does not exist\n"
+
+    def test_wrapper_runuser_error_without_sentinel_raises(self) -> None:
+        ws = MagicMock(spec=WSClient)
+        current_stderr: bytes | None = None
+
+        ws.is_open.side_effect = [True, False]
+        ws.close.return_value = None
+
+        def update(timeout: float | None = None) -> None:
+            nonlocal current_stderr
+            current_stderr = b"runuser: user foo does not exist\n"
+
+        def peek_stderr(**kwargs: object) -> bytes:
+            return current_stderr or b""
+
+        def read_stderr(**kwargs: object) -> bytes:
+            nonlocal current_stderr
+            data = current_stderr or b""
+            current_stderr = None
+            return data
+
+        ws.update.side_effect = update
+        ws.peek_stderr.side_effect = peek_stderr
+        ws.read_stderr.side_effect = read_stderr
+        ws.peek_stdout.return_value = b""
+
+        with patch("k8s_sandbox._pod.execute.get_returncode", return_value=1):
+            executor = ExecuteOperation(MagicMock())
+            with pytest.raises(RuntimeError, match="does not appear to exist"):
+                executor._handle_shell_output(ws, user="foo", timeout=None)
+
+    def test_non_runuser_error_without_sentinel_returns_result(self) -> None:
+        ws = MagicMock(spec=WSClient)
+        ws.is_open.return_value = False
+
+        executor = ExecuteOperation(MagicMock())
+        with patch("k8s_sandbox._pod.execute.get_returncode", return_value=1):
+            result = executor._handle_shell_output(ws, user="foo", timeout=None)
+
+        assert result.returncode == 1
+
+
+class TestConnectionResetWithoutSentinel:
     def test_connection_reset_without_sentinel_raises(self) -> None:
         """ConnectionReset before sentinel → PodError."""
-        ws = self._make_dead_ws(
-            ConnectionResetError("connection reset"),
-        )
+        ws = MagicMock(spec=WSClient)
+        ws.is_open.return_value = True
+        ws.update.side_effect = ConnectionResetError("connection reset")
 
         executor = ExecuteOperation(MagicMock())
         with pytest.raises(PodError, match="WebSocket connection lost"):
