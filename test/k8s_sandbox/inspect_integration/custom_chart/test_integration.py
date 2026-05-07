@@ -23,7 +23,7 @@ pytestmark = pytest.mark.req_k8s
 @pytest.fixture
 def model() -> Model:
     return MockToolCallModel(
-        [tool_call("bash", {"cmd": "echo $POD_ENV_VAR"})],
+        [tool_call("bash", {"command": "echo $POD_ENV_VAR"})],
     )
 
 
@@ -66,7 +66,7 @@ def test_specified_kube_config_context() -> None:
     # multiple Kubernetes clusters.
     current_context = get_current_context_name()
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": "cat /etc/os-release | grep VERSION_CODENAME"})],
+        [tool_call("bash", {"command": "cat /etc/os-release | grep VERSION_CODENAME"})],
     )
     task = create_task(
         __file__,

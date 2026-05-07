@@ -55,4 +55,4 @@ fi
 
 # Everything below runs regardless of --no-cluster.
 echo "Installing uv environment..."
-uv sync --extra dev
+uv sync --extra dev --frozen
