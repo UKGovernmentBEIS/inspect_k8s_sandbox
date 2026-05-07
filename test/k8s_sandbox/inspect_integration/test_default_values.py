@@ -13,7 +13,7 @@ from test.k8s_sandbox.inspect_integration.testing_utils.utils import (
 @pytest.mark.req_k8s
 def test_default_chart_with_no_values() -> None:
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": "cat /etc/os-release | grep VERSION_CODENAME"})],
+        [tool_call("bash", {"command": "cat /etc/os-release | grep VERSION_CODENAME"})],
     )
     task = create_task(__file__, target="bookworm")
 

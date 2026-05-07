@@ -15,7 +15,7 @@ from test.k8s_sandbox.inspect_integration.testing_utils.utils import (
 def test_normal_services_can_communicate() -> None:
     """Test that normal services can connect to other services."""
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": _network_test_cmd("other-service")})],
+        [tool_call("bash", {"command": _network_test_cmd("other-service")})],
     )
     task = create_task(
         __file__,
@@ -34,7 +34,7 @@ def test_normal_services_can_communicate() -> None:
 def test_isolated_service_cannot_communicate() -> None:
     """Test that an isolated service (network_mode: none) cannot connect."""
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": _network_test_cmd("other-service")})],
+        [tool_call("bash", {"command": _network_test_cmd("other-service")})],
     )
     task = create_task(
         __file__,

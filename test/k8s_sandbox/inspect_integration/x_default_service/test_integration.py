@@ -15,7 +15,7 @@ from test.k8s_sandbox.inspect_integration.testing_utils.utils import (
 def test_explicit_default_service_takes_precedence() -> None:
     """Test that a service named "default" takes precedence over x-default."""
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": "echo $SERVICE_NAME"})],
+        [tool_call("bash", {"command": "echo $SERVICE_NAME"})],
     )
     task = create_task(
         __file__,
@@ -34,7 +34,7 @@ def test_explicit_default_service_takes_precedence() -> None:
 def test_x_default_service() -> None:
     """Test that x-default: true marks a service as the default sandbox."""
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": "echo $SERVICE_NAME"})],
+        [tool_call("bash", {"command": "echo $SERVICE_NAME"})],
     )
     task = create_task(
         __file__,
@@ -53,7 +53,7 @@ def test_x_default_service() -> None:
 def test_first_service_as_fallback() -> None:
     """Test that the first service is used when no default or x-default exists."""
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": "echo $SERVICE_NAME"})],
+        [tool_call("bash", {"command": "echo $SERVICE_NAME"})],
     )
     task = create_task(
         __file__,
