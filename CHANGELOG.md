@@ -6,9 +6,9 @@
 - Prefer kubeconfig over in-cluster config to preserve the configured namespace
 - Configurable K8s client token refresh
 - Add `INSPECT_K8S_DEFAULT_NAMESPACE` env var to override the default namespace
-- Pass comma-separated `key=value` labels from env var `INSPECT_HELM_LABELS` to `helm install --labels`
-- Log a warning when no GPU node is available during `helm install`, so users know the wait is expected rather than a hang
 - Use `--wait=legacy` with Helm 4.x to avoid kstatus treating unscheduled pods as permanently failed
+- Log a warning when no GPU node is available during `helm install`, so users know the wait is expected rather than a hang
+- Pass comma-separated `key=value` labels from env var `INSPECT_HELM_LABELS` to `helm install --labels`
 
 ## 2026-03-04 0.4.0
 
