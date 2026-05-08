@@ -151,25 +151,11 @@ chart](../helm/built-in-chart.md#dns). Or, if using a custom Helm chart, conside
 the `hostAliases` field in the Pod spec
 ([docs](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/)).
 
-## Transient network or infrastructure issues during `exec()` won't be retried
+## Transient errors are automatically retried
 
-The following exceptions have occasionally been observed during calls to `exec()`,
-`read_file()` or `write_file()`:
+Transient network or infrastructure errors during `exec()`, `read_file()`, and `write_file()` are automatically retried (up to 5 times). These are typically caused by issues such as a node becoming unhealthy, a Pod being rescheduled, or the Kubernetes control plane being overloaded.
 
-* `WebSocketBadStatusException: pod does not exist` (re-raised as `ApiException`)
-* `WebSocketBadStatusException: container not found` (re-raised as `ApiException`)
-* `WebSocketBadStatusException: Handshake status 500 Internal Server Error` (re-raised
-  as `ApiException`)
-* `WebSocketConnectionClosedException: Connection to remote host was lost`
-* `SSLEOFError: EOF occurred in violation of protocol`
-
-These are likely due to transient network or infrastructure issues. For example, when a
-node becomes unhealthy and the Pod is rescheduled.
-
-The `k8s_sandbox` package will not retry the remote command execution when any of these
-(or other) exceptions are raised because it cannot assume that the command is idempotent
-and that the command did not at least start executing. This will result in that sample
-of the eval failing.
+Note that retries cannot guarantee idempotency — if a command partially executed before the error, it may run again on retry.
 
 ## Must run as root to use the `user` parameter in `exec()` { #exec-user }
 

@@ -14,7 +14,7 @@ from test.k8s_sandbox.inspect_integration.testing_utils.utils import (
 @pytest.mark.req_k8s
 def test_default_chart_with_docker_compose_yaml() -> None:
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": "echo $TEST_ENV_VAR"})],
+        [tool_call("bash", {"command": "echo $TEST_ENV_VAR"})],
     )
     task = create_task(
         __file__,

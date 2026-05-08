@@ -1,11 +1,14 @@
 from typing import AsyncGenerator
 
+import pytest
 import pytest_asyncio
 from inspect_ai.util import SandboxEnvironment
 from inspect_ai.util._sandbox.self_check import self_check
 
 from k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
 from test.k8s_sandbox.utils import install_sandbox_environments
+
+pytestmark = pytest.mark.req_k8s
 
 
 @pytest_asyncio.fixture(scope="module")

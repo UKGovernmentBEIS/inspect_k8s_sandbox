@@ -28,6 +28,20 @@ from k8s_sandbox._kubernetes_api import get_default_namespace, k8s_client
 from k8s_sandbox._sandbox_environment import _key_to_pascal, _metadata_to_extra_values
 
 
+@pytest.fixture(autouse=True)
+def _mock_default_namespace(request: pytest.FixtureRequest) -> object:
+    """Patch get_default_namespace for tests that don't need a real cluster.
+
+    Tests marked req_k8s get the real implementation; everything else gets a
+    stub so that constructing a Release doesn't require a kubeconfig.
+    """
+    if "req_k8s" in {m.name for m in request.node.iter_markers()}:
+        yield
+        return
+    with patch("k8s_sandbox._helm.get_default_namespace", return_value="default") as m:
+        yield m
+
+
 @pytest.fixture
 def uninstallable_release() -> Release:
     return Release(
@@ -45,6 +59,7 @@ def log_err(caplog: LogCaptureFixture) -> LogCaptureFixture:
     return caplog
 
 
+@pytest.mark.req_k8s
 async def test_helm_install_error(
     uninstallable_release: Release, log_err: LogCaptureFixture
 ) -> None:
@@ -57,6 +72,7 @@ async def test_helm_install_error(
     assert "not found" in log_err.text
 
 
+@pytest.mark.req_k8s
 async def test_cancelling_install_uninstalls():
     release = Release(__file__, None, ValuesSource.none(), None)
     with patch("k8s_sandbox._helm.uninstall", wraps=uninstall) as spy:
@@ -73,6 +89,7 @@ async def test_cancelling_install_uninstalls():
     )
 
 
+@pytest.mark.req_k8s
 async def test_helm_uninstall_does_not_error_for_release_not_found(
     log_err: LogCaptureFixture,
 ) -> None:
@@ -84,6 +101,7 @@ async def test_helm_uninstall_does_not_error_for_release_not_found(
     assert log_err.text == ""
 
 
+@pytest.mark.req_k8s
 async def test_helm_uninstall_errors_for_other_errors(
     log_err: LogCaptureFixture,
 ) -> None:
@@ -125,6 +143,7 @@ async def test_invalid_helm_timeout(
         await uninstallable_release.install()
 
 
+@pytest.mark.req_k8s
 async def test_helm_install_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
     release = Release(__file__, None, ValuesSource.none(), None)

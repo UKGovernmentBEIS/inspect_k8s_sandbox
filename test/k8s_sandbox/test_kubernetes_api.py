@@ -1,6 +1,7 @@
 """Tests for Kubernetes API configuration loading."""
 
 import importlib
+import time
 from pathlib import Path
 from typing import Iterator, Protocol, Self, cast
 from unittest.mock import MagicMock, patch
@@ -54,28 +55,9 @@ class TestConfigLoading:
     # Singleton reset handled by _reset_config autouse fixture.
 
     @patch("k8s_sandbox._kubernetes_api.config")
-    def test_loads_incluster_config_when_available(
-        self, mock_config: MagicMock
-    ) -> None:
-        """When running in a pod, load_incluster_config() is used."""
+    def test_loads_kubeconfig_when_available(self, mock_config: MagicMock) -> None:
+        """When kubeconfig exists, it is preferred over in-cluster config."""
         typed_config = cast(_ConfigMock, mock_config)
-        typed_config.load_incluster_config.return_value = None
-
-        instance = Config.get_instance()
-
-        typed_config.load_incluster_config.assert_called_once()
-        typed_config.load_kube_config.assert_not_called()
-        assert instance.in_cluster is True
-
-    @patch("k8s_sandbox._kubernetes_api.config")
-    def test_falls_back_to_kubeconfig(self, mock_config: MagicMock) -> None:
-        """When not in a pod, falls back to load_kube_config()."""
-        from kubernetes.config import ConfigException  # type: ignore
-
-        typed_config = cast(_ConfigMock, mock_config)
-        typed_config.load_incluster_config.side_effect = ConfigException(
-            "not in cluster"
-        )
         typed_config.load_kube_config.return_value = None
         typed_config.list_kube_config_contexts.return_value = (
             [{"name": "test", "context": {"namespace": "default"}}],
@@ -84,16 +66,48 @@ class TestConfigLoading:
 
         instance = Config.get_instance()
 
-        typed_config.load_incluster_config.assert_called_once()
         typed_config.load_kube_config.assert_called_once()
+        typed_config.load_incluster_config.assert_not_called()
         assert instance.in_cluster is False
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    def test_falls_back_to_incluster(self, mock_config: MagicMock) -> None:
+        """When no kubeconfig exists, falls back to in-cluster config."""
+        from kubernetes.config import ConfigException
+
+        typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
+        typed_config.load_incluster_config.return_value = None
+
+        instance = Config.get_instance()
+
+        typed_config.load_kube_config.assert_called_once()
+        typed_config.load_incluster_config.assert_called_once()
+        assert instance.in_cluster is True
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    def test_raises_when_no_config_available(self, mock_config: MagicMock) -> None:
+        """Raises ConfigException when neither config source exists."""
+        from kubernetes.config import ConfigException
+
+        typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
+        typed_config.load_incluster_config.side_effect = ConfigException(
+            "not in cluster"
+        )
+
+        with pytest.raises(ConfigException, match="Unable to load Kubernetes"):
+            Config.get_instance()
 
     @patch("k8s_sandbox._kubernetes_api.config")
     def test_incluster_get_context_returns_none_context_name(
         self, mock_config: MagicMock
     ) -> None:
         """In-cluster mode: get_context(None) returns a synthetic context."""
+        from kubernetes.config import ConfigException
+
         typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
         typed_config.load_incluster_config.return_value = None
 
         instance = Config.get_instance()
@@ -104,7 +118,10 @@ class TestConfigLoading:
     @patch("k8s_sandbox._kubernetes_api.config")
     def test_incluster_rejects_named_context(self, mock_config: MagicMock) -> None:
         """In-cluster mode: get_context('some-name') raises ValueError."""
+        from kubernetes.config import ConfigException
+
         typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
         typed_config.load_incluster_config.return_value = None
 
         instance = Config.get_instance()
@@ -123,7 +140,10 @@ class TestGetDefaultNamespace:
         self, mock_config: MagicMock, tmp_path: Path
     ) -> None:
         """In-cluster mode reads namespace from the SA token mount."""
+        from kubernetes.config import ConfigException
+
         typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
         typed_config.load_incluster_config.return_value = None
 
         ns_file = tmp_path / "namespace"
@@ -144,7 +164,10 @@ class TestGetDefaultNamespace:
         self, mock_config: MagicMock
     ) -> None:
         """In-cluster mode defaults to 'default' if SA namespace file is missing."""
+        from kubernetes.config import ConfigException
+
         typed_config = cast(_ConfigMock, mock_config)
+        typed_config.load_kube_config.side_effect = ConfigException("no kubeconfig")
         typed_config.load_incluster_config.return_value = None
 
         instance = Config.get_instance()
@@ -239,3 +262,124 @@ class TestInspectK8sDefaultNamespace:
         )
 
         assert get_default_namespace(context_name=None) == "kubeconfig-ns"
+
+
+_get_client_refresh_seconds = getattr(_KUBE_API, "_get_client_refresh_seconds")
+
+
+class TestClientRefreshSeconds:
+    """Tests for _get_client_refresh_seconds env var parsing."""
+
+    def test_unset_returns_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("INSPECT_K8S_CLIENT_REFRESH_SECONDS", raising=False)
+        assert _get_client_refresh_seconds() == 0
+
+    def test_zero_returns_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("INSPECT_K8S_CLIENT_REFRESH_SECONDS", "0")
+        assert _get_client_refresh_seconds() == 0
+
+    def test_positive_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("INSPECT_K8S_CLIENT_REFRESH_SECONDS", "600")
+        assert _get_client_refresh_seconds() == 600
+
+    def test_negative_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("INSPECT_K8S_CLIENT_REFRESH_SECONDS", "-1")
+        with pytest.raises(ValueError, match="must be a non-negative int"):
+            _get_client_refresh_seconds()
+
+    def test_non_integer_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("INSPECT_K8S_CLIENT_REFRESH_SECONDS", "abc")
+        with pytest.raises(ValueError, match="must be a non-negative int"):
+            _get_client_refresh_seconds()
+
+
+_ThreadLocalClientFactory = getattr(_KUBE_API, "_ThreadLocalClientFactory")
+
+
+class TestClientRefresh:
+    """Tests for _ThreadLocalClientFactory client refresh behavior."""
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox._kubernetes_api._get_client_refresh_seconds", return_value=0)
+    def test_client_cached_when_refresh_disabled(
+        self, _mock_refresh: MagicMock, mock_config: MagicMock
+    ) -> None:
+        """When refresh is disabled, the same client is returned every time."""
+        mock_config.new_client_from_config.return_value = MagicMock()
+        factory = _ThreadLocalClientFactory()
+        client1 = factory.get_client("ctx")
+        client2 = factory.get_client("ctx")
+        assert client1 is client2
+        mock_config.new_client_from_config.assert_called_once()
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox._kubernetes_api._get_client_refresh_seconds", return_value=1)
+    def test_client_refreshed_when_expired(
+        self, _mock_refresh: MagicMock, mock_config: MagicMock
+    ) -> None:
+        """When refresh is enabled and client is stale, a new client is created."""
+        mock_api_client_1 = MagicMock()
+        mock_api_client_2 = MagicMock()
+        mock_config.new_client_from_config.side_effect = [
+            mock_api_client_1,
+            mock_api_client_2,
+        ]
+        factory = _ThreadLocalClientFactory()
+        client1 = factory.get_client("ctx")
+
+        # Backdate the creation time so it appears expired.
+        factory._created_at["ctx"] = time.monotonic() - 2
+
+        client2 = factory.get_client("ctx")
+        assert client1 is not client2
+        assert mock_config.new_client_from_config.call_count == 2
+        mock_api_client_1.close.assert_called_once()
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox._kubernetes_api._get_client_refresh_seconds", return_value=1)
+    def test_client_not_refreshed_when_young(
+        self, _mock_refresh: MagicMock, mock_config: MagicMock
+    ) -> None:
+        """When refresh is enabled but client is young, cached client is returned."""
+        mock_config.new_client_from_config.return_value = MagicMock()
+        factory = _ThreadLocalClientFactory()
+        client1 = factory.get_client("ctx")
+        client2 = factory.get_client("ctx")
+        assert client1 is client2
+        mock_config.new_client_from_config.assert_called_once()
+
+    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox._kubernetes_api._get_client_refresh_seconds", return_value=1)
+    def test_current_context_client_refreshed(
+        self, _mock_refresh: MagicMock, mock_config: MagicMock
+    ) -> None:
+        """Current-context client (context_name=None) is also refreshed."""
+        Config._instance = Config(contexts=None, current_context=None, in_cluster=False)  # type: ignore[call-arg]
+        mock_api_client_1 = MagicMock()
+        mock_api_client_2 = MagicMock()
+        mock_config.new_client_from_config.side_effect = [
+            mock_api_client_1,
+            mock_api_client_2,
+        ]
+        factory = _ThreadLocalClientFactory()
+        client1 = factory.get_client(None)
+
+        factory._created_at[None] = time.monotonic() - 2
+
+        client2 = factory.get_client(None)
+        assert client1 is not client2
+        assert mock_config.new_client_from_config.call_count == 2
+        mock_api_client_1.close.assert_called_once()
+
+    @patch("k8s_sandbox._kubernetes_api.client")
+    @patch("k8s_sandbox._kubernetes_api.config")
+    @patch("k8s_sandbox._kubernetes_api._get_client_refresh_seconds", return_value=0)
+    def test_incluster_uses_default_client(
+        self, _mock_refresh: MagicMock, mock_config: MagicMock, mock_client: MagicMock
+    ) -> None:
+        """In-cluster mode uses client.CoreV1Api() (built-in token refresh)."""
+        Config._instance = Config(contexts=None, current_context=None, in_cluster=True)  # type: ignore[call-arg]
+        factory = _ThreadLocalClientFactory()
+        factory.get_client(None)
+        mock_client.CoreV1Api.assert_called_once_with()
+        mock_config.new_client_from_config.assert_not_called()
