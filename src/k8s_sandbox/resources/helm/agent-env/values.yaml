@@ -144,3 +144,6 @@ annotations:
   # inspectTaskName: "task-name"
 # -- A dict of labels to apply to resources within the agent environment.
 labels: {}
+# -- Service account configuration for pods. When set, pods will use the specified
+# service account (e.g. for IRSA-based S3 access).
+serviceAccount: {}

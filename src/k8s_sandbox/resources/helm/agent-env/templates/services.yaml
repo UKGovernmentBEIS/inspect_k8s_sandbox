@@ -33,6 +33,9 @@ spec:
       {{- if ne $service.runtimeClassName "CLUSTER_DEFAULT" }}
       runtimeClassName: {{ $service.runtimeClassName | default "gvisor" }}
       {{- end }}
+      {{- if $.Values.serviceAccount }}
+      serviceAccountName: {{ $.Values.serviceAccount.name | default "task-s3-access" }}
+      {{- end }}
       {{- /* Do not leak info on services via env vars */}}
       enableServiceLinks: false
       terminationGracePeriodSeconds: 0
