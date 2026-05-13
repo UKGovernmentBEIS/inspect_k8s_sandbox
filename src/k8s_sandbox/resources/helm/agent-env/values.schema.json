@@ -205,7 +205,7 @@
       "type": "object"
     },
     "serviceAccountName": {
-      "type": "string"
+      "type": ["string", "null"]
     }
   },
   "required": [
