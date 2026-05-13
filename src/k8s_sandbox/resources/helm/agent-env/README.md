@@ -40,3 +40,4 @@
 | services.default.volumes | list | `[]` | Volumes accessible to the container. Supports arbitrary yaml or colon-separated strings of the form `volume-name:/mount-path`. |
 | services.default.workingDir | string | `nil` | The container's working directory. |
 | volumes | object | `{}` | A dict of volumes to deploy within the agent environment as NFS-CSI PersistentVolumeClaims. These volumes can be mounted in services using the `volumes:` field. The actual volume name will include the release name. |
+
