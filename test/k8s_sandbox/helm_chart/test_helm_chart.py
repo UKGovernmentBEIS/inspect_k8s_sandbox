@@ -200,6 +200,28 @@ def test_labels(
         assert labels.items() <= deployment["metadata"]["labels"].items()
 
 
+def test_no_service_account_by_default(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir)
+
+    assert _get_documents(documents, "ServiceAccount") == []
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert "serviceAccountName" not in spec
+
+
+def test_service_account_name(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir, set_str="serviceAccountName=my-sa")
+
+    service_accounts = _get_documents(documents, "ServiceAccount")
+    assert len(service_accounts) == 1
+    assert service_accounts[0]["metadata"]["name"] == "my-sa"
+    assert "app.kubernetes.io/name" in service_accounts[0]["metadata"]["labels"]
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["serviceAccountName"] == "my-sa"
+
+
 def test_init_containers(chart_dir: Path, test_resources_dir: Path) -> None:
     documents = _run_helm_template(
         chart_dir, test_resources_dir / "services-with-init-container.yaml"

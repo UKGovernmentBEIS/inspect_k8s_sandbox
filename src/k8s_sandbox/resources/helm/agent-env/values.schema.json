@@ -203,6 +203,9 @@
     },
     "labels": {
       "type": "object"
+    },
+    "serviceAccountName": {
+      "type": ["string", "null"]
     }
   },
   "required": [

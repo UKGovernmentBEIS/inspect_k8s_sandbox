@@ -144,3 +144,6 @@ annotations:
   # inspectTaskName: "task-name"
 # -- A dict of labels to apply to resources within the agent environment.
 labels: {}
+# -- Service account name. When set, a ServiceAccount is created with this name
+# and pods will use it.
+serviceAccountName: null

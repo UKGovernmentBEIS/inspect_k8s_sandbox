@@ -33,6 +33,9 @@ spec:
       {{- if ne $service.runtimeClassName "CLUSTER_DEFAULT" }}
       runtimeClassName: {{ $service.runtimeClassName | default "gvisor" }}
       {{- end }}
+      {{- if $.Values.serviceAccountName }}
+      serviceAccountName: {{ $.Values.serviceAccountName }}
+      {{- end }}
       {{- /* Do not leak info on services via env vars */}}
       enableServiceLinks: false
       terminationGracePeriodSeconds: 0
