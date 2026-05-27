@@ -26,6 +26,7 @@ from pydantic import BaseModel, TypeAdapter
 from tenacity import retry_if_exception, stop_after_attempt, wait_exponential_jitter
 from tenacity.asyncio import AsyncRetrying
 
+from k8s_sandbox._error import K8sError
 from k8s_sandbox._helm import (
     DEFAULT_CHART,
     Release,
@@ -34,7 +35,6 @@ from k8s_sandbox._helm import (
 )
 from k8s_sandbox._kubernetes_api import validate_context_name
 from k8s_sandbox._logger import (
-    format_log_message,
     inspect_trace_action,
     log_error,
     log_trace,
@@ -46,7 +46,13 @@ from k8s_sandbox._manager import (
     uninstall_unmanaged_release,
 )
 from k8s_sandbox._pod import Pod
-from k8s_sandbox._pod.error import ExecutableNotFoundError, GetReturncodeError, PodError
+from k8s_sandbox._pod.error import (
+    ContainerRestartedError,
+    ExecutableNotFoundError,
+    GetReturncodeError,
+    PodError,
+    PodReplacedError,
+)
 from k8s_sandbox._pod.executor import PodOpExecutor
 from k8s_sandbox._prereqs import validate_prereqs
 from k8s_sandbox.compose._compose import (
@@ -257,18 +263,22 @@ class K8sSandboxEnvironment(SandboxEnvironment):
     ) -> ExecResult[str]:
         log_kwargs = dict(cmd=cmd, stdin=input, cwd=cwd, env=env, timeout=timeout)
         # Do not log these at error level or re-raise as enriched K8sError.
+        # PodReplacedError / ContainerRestartedError are self-describing typed
+        # exceptions; let them propagate to callers (e.g. agent-side handlers)
+        # without being wrapped as opaque K8sErrors.
         expected_exceptions = (
             TimeoutError,
             UnicodeDecodeError,
             PermissionError,
             OutputLimitExceededError,
+            PodReplacedError,
+            ContainerRestartedError,
         )
         if user is None:
             user = self._config.default_user
 
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
-            await self._pod.check_for_pod_restart()
             async for attempt in _retry():
                 with attempt:
                     result = await self._pod.exec(
@@ -287,7 +297,12 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 temp_file.write(contents)
             temp_file.seek(0)
             # Do not log these at error level or re-raise as enriched K8sError.
-            expected_exceptions = (PermissionError, IsADirectoryError)
+            expected_exceptions = (
+                PermissionError,
+                IsADirectoryError,
+                PodReplacedError,
+                ContainerRestartedError,
+            )
             with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
                 async for attempt in _retry():
                     with attempt:
@@ -311,6 +326,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 PermissionError,
                 IsADirectoryError,
                 OutputLimitExceededError,
+                PodReplacedError,
+                ContainerRestartedError,
             )
             with self._log_op("K8s read file from Pod", expected_exceptions, file=file):
                 async for attempt in _retry():
@@ -421,16 +438,6 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     restarted_container_behavior: Literal["warn", "raise"] = "warn"
     max_pod_ops: int | None = None
     """Maximum number of concurrent pod operations. Defaults to cpu_count * 4."""
-
-
-class K8sError(Exception):
-    """An error that occurred during a Kubernetes operation.
-
-    This will typically cause the eval to fail.
-    """
-
-    def __init__(self, message: str, **kwargs: Any):
-        super().__init__(format_log_message(message, **kwargs))
 
 
 def _key_to_pascal(key: str) -> str:
