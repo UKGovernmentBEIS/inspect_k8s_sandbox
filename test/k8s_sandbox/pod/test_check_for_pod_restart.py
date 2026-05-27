@@ -40,6 +40,18 @@ def test_no_change_does_not_raise():
         check_for_pod_restart(_pod_info())
 
 
+def test_missing_container_statuses_skips_restart_check():
+    # Briefly possible right after pod scheduling: same UID but kubelet
+    # hasn't published container_statuses yet. Must not assert.
+    pod = MagicMock()
+    pod.metadata.uid = "uid-1"
+    pod.metadata.name = "agent-env-abc-default-0"
+    pod.status.container_statuses = None
+    with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
+        mock_client.return_value.read_namespaced_pod.return_value = pod
+        check_for_pod_restart(_pod_info(uid="uid-1"))
+
+
 def test_pod_replaced_raises_typed_with_new_restart_count():
     with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
         mock_client.return_value.read_namespaced_pod.return_value = _k8s_pod(

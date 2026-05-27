@@ -152,7 +152,11 @@ def check_for_pod_restart(pod: PodInfo) -> None:
             new_uid=k8s_pod.metadata.uid,
             new_restart_count=new_restart_count,
         )
-    assert k8s_pod.status.container_statuses is not None
+    if k8s_pod.status.container_statuses is None:
+        # Kubelet hasn't published container statuses yet (briefly possible
+        # right after pod scheduling). Nothing to compare against — skip the
+        # restart-count check rather than asserting.
+        return
     status = next(
         (
             container_status
