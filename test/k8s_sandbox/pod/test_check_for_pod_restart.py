@@ -1,4 +1,7 @@
+import asyncio
+import io
 import json
+import pathlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -149,3 +152,81 @@ def test_pod_auto_refreshes_restart_count_after_container_restart():
             uid="uid-OLD", container_name="default", restart_count=4
         )
         pod._check_for_pod_restart_sync()
+
+
+# --- INSPECT_POD_RESTART_CHECK gating (METR-private; not upstream) -----------
+
+
+def _make_replaced_pod_response() -> MagicMock:
+    return _k8s_pod(uid="uid-NEW", container_name="default", restart_count=0)
+
+
+def test_env_var_skips_file_op_check_but_not_exec(monkeypatch):
+    # Sandbox provider: Pod.read_file / Pod.write_file must skip the pre-op
+    # restart check when INSPECT_POD_RESTART_CHECK=false, while Pod.exec must
+    # always run it. Gate the file-op API hammer; keep the high-signal exec
+    # check unconditional.
+    monkeypatch.setenv("INSPECT_POD_RESTART_CHECK", "false")
+
+    # Patch the executor to run callables inline so we don't need a real
+    # threadpool / event loop boundary here.
+    with patch(
+        "k8s_sandbox._pod.executor.PodOpExecutor.get_instance"
+    ) as mock_get_instance:
+        executor = MagicMock()
+
+        async def queue(callable):
+            return callable()
+
+        executor.queue_operation = queue
+        mock_get_instance.return_value = executor
+
+        with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
+            mock_client.return_value.read_namespaced_pod.return_value = (
+                _make_replaced_pod_response()
+            )
+            # Patch the actual file ops so they don't try to hit a real pod.
+            with (
+                patch("k8s_sandbox._pod.pod.ReadFileOperation"),
+                patch("k8s_sandbox._pod.pod.WriteFileOperation"),
+                patch("k8s_sandbox._pod.pod.ExecuteOperation"),
+            ):
+                pod = _make_pod()
+
+                # read_file: env var should suppress the check entirely.
+                asyncio.run(pod.read_file(pathlib.Path("/x"), io.BytesIO()))
+                assert mock_client.return_value.read_namespaced_pod.call_count == 0
+
+                # write_file: same.
+                asyncio.run(pod.write_file(io.BytesIO(b""), pathlib.Path("/x")))
+                assert mock_client.return_value.read_namespaced_pod.call_count == 0
+
+                # exec: must always check, env var notwithstanding.
+                with pytest.raises(PodReplacedError):
+                    asyncio.run(pod.exec(["true"], None, None, {}, None, None))
+                assert mock_client.return_value.read_namespaced_pod.call_count == 1
+
+
+def test_env_var_default_keeps_file_op_check(monkeypatch):
+    monkeypatch.delenv("INSPECT_POD_RESTART_CHECK", raising=False)
+
+    with patch(
+        "k8s_sandbox._pod.executor.PodOpExecutor.get_instance"
+    ) as mock_get_instance:
+        executor = MagicMock()
+
+        async def queue(callable):
+            return callable()
+
+        executor.queue_operation = queue
+        mock_get_instance.return_value = executor
+
+        with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
+            mock_client.return_value.read_namespaced_pod.return_value = (
+                _make_replaced_pod_response()
+            )
+            with patch("k8s_sandbox._pod.pod.ReadFileOperation"):
+                pod = _make_pod()
+                with pytest.raises(PodReplacedError):
+                    asyncio.run(pod.read_file(pathlib.Path("/x"), io.BytesIO()))
+                assert mock_client.return_value.read_namespaced_pod.call_count == 1
