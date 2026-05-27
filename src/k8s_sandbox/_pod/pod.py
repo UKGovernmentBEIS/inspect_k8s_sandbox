@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+import logging
 from pathlib import Path
 from typing import IO, Callable, Literal, TypeVar
 
@@ -10,8 +12,11 @@ from k8s_sandbox._pod.executor import PodOpExecutor
 from k8s_sandbox._pod.op import PodInfo, check_for_pod_restart
 from k8s_sandbox._pod.read import ReadFileOperation
 from k8s_sandbox._pod.write import WriteFileOperation
+from k8s_sandbox.error import ContainerRestartedError, PodReplacedError
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
 
 
 class Pod:
@@ -25,7 +30,7 @@ class Pod:
         initial_restart_count: int,
         restarted_container_behavior: Literal["warn", "raise"],
     ) -> None:
-        self.info = PodInfo(
+        self._info = PodInfo(
             name,
             namespace,
             context_name,
@@ -35,9 +40,52 @@ class Pod:
             restarted_container_behavior,
         )
 
+    @property
+    def info(self) -> PodInfo:
+        """The current cached pod identity.
+
+        Note that ``uid`` and ``initial_restart_count`` may be replaced by
+        ``check_for_pod_restart`` if a replacement or restart is observed.
+        """
+        return self._info
+
     async def check_for_pod_restart(self) -> None:
-        """Check if the pod has been replaced or its container has restarted."""
-        await self._run_async(lambda: check_for_pod_restart(self.info))
+        """Check whether the pod has been replaced or its container has restarted.
+
+        On detection, refreshes the cached identity (``uid`` and/or
+        ``initial_restart_count``) so subsequent operations target the new pod
+        without re-raising the same condition. Whether the detection raises is
+        governed by ``restarted_container_behavior``:
+
+        - ``"warn"``: log a warning and return normally.
+        - ``"raise"``: raise ``PodReplacedError`` or ``ContainerRestartedError``.
+        """
+        await self._run_async(self._check_for_pod_restart_sync)
+
+    def _check_for_pod_restart_sync(self) -> None:
+        try:
+            check_for_pod_restart(self._info)
+        except PodReplacedError as e:
+            # Refresh cached identity atomically (frozen dataclass replacement
+            # is an attribute assignment, which is atomic in CPython).
+            self._info = dataclasses.replace(
+                self._info,
+                uid=e.new_uid,
+                initial_restart_count=e.new_restart_count,
+            )
+            if self._info.restarted_container_behavior == "warn":
+                logger.warning(str(e))
+                return
+            raise
+        except ContainerRestartedError as e:
+            self._info = dataclasses.replace(
+                self._info,
+                initial_restart_count=e.restart_count,
+            )
+            if self._info.restarted_container_behavior == "warn":
+                logger.warning(str(e))
+                return
+            raise
 
     async def exec(
         self,
@@ -92,7 +140,8 @@ class Pod:
             elapsed. This is enforced by the `timeout` command on the pod. This will not
             terminate background processes started by cmd.
         """
-        executor = ExecuteOperation(self.info)
+        await self.check_for_pod_restart()
+        executor = ExecuteOperation(self._info)
         result = await self._run_async(
             lambda: executor.exec(cmd, stdin, cwd, env, user, timeout)
         )
@@ -114,7 +163,8 @@ class Pod:
           dst (Path): The path to write the file to on the pod. Relative paths will be
             resolved relative to the pod's default working directory.
         """
-        writer = WriteFileOperation(self.info)
+        await self.check_for_pod_restart()
+        writer = WriteFileOperation(self._info)
         await self._run_async(lambda: writer.write_file(src, dst))
 
     async def read_file(self, src: Path, dst: IO[bytes]) -> None:
@@ -129,7 +179,8 @@ class Pod:
             relative to the pod's default working directory.
           dst (IO[bytes]): A file-like object to write the file to on the client system.
         """
-        reader = ReadFileOperation(self.info)
+        await self.check_for_pod_restart()
+        reader = ReadFileOperation(self._info)
         await self._run_async(lambda: reader.read_file(src, dst))
 
     async def _run_async(self, callable: Callable[[], T]) -> T:

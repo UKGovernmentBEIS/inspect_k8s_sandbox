@@ -9,6 +9,7 @@ from kubernetes.stream import stream  # type: ignore
 from kubernetes.stream.ws_client import RESIZE_CHANNEL, WSClient  # type: ignore
 
 from k8s_sandbox._kubernetes_api import k8s_client
+from k8s_sandbox.error import ContainerRestartedError, PodReplacedError
 
 # The duration to wait for an initial response from the k8s API server.
 # The initial response is received before the command is necessarily complete, so
@@ -118,25 +119,39 @@ class PodOperation(ABC):
             return
         ws_client._all = _IgnoredIO()
 
-    def _check_for_pod_restart(self):
-        check_for_pod_restart(self._pod)
-
 
 def check_for_pod_restart(pod: PodInfo) -> None:
-    """Check if the pod has been replaced or its container has restarted."""
+    """Check whether the pod has been replaced or its container has restarted.
+
+    Always raises a typed exception when a change is detected; callers
+    (typically ``Pod._check_for_pod_restart_sync``) are responsible for
+    applying the ``restarted_container_behavior`` policy and refreshing any
+    cached identity.
+
+    Raises:
+        PodReplacedError: the pod's UID has changed since ``pod.uid``.
+        ContainerRestartedError: the default container's restart count has
+            increased since ``pod.initial_restart_count``.
+        RuntimeError: the named container is no longer present on the pod
+            (treated as a permanent misconfiguration).
+    """
     api = k8s_client(pod.context_name)
     k8s_pod = api.read_namespaced_pod(name=pod.name, namespace=pod.namespace)
     assert k8s_pod.metadata is not None
+    assert k8s_pod.metadata.uid is not None
     assert k8s_pod.status is not None
     if k8s_pod.metadata.uid != pod.uid:
-        message = (
-            f"Pod UID mismatch: expected {pod.uid}, got {k8s_pod.metadata.uid} "
-            f"for {k8s_pod.metadata.name}"
+        # Capture the new pod's restart count for the default container so the
+        # caller can refresh its full cached identity atomically.
+        new_restart_count = _restart_count_for(
+            k8s_pod.status.container_statuses, pod.default_container_name
         )
-        if pod.restarted_container_behavior == "warn":
-            logger.warning(message)
-        else:
-            raise RuntimeError(message)
+        raise PodReplacedError(
+            pod_name=pod.name,
+            old_uid=pod.uid,
+            new_uid=k8s_pod.metadata.uid,
+            new_restart_count=new_restart_count,
+        )
     assert k8s_pod.status.container_statuses is not None
     status = next(
         (
@@ -147,28 +162,34 @@ def check_for_pod_restart(pod: PodInfo) -> None:
         None,
     )
     if status is None:
-        message = (
+        raise RuntimeError(
             f"Pod '{k8s_pod.metadata.name}' does not have a container named "
             f"'{pod.default_container_name}'"
         )
-        if pod.restarted_container_behavior == "warn":
-            logger.warning(message)
-            return
-        else:
-            raise RuntimeError(message)
     if status.restart_count > pod.initial_restart_count:
         last_state = status.last_state
         terminated = last_state.terminated if last_state else None
-        last_reason = terminated.reason if terminated else "unknown"
-        message = (
-            f"Container '{status.name}' in pod '{k8s_pod.metadata.name}' has restarted "
-            f"{status.restart_count} time(s) (last reason: {last_reason}); "
-            "pod state is no longer guaranteed."
+        last_reason = (
+            terminated.reason if terminated and terminated.reason else "unknown"
         )
-        if pod.restarted_container_behavior == "warn":
-            logger.warning(message)
-        else:
-            raise RuntimeError(message)
+        raise ContainerRestartedError(
+            pod_name=pod.name,
+            container_name=status.name,
+            restart_count=status.restart_count,
+            last_reason=last_reason,
+        )
+
+
+def _restart_count_for(
+    container_statuses, container_name: str
+) -> int:
+    if not container_statuses:
+        return 0
+    status = next(
+        (cs for cs in container_statuses if cs.name == container_name),
+        None,
+    )
+    return status.restart_count if status is not None else 0
 
 
 def _send_keepalive(ws_client: WSClient, stop: threading.Event) -> None:
