@@ -47,11 +47,9 @@ from k8s_sandbox._manager import (
 )
 from k8s_sandbox._pod import Pod
 from k8s_sandbox._pod.error import (
-    ContainerRestartedError,
     ExecutableNotFoundError,
     GetReturncodeError,
     PodError,
-    PodReplacedError,
 )
 from k8s_sandbox._pod.executor import PodOpExecutor
 from k8s_sandbox._prereqs import validate_prereqs
@@ -263,16 +261,15 @@ class K8sSandboxEnvironment(SandboxEnvironment):
     ) -> ExecResult[str]:
         log_kwargs = dict(cmd=cmd, stdin=input, cwd=cwd, env=env, timeout=timeout)
         # Do not log these at error level or re-raise as enriched K8sError.
-        # PodReplacedError / ContainerRestartedError are self-describing typed
-        # exceptions; let them propagate to callers (e.g. agent-side handlers)
-        # without being wrapped as opaque K8sErrors.
+        # PodReplacedError / ContainerRestartedError are intentionally NOT in
+        # this list: they're operator-visible incidents we want logged at ERROR
+        # with full op context, and callers that need to discriminate by type
+        # can walk `K8sError.__cause__`.
         expected_exceptions = (
             TimeoutError,
             UnicodeDecodeError,
             PermissionError,
             OutputLimitExceededError,
-            PodReplacedError,
-            ContainerRestartedError,
         )
         if user is None:
             user = self._config.default_user
@@ -297,12 +294,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 temp_file.write(contents)
             temp_file.seek(0)
             # Do not log these at error level or re-raise as enriched K8sError.
-            expected_exceptions = (
-                PermissionError,
-                IsADirectoryError,
-                PodReplacedError,
-                ContainerRestartedError,
-            )
+            expected_exceptions = (PermissionError, IsADirectoryError)
             with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
                 async for attempt in _retry():
                     with attempt:
@@ -326,8 +318,6 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 PermissionError,
                 IsADirectoryError,
                 OutputLimitExceededError,
-                PodReplacedError,
-                ContainerRestartedError,
             )
             with self._log_op("K8s read file from Pod", expected_exceptions, file=file):
                 async for attempt in _retry():
