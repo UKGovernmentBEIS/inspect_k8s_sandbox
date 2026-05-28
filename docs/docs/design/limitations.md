@@ -41,9 +41,27 @@ chart](../helm//built-in-chart.md#resource-requests-and-limits).
 
 You can reduce the impact of a container restarting by using persistent volumes.
 
-The framework will issue a warning if a container restarts during an eval. If you set
-the `restarted_container_behaviour` parameter to `raise`, the eval will fail the sample
-if it detects a container restart.
+The framework detects two kinds of state-loss events on every operation:
+
+* **Pod replacement** — the pod's UID has changed (the StatefulSet recreated it,
+  typically after eviction).
+* **Container restart** — the same pod's container process restarted in place
+  (`restart_count` increased).
+
+In both cases, in-memory state and any background processes started by the agent are
+lost, and anything written to the container's writable filesystem is reset. EmptyDir
+volumes survive container restarts but not pod replacements; PersistentVolume-backed
+paths survive both.
+
+By default (`restarted_container_behavior="warn"`), the framework logs a warning,
+refreshes its cached pod identity, and continues against the refreshed pod or
+container. The warning is recorded in Python `logging` and the eval transcript — it is
+not surfaced to the agent or solver.
+
+If you set `restarted_container_behavior="raise"`, the operation that detected the
+change instead raises a typed `PodReplacedError` or `ContainerRestartedError` (both
+`K8sError` subclasses). The cached identity is still refreshed, so a subsequent
+operation will target the refreshed pod.
 
 ??? question "Why not use Jobs over StatefulSets?"
 
