@@ -147,25 +147,20 @@ class Pod:
         )
         return result
 
-    async def write_file(self, src: IO[bytes], dst: Path) -> None:
+    async def write_file(self, data: bytes, dst: Path) -> None:
         """
-        Copy a file-like object (src) from the client to a path on the pod (dst).
+        Write ``data`` from the client to a path on the pod (dst).
 
         Existing files on the pod will be overwritten.
 
-        The source will be read from its current position to the end of the file. The
-        file position will be restored after the copy. The file-like object must be
-        opened in binary mode.
-
         Args:
-          src (IO[bytes]): The file-like object which contains the contents to be
-            written to the pod.
+          data (bytes): The contents to write to the pod.
           dst (Path): The path to write the file to on the pod. Relative paths will be
             resolved relative to the pod's default working directory.
         """
         await self.check_for_pod_restart()
         writer = WriteFileOperation(self._info)
-        await self._run_async(lambda: writer.write_file(src, dst))
+        await self._run_async(lambda: writer.write_file(data, dst))
 
     async def read_file(self, src: Path, dst: IO[bytes]) -> None:
         """

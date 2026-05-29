@@ -32,7 +32,7 @@ class ExecuteOperation(PodOperation):
         with self._interactive_shell(user) as ws_client:
             # Write the script to the shell's stdin rather than passing it as a command
             # argument (-c) to better support potentially long commands.
-            ws_client.write_stdin(shell_script)
+            self._write_stdin_chunked(ws_client, shell_script)
             result = self._handle_shell_output(ws_client, user, timeout)
         return result
 

@@ -175,6 +175,21 @@ async def test_exec_stdin_as_bytes(
     assert actual == binary_data
 
 
+async def test_exec_with_large_stdin(sandbox: K8sSandboxEnvironment) -> None:
+    # Regression: a large input= was sent as one oversized WebSocket frame and
+    # the connection reset. 30 MiB is comfortably past the failure threshold.
+    size = 30 * 1024**2  # 30 MiB
+    pattern = bytes(range(256))
+    large = (pattern * (size // len(pattern) + 1))[:size]
+
+    # No timeout: a 30 MiB transfer can exceed the few-second timeouts used by
+    # the smaller stdin tests above.
+    await sandbox.exec(["bash", "-c", "cat > /tmp/large-stdin.bin"], input=large)
+
+    actual = await sandbox.read_file("/tmp/large-stdin.bin", text=False)
+    assert actual == large
+
+
 async def test_exec_cwd_absolute(sandbox: K8sSandboxEnvironment) -> None:
     result = await sandbox.exec(["pwd"], cwd="/tmp", timeout=10)
 

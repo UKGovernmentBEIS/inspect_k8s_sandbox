@@ -26,6 +26,10 @@ API_TIMEOUT = 60
 # [1] https://github.com/kubernetes/kubernetes/blob/db9fcfeed29b860d8dd7188bc1903c4709977890/staging/src/k8s.io/kubelet/pkg/cri/streaming/server.go#L100-L105
 # [2] https://github.com/kubernetes/kubernetes/blob/77b02b7ad40d36cd803856de5ba5922c947cb0aa/staging/src/k8s.io/apimachinery/pkg/util/httpstream/wsstream/conn.go#L348-L356
 _KEEPALIVE_INTERVAL_SECONDS = 30
+# Maximum size of a single WebSocket stdin frame. Larger single writes (tens of
+# MiB) make the kubelet/API-server/TLS layer reset the connection
+# (ConnectionResetError / ssl.SSLEOFError), so stdin is written in chunks.
+_STDIN_CHUNK_SIZE = 1024**2  # 1 MiB
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +64,16 @@ class PodOperation(ABC):
 
     def __init__(self, pod: PodInfo):
         self._pod = pod
+
+    def _write_stdin_chunked(self, ws_client: WSClient, data: str | bytes) -> None:
+        """Write ``data`` to the stdin channel in ``_STDIN_CHUNK_SIZE`` frames.
+
+        Used by both exec and write_file (see ``_STDIN_CHUNK_SIZE`` for why we
+        chunk). The slice type is preserved: ``str`` -> text frames, ``bytes``
+        -> binary frames.
+        """
+        for i in range(0, len(data), _STDIN_CHUNK_SIZE):
+            ws_client.write_stdin(data[i : i + _STDIN_CHUNK_SIZE])
 
     def create_websocket_client_for_exec(
         self, **kwargs

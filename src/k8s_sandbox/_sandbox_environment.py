@@ -285,21 +285,13 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             return result
 
     async def write_file(self, file: str, contents: str | bytes) -> None:
-        # Write contents to a temporary file on the client system and pass the file
-        # handle.
-        with tempfile.NamedTemporaryFile("w+b") as temp_file:
-            if isinstance(contents, str):
-                temp_file.write(contents.encode("utf-8"))
-            else:
-                temp_file.write(contents)
-            temp_file.seek(0)
-            # Do not log these at error level or re-raise as enriched K8sError.
-            expected_exceptions = (PermissionError, IsADirectoryError)
-            with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
-                async for attempt in _retry():
-                    with attempt:
-                        temp_file.seek(0)
-                        await self._pod.write_file(temp_file.file, Path(file))
+        data = contents.encode("utf-8") if isinstance(contents, str) else contents
+        # Do not log these at error level or re-raise as enriched K8sError.
+        expected_exceptions = (PermissionError, IsADirectoryError)
+        with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
+            async for attempt in _retry():
+                with attempt:
+                    await self._pod.write_file(data, Path(file))
 
     @overload
     async def read_file(self, file: str, text: Literal[True] = True) -> str: ...
