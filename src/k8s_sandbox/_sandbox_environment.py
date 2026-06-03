@@ -360,8 +360,18 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 # Whilst Inspect's trace_action will have logged the exception, log it
                 # at ERROR level here for user visibility.
                 log_error(f"Error during: {op}.", cause=e, **log_kwargs)
-                # Enrich the unexpected exception with additional context.
-                raise K8sError(f"Error during: {op}.", **log_kwargs) from e
+                # Enrich the unexpected exception with additional context. The
+                # cause's type and short message are included in the K8sError's
+                # own message so callers reading str(error) (e.g. an LLM agent
+                # reading the bash tool's error string) can distinguish a
+                # transient infra failure like PodReplacedError from
+                # destructive-class errors. The original exception remains
+                # reachable via __cause__ for callers that walk the chain.
+                raise K8sError(
+                    f"Error during: {op}.",
+                    cause=f"{type(e).__name__}: {e}",
+                    **log_kwargs,
+                ) from e
 
     @classmethod
     def config_deserialize(cls, config: dict[str, Any]) -> BaseModel:
