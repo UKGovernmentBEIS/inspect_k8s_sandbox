@@ -1,8 +1,12 @@
+from contextlib import contextmanager
+from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
+from inspect_ai.util import ExecResult
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
+import k8s_sandbox._pod.op as op_module
 from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.execute import ExecuteOperation
 
@@ -222,3 +226,37 @@ class TestConnectionResetWithoutSentinel:
         executor = ExecuteOperation(MagicMock())
         with pytest.raises(PodError, match="WebSocket connection lost"):
             executor._handle_shell_output(ws, user=None, timeout=None)
+
+
+class TestExecChunksStdin:
+    def test_exec_writes_shell_script_in_chunks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Tiny chunk size (patched in op.py, where _write_stdin_chunked reads it)
+        # plus stubbed shell creation + output handling, so only the write path runs.
+        monkeypatch.setattr(op_module, "_STDIN_CHUNK_SIZE", 16)
+        ws = MagicMock(spec=WSClient)
+
+        @contextmanager
+        def fake_interactive_shell(
+            user: str | None,
+        ) -> Generator[MagicMock, None, None]:
+            yield ws
+
+        op = ExecuteOperation(MagicMock())
+        monkeypatch.setattr(op, "_interactive_shell", fake_interactive_shell)
+        sentinel = ExecResult(success=True, returncode=0, stdout="", stderr="")
+        monkeypatch.setattr(op, "_handle_shell_output", lambda *a, **k: sentinel)
+
+        # The assembled script (base64 input + pipeline) is several hundred bytes,
+        # well above the 16-byte chunk size, so it splits into many frames.
+        result = op.exec(
+            ["cat"], stdin=b"x" * 100, cwd=None, env={}, user=None, timeout=None
+        )
+
+        expected_script = op._build_shell_script(["cat"], b"x" * 100, None, {}, None)
+        written = "".join(call.args[0] for call in ws.write_stdin.call_args_list)
+        assert written == expected_script
+        assert ws.write_stdin.call_count > 1
+        assert all(len(c.args[0]) <= 16 for c in ws.write_stdin.call_args_list)
+        assert result is sentinel
