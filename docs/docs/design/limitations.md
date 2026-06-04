@@ -55,13 +55,17 @@ paths survive both.
 
 By default (`restarted_container_behavior="warn"`), the framework logs a warning,
 refreshes its cached pod identity, and continues against the refreshed pod or
-container. The warning is recorded in Python `logging` and the eval transcript — it is
-not surfaced to the agent or solver.
+container. The warning goes to Python `logging` (i.e. stderr/console) — it is not
+surfaced to the agent or solver, and it does not currently appear in the eval
+transcript.
 
 If you set `restarted_container_behavior="raise"`, the operation that detected the
-change instead raises a typed `PodReplacedError` or `ContainerRestartedError` (both
-`K8sError` subclasses). The cached identity is still refreshed, so a subsequent
-operation will target the refreshed pod.
+change raises instead of continuing. Internally a typed `PodReplacedError` or
+`ContainerRestartedError` is raised, but the sandbox `exec`/`read_file`/`write_file`
+methods re-wrap it as a `K8sError` with the typed error as its `__cause__`. To
+discriminate by type, catch `K8sError` and inspect `__cause__` rather than catching
+`PodReplacedError`/`ContainerRestartedError` directly. The cached identity is still
+refreshed, so a subsequent operation will target the refreshed pod.
 
 ??? question "Why not use Jobs over StatefulSets?"
 
