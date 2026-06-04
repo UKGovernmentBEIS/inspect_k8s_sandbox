@@ -45,7 +45,7 @@ class Pod:
         """The current cached pod identity.
 
         Note that ``uid`` and ``initial_restart_count`` may be replaced by
-        ``check_for_pod_restart`` if a replacement or restart is observed.
+        ``_detect_and_refresh`` if a replacement or restart is observed.
         """
         return self._info
 
@@ -60,11 +60,32 @@ class Pod:
         - ``"warn"``: log a warning and return normally.
         - ``"raise"``: raise ``PodReplacedError`` or ``ContainerRestartedError``.
         """
-        await self._run_async(self._check_for_pod_restart_sync)
+        detected = await self._run_async(self._detect_and_refresh)
+        if detected is None:
+            return
+        # Apply the warn/raise policy here, on the event loop thread, rather
+        # than inside the PodOpExecutor worker. Inspect's logging-to-transcript
+        # capture is keyed on a contextvar that asyncio's run_in_executor does
+        # not propagate to the worker thread, so a warning logged there never
+        # reaches the sample transcript. Raising is unaffected (the exception
+        # surfaces here when awaited) but both branches are kept together.
+        if self._info.restarted_container_behavior == "warn":
+            logger.warning(str(detected))
+            return
+        raise detected
 
-    def _check_for_pod_restart_sync(self) -> None:
+    def _detect_and_refresh(
+        self,
+    ) -> PodReplacedError | ContainerRestartedError | None:
+        """Detect a pod replacement / container restart and refresh the identity.
+
+        Runs in a PodOpExecutor worker thread. Returns the detected exception
+        with the cached identity already refreshed, or ``None`` if no change was
+        detected. The caller applies the ``restarted_container_behavior`` policy.
+        """
         try:
             check_for_pod_restart(self._info)
+            return None
         except PodReplacedError as e:
             # Refresh cached identity atomically (frozen dataclass replacement
             # is an attribute assignment, which is atomic in CPython).
@@ -73,19 +94,13 @@ class Pod:
                 uid=e.new_uid,
                 initial_restart_count=e.new_restart_count,
             )
-            if self._info.restarted_container_behavior == "warn":
-                logger.warning(str(e))
-                return
-            raise
+            return e
         except ContainerRestartedError as e:
             self._info = dataclasses.replace(
                 self._info,
                 initial_restart_count=e.restart_count,
             )
-            if self._info.restarted_container_behavior == "warn":
-                logger.warning(str(e))
-                return
-            raise
+            return e
 
     async def exec(
         self,

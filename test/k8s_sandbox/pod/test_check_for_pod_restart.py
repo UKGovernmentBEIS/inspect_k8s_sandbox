@@ -1,7 +1,9 @@
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from k8s_sandbox._pod import pod as pod_module
 from k8s_sandbox._pod.error import ContainerRestartedError, PodReplacedError
 from k8s_sandbox._pod.op import PodInfo, check_for_pod_restart
 from k8s_sandbox._pod.pod import Pod
@@ -91,14 +93,14 @@ def _make_pod(restarted_container_behavior: str = "raise") -> Pod:
     )
 
 
-def test_pod_auto_refreshes_uid_after_replacement():
+async def test_pod_auto_refreshes_uid_after_replacement():
     pod = _make_pod()
     with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
         mock_client.return_value.read_namespaced_pod.return_value = _k8s_pod(
             uid="uid-NEW", container_name="default", restart_count=2
         )
         with pytest.raises(PodReplacedError):
-            pod._check_for_pod_restart_sync()
+            await pod.check_for_pod_restart()
     # Cached identity is refreshed so a subsequent call against the new pod
     # does NOT re-raise.
     assert pod.info.uid == "uid-NEW"
@@ -107,33 +109,55 @@ def test_pod_auto_refreshes_uid_after_replacement():
         mock_client.return_value.read_namespaced_pod.return_value = _k8s_pod(
             uid="uid-NEW", container_name="default", restart_count=2
         )
-        pod._check_for_pod_restart_sync()  # no raise
+        await pod.check_for_pod_restart()  # no raise
 
 
-def test_warn_mode_logs_and_does_not_raise_but_still_refreshes(caplog):
+async def test_warn_mode_logs_and_does_not_raise_but_still_refreshes(caplog):
     pod = _make_pod(restarted_container_behavior="warn")
     with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
         mock_client.return_value.read_namespaced_pod.return_value = _k8s_pod(
             uid="uid-NEW", container_name="default", restart_count=0
         )
         with caplog.at_level("WARNING"):
-            pod._check_for_pod_restart_sync()
+            await pod.check_for_pod_restart()
     assert pod.info.uid == "uid-NEW"
     assert any("has been replaced" in r.message for r in caplog.records)
 
 
-def test_pod_auto_refreshes_restart_count_after_container_restart():
+async def test_warn_is_logged_on_calling_thread_not_executor_thread():
+    # Detection runs in a PodOpExecutor worker thread, but the warn-mode
+    # warning must be emitted on the calling (event loop) thread. Inspect's
+    # logging-to-transcript capture is contextvar-based and run_in_executor
+    # does not propagate the context to the worker, so a warning logged there
+    # would never reach the sample transcript. This guards that regression.
+    pod = _make_pod(restarted_container_behavior="warn")
+    calling_thread = threading.get_ident()
+    warn_threads: list[int] = []
+    with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
+        mock_client.return_value.read_namespaced_pod.return_value = _k8s_pod(
+            uid="uid-NEW", container_name="default", restart_count=0
+        )
+        with patch.object(
+            pod_module.logger,
+            "warning",
+            side_effect=lambda *a, **k: warn_threads.append(threading.get_ident()),
+        ):
+            await pod.check_for_pod_restart()
+    assert warn_threads == [calling_thread]
+
+
+async def test_pod_auto_refreshes_restart_count_after_container_restart():
     pod = _make_pod()
     with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
         mock_client.return_value.read_namespaced_pod.return_value = _k8s_pod(
             uid="uid-OLD", container_name="default", restart_count=4
         )
         with pytest.raises(ContainerRestartedError):
-            pod._check_for_pod_restart_sync()
+            await pod.check_for_pod_restart()
     assert pod.info.initial_restart_count == 4
     # Same restart_count next time → no raise.
     with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
         mock_client.return_value.read_namespaced_pod.return_value = _k8s_pod(
             uid="uid-OLD", container_name="default", restart_count=4
         )
-        pod._check_for_pod_restart_sync()
+        await pod.check_for_pod_restart()

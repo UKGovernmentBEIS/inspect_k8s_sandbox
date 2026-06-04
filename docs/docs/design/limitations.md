@@ -55,9 +55,8 @@ paths survive both.
 
 By default (`restarted_container_behavior="warn"`), the framework logs a warning,
 refreshes its cached pod identity, and continues against the refreshed pod or
-container. The warning goes to Python `logging` (i.e. stderr/console) — it is not
-surfaced to the agent or solver, and it does not currently appear in the eval
-transcript.
+container. The warning is emitted via Python `logging` and recorded in the eval
+transcript (visible in `inspect view`); it is not surfaced to the agent or solver.
 
 If you set `restarted_container_behavior="raise"`, the operation that detected the
 change raises instead of continuing. Internally a typed `PodReplacedError` or
