@@ -14,6 +14,7 @@ from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.exceptions import ApiException  # type: ignore
 from shortuuid import uuid
 
+from k8s_sandbox._diagnostics import describe_release_pods
 from k8s_sandbox._kubernetes_api import get_default_namespace, k8s_client
 from k8s_sandbox._logger import (
     format_log_message,
@@ -330,7 +331,7 @@ class Release:
             with suppress(Exception, asyncio.CancelledError):
                 await watcher
         if not result.success:
-            self._raise_install_error(result)
+            await self._raise_install_error(result)
 
     async def _watch_for_scheduling_events(self) -> None:
         """Poll for FailedScheduling events and log once if GPU provisioning is needed.
@@ -376,7 +377,7 @@ class Release:
         except asyncio.CancelledError:
             pass
 
-    def _raise_install_error(self, result: ExecResult[str]) -> NoReturn:
+    async def _raise_install_error(self, result: ExecResult[str]) -> NoReturn:
         # When concurrent helm operations are modifying the same resource quota, the
         # following error occasionally occurs. Retry.
         if re.search(
@@ -391,6 +392,19 @@ class Release:
                 error=result.stderr,
             )
             raise _ResourceQuotaModifiedError(result.stderr)
+        # Helm only reports the generic symptom (e.g. a pod not becoming ready). Read
+        # the pods' container states so the concrete cause (ImagePullBackOff, OOMKilled,
+        # FailedScheduling, ...) is surfaced. Best-effort: None if it can't be gathered.
+        # The Kubernetes client is synchronous, so run it in a thread (as
+        # get_sandbox_pods and the scheduling watcher do) to avoid blocking the loop.
+        loop = asyncio.get_running_loop()
+        diagnostics = await loop.run_in_executor(
+            None,
+            lambda: describe_release_pods(
+                self._context_name, self._namespace, self.release_name
+            ),
+        )
+        extra: dict[str, Any] = {"pod_diagnostics": diagnostics} if diagnostics else {}
         if re.search(r"context deadline exceeded", result.stderr):
             _raise_runtime_error(
                 f"Helm install timed out (context deadline exceeded). The configured "
@@ -400,9 +414,13 @@ class Release:
                 f"{INSPECT_HELM_TIMEOUT} environment variable.",
                 release=self.release_name,
                 result=result,
+                **extra,
             )
         _raise_runtime_error(
-            "Helm install failed.", release=self.release_name, result=result
+            "Helm install failed.",
+            release=self.release_name,
+            result=result,
+            **extra,
         )
 
 
