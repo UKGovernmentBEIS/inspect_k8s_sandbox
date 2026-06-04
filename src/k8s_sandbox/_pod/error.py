@@ -72,9 +72,11 @@ class ContainerRestartedError(K8sError):
     """A container in the pod has restarted since the pod was first observed.
 
     The pod itself is the same (same UID), but the container's process was
-    restarted (OOM, crash, liveness probe failure, etc.). Files on disk
-    survive; in-memory state and any background processes started by the agent
-    do not.
+    restarted (OOM, crash, liveness probe failure, etc.). In-memory state and
+    any background processes started by the agent are lost, and the container's
+    writable filesystem layer is reset to the image. Files on a mounted volume
+    survive: emptyDir volumes survive a container restart (but not a pod
+    replacement), and persistent volumes survive both.
 
     The sandbox provider refreshes its cached restart count when this is
     raised, so subsequent operations will not re-raise
