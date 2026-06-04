@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Raise typed `PodReplacedError` / `ContainerRestartedError` (instead of `RuntimeError`) when a pod operation detects the pod has been replaced or its container restarted, and refresh the cached pod identity so subsequent operations target the new pod instead of looping against a stale UID. `restarted_container_behavior="warn"` now also refreshes (previously left the cached UID stale).
+- The `restarted_container_behavior="warn"` warning is now recorded in the eval transcript (visible in `inspect view`), not just on stderr. It was previously logged from a worker thread whose context Inspect's transcript capture could not see.
 
 ## 2026-05-07 0.5.0
 
