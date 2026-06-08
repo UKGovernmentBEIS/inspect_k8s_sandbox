@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, TypeVar
@@ -78,6 +79,13 @@ class PodOpExecutor:
         This method is async-safe but not thread-safe.
         """
         async with concurrency("pod-op", self._max_workers):
+            # run_in_executor does not propagate the caller's context into the
+            # worker thread (PEP 567: a new thread starts with an empty context).
+            # Snapshot it here so ContextVar-based config set in the calling async
+            # context is visible to the operation. Without this, inspect_ai's
+            # per-operation overrides (exec output-size limit, transcript capture)
+            # are silently lost on the worker thread. See issue #200.
+            context = contextvars.copy_context()
             return await asyncio.get_event_loop().run_in_executor(
-                self._executor, callable
+                self._executor, lambda: context.run(callable)
             )
