@@ -88,7 +88,6 @@ async def test_queue_more_operations_than_max_workers(monkeypatch: MonkeyPatch) 
 async def test_queue_operation_propagates_caller_context(
     monkeypatch: MonkeyPatch,
 ) -> None:
-
     monkeypatch.setenv("INSPECT_MAX_POD_OPS", "1")
     executor = PodOpExecutor.get_instance()
     var: contextvars.ContextVar[str] = contextvars.ContextVar(
