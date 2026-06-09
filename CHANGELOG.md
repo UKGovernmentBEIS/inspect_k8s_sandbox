@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- Propagate the caller's context into the pod-operation worker thread (`PodOpExecutor.queue_operation` now runs the operation under a `contextvars.copy_context()` snapshot). Previously `run_in_executor` started the worker with an empty context, so ContextVar-based config set in the calling async context was silently lost. Fixes `INSPECT_SANDBOX_MAX_EXEC_OUTPUT_SIZE` (and other exec-limit overrides) having no effect on k8s, and ensures `restarted_container_behavior="warn"` warnings reach the eval transcript ([#200](https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/200)).
-- Raise typed `PodReplacedError` / `ContainerRestartedError` (instead of `RuntimeError`) when a pod operation detects the pod has been replaced or its container restarted, and refresh the cached pod identity so subsequent operations target the new pod instead of looping against a stale UID. `restarted_container_behavior="warn"` now also refreshes (previously left the cached UID stale).
+- Propagate the caller's context into the pod-operation worker thread to ensure that Inspect sandbox config overrides are honoured.
+- Raise typed `PodReplacedError` / `ContainerRestartedError` (instead of `RuntimeError`) when a pod operation detects the pod has been replaced or its container restarted, and refresh the cached pod identity so subsequent operations target the new pod instead of looping against a stale UID. `restarted_container_behavior="warn"` now also refreshes (previously left the cached UID stale).  
 - Fix `exec(input=...)` failing with "Connection reset by peer" for large inputs (e.g. injecting a ~28 MiB binary): stdin is now written to the pod in ≤1 MiB WebSocket frames instead of a single oversized frame. `write_file` shares the same chunking helper.
 
 ## 2026-05-07 0.5.0

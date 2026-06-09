@@ -88,10 +88,7 @@ async def test_queue_more_operations_than_max_workers(monkeypatch: MonkeyPatch) 
 async def test_queue_operation_propagates_caller_context(
     monkeypatch: MonkeyPatch,
 ) -> None:
-    # The worker callable reads ContextVar-based config (inspect_ai's exec
-    # output-size limit, transcript capture). run_in_executor does not carry the
-    # caller's context into the worker thread, so queue_operation must snapshot
-    # it. See issue #200.
+
     monkeypatch.setenv("INSPECT_MAX_POD_OPS", "1")
     executor = PodOpExecutor.get_instance()
     var: contextvars.ContextVar[str] = contextvars.ContextVar(
