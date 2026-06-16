@@ -138,6 +138,35 @@ async def test_warn_mode_still_raises_after_failed_exec():
             )
 
 
+async def test_warn_mode_api_fast_still_raises_after_failed_exec():
+    # API already knows about the restart before exec runs.
+    # Pre-exec warn-mode check logs and updates the counter.
+    # Post-exec check must still detect it using the pre-exec snapshot.
+    pod = _make_pod(restarted_container_behavior="warn")
+
+    k8s_pod = _k8s_pod(uid="uid-OLD", container_name="default", restart_count=1)
+
+    with (
+        patch("k8s_sandbox._pod.op.k8s_client") as mock_client,
+        patch("k8s_sandbox._pod.pod.ExecuteOperation") as mock_exec_cls,
+    ):
+        mock_client.return_value.read_namespaced_pod.return_value = k8s_pod
+        mock_exec_cls.return_value.exec.return_value = _failed_exec_result()
+
+        with pytest.raises(ContainerRestartedError) as exc_info:
+            await pod.exec(
+                cmd=["echo", "hello"],
+                stdin=None,
+                cwd=None,
+                env={},
+                user=None,
+                timeout=None,
+            )
+
+    assert exc_info.value.restart_count == 1
+    assert pod.info.initial_restart_count == 1
+
+
 async def test_recheck_api_failure_does_not_mask_exec_result(
     caplog: pytest.LogCaptureFixture,
 ):

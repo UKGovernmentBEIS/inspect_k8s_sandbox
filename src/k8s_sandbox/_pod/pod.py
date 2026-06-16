@@ -140,23 +140,33 @@ class Pod:
             elapsed. This is enforced by the `timeout` command on the pod. This will not
             terminate background processes started by cmd.
         """
+        restart_count_before = self._info.initial_restart_count
+        uid_before = self._info.uid
         await self.check_for_pod_restart()
         executor = ExecuteOperation(self._info)
         result = await self._run_async(
             lambda: executor.exec(cmd, stdin, cwd, env, user, timeout)
         )
         if not result.success:
-            await self._recheck_for_restart_after_failed_exec()
+            await self._recheck_for_restart_after_failed_exec(
+                restart_count_before, uid_before
+            )
         return result
 
-    async def _recheck_for_restart_after_failed_exec(self) -> None:
-        """Re-check for restart after a failed exec to close the race window.
+    async def _recheck_for_restart_after_failed_exec(
+        self,
+        restart_count_before: int,
+        uid_before: str,
+    ) -> None:
+        """Re-check for restart after a failed exec.
 
-        Always raises on detection regardless of restarted_container_behavior
-        — the exec already failed, so the restart is operationally relevant.
+        Uses the pre-exec snapshot as baseline so restarts detected-and-warned
+        by the pre-exec check are still visible here.
         """
         try:
-            await self._run_async(self._recheck_for_restart_sync)
+            await self._run_async(
+                lambda: self._recheck_for_restart_sync(restart_count_before, uid_before)
+            )
         except (PodReplacedError, ContainerRestartedError):
             raise
         except Exception:
@@ -165,9 +175,18 @@ class Pod:
                 exc_info=True,
             )
 
-    def _recheck_for_restart_sync(self) -> None:
+    def _recheck_for_restart_sync(
+        self, restart_count_before: int, uid_before: str
+    ) -> None:
+        # Use the pre-exec snapshot so we can see restarts that the
+        # pre-exec warn-mode check already consumed.
+        snapshot = dataclasses.replace(
+            self._info,
+            initial_restart_count=restart_count_before,
+            uid=uid_before,
+        )
         try:
-            check_for_pod_restart(self._info)
+            check_for_pod_restart(snapshot)
         except PodReplacedError as e:
             self._info = dataclasses.replace(
                 self._info,
