@@ -151,13 +151,12 @@ class Pod:
         if not result.success:
             if warned_restart is not None:
                 raise warned_restart
-            await self._recheck_for_restart_after_failed_exec()
+            await self._diagnose_restart_after_failed_exec()
         return result
 
-    async def _recheck_for_restart_after_failed_exec(self) -> None:
-        """Re-check for restart after a failed exec to close the race window."""
+    async def _diagnose_restart_after_failed_exec(self) -> None:
         try:
-            await self._run_async(self._recheck_for_restart_sync)
+            restart = await self.check_for_pod_restart()
         except (PodReplacedError, ContainerRestartedError):
             raise
         except Exception:
@@ -165,23 +164,9 @@ class Pod:
                 "Post-exec restart re-check failed; returning original exec result",
                 exc_info=True,
             )
-
-    def _recheck_for_restart_sync(self) -> None:
-        try:
-            check_for_pod_restart(self._info)
-        except PodReplacedError as e:
-            self._info = dataclasses.replace(
-                self._info,
-                uid=e.new_uid,
-                initial_restart_count=e.new_restart_count,
-            )
-            raise
-        except ContainerRestartedError as e:
-            self._info = dataclasses.replace(
-                self._info,
-                initial_restart_count=e.restart_count,
-            )
-            raise
+            return
+        if restart is not None:
+            raise restart
 
     async def write_file(self, data: bytes, dst: Path) -> None:
         """
