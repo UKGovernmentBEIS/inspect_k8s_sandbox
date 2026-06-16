@@ -161,8 +161,7 @@ class Pod:
             raise
         except Exception:
             logger.warning(
-                "Post-exec restart re-check failed; "
-                "returning original exec result",
+                "Post-exec restart re-check failed; returning original exec result",
                 exc_info=True,
             )
 
