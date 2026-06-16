@@ -49,7 +49,9 @@ class Pod:
         """
         return self._info
 
-    async def check_for_pod_restart(self) -> None:
+    async def check_for_pod_restart(
+        self,
+    ) -> PodReplacedError | ContainerRestartedError | None:
         """Check whether the pod has been replaced or its container has restarted.
 
         On detection, refreshes the cached identity (``uid`` and/or
@@ -57,17 +59,17 @@ class Pod:
         without re-raising the same condition. Whether the detection raises is
         governed by ``restarted_container_behavior``:
 
-        - ``"warn"``: log a warning and return normally.
+        - ``"warn"``: log a warning and return the detected error.
         - ``"raise"``: raise ``PodReplacedError`` or ``ContainerRestartedError``.
         """
-        await self._run_async(self._check_for_pod_restart_sync)
+        return await self._run_async(self._check_for_pod_restart_sync)
 
-    def _check_for_pod_restart_sync(self) -> None:
+    def _check_for_pod_restart_sync(
+        self,
+    ) -> PodReplacedError | ContainerRestartedError | None:
         try:
             check_for_pod_restart(self._info)
         except PodReplacedError as e:
-            # Refresh cached identity atomically (frozen dataclass replacement
-            # is an attribute assignment, which is atomic in CPython).
             self._info = dataclasses.replace(
                 self._info,
                 uid=e.new_uid,
@@ -75,7 +77,7 @@ class Pod:
             )
             if self._info.restarted_container_behavior == "warn":
                 logger.warning(str(e))
-                return
+                return e
             raise
         except ContainerRestartedError as e:
             self._info = dataclasses.replace(
@@ -84,8 +86,9 @@ class Pod:
             )
             if self._info.restarted_container_behavior == "warn":
                 logger.warning(str(e))
-                return
+                return e
             raise
+        return None
 
     async def exec(
         self,
@@ -140,33 +143,21 @@ class Pod:
             elapsed. This is enforced by the `timeout` command on the pod. This will not
             terminate background processes started by cmd.
         """
-        restart_count_before = self._info.initial_restart_count
-        uid_before = self._info.uid
-        await self.check_for_pod_restart()
+        warned_restart = await self.check_for_pod_restart()
         executor = ExecuteOperation(self._info)
         result = await self._run_async(
             lambda: executor.exec(cmd, stdin, cwd, env, user, timeout)
         )
         if not result.success:
-            await self._recheck_for_restart_after_failed_exec(
-                restart_count_before, uid_before
-            )
+            if warned_restart is not None:
+                raise warned_restart
+            await self._recheck_for_restart_after_failed_exec()
         return result
 
-    async def _recheck_for_restart_after_failed_exec(
-        self,
-        restart_count_before: int,
-        uid_before: str,
-    ) -> None:
-        """Re-check for restart after a failed exec.
-
-        Uses the pre-exec snapshot as baseline so restarts detected-and-warned
-        by the pre-exec check are still visible here.
-        """
+    async def _recheck_for_restart_after_failed_exec(self) -> None:
+        """Re-check for restart after a failed exec to close the race window."""
         try:
-            await self._run_async(
-                lambda: self._recheck_for_restart_sync(restart_count_before, uid_before)
-            )
+            await self._run_async(self._recheck_for_restart_sync)
         except (PodReplacedError, ContainerRestartedError):
             raise
         except Exception:
@@ -175,18 +166,9 @@ class Pod:
                 exc_info=True,
             )
 
-    def _recheck_for_restart_sync(
-        self, restart_count_before: int, uid_before: str
-    ) -> None:
-        # Use the pre-exec snapshot so we can see restarts that the
-        # pre-exec warn-mode check already consumed.
-        snapshot = dataclasses.replace(
-            self._info,
-            initial_restart_count=restart_count_before,
-            uid=uid_before,
-        )
+    def _recheck_for_restart_sync(self) -> None:
         try:
-            check_for_pod_restart(snapshot)
+            check_for_pod_restart(self._info)
         except PodReplacedError as e:
             self._info = dataclasses.replace(
                 self._info,
