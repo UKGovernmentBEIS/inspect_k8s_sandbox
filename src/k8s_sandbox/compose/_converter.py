@@ -292,6 +292,11 @@ class _ServiceConverter:
                 f"must be available for pulling from a container registry. "
                 f"{self.context}"
             )
+        # Apply the per-service 'x-inspect_k8s_sandbox' extension after 'resources'
+        # has been built from mem_limit/cpus/deploy (so the merge target exists) but
+        # before the leftover-key guard (so it isn't flagged as unsupported).
+        if (extensions := src.pop("x-inspect_k8s_sandbox", None)) is not None:
+            self._apply_service_extensions(extensions, result)
         if src:
             raise ComposeConverterError(
                 f"Unsupported key(s) in 'service': {set(src)}. {self.context}"
@@ -473,6 +478,68 @@ class _ServiceConverter:
         if "limits" in resources and "requests" not in resources:
             # Copy to avoid references which can result in anchors and aliases in YAML.
             resources["requests"] = resources["limits"].copy()
+
+    def _apply_service_extensions(
+        self, extensions: Any, result: dict[str, Any]
+    ) -> None:
+        """Apply the per-service 'x-inspect_k8s_sandbox' extension.
+
+        This is an escape hatch for expressing Kubernetes resources that the Docker
+        Compose shortcuts (mem_limit/cpus/deploy.resources) cannot, most notably
+        request-only resources such as 'ephemeral-storage'. Currently only a
+        'resources' block is supported.
+        """
+        if not isinstance(extensions, dict):
+            raise ComposeConverterError(
+                f"Invalid 'x-inspect_k8s_sandbox' type: {type(extensions)}. Expected "
+                f"dict. {self.context}"
+            )
+        if (resources := extensions.pop("resources", None)) is not None:
+            self._merge_extension_resources(resources, result)
+        if extensions:
+            raise ComposeConverterError(
+                f"Unsupported key(s) in service 'x-inspect_k8s_sandbox': "
+                f"{set(extensions)}. Only 'resources' is supported. {self.context}"
+            )
+
+    def _merge_extension_resources(self, src: Any, result: dict[str, Any]) -> None:
+        """Deep-merge an extension 'resources' block into the built resources.
+
+        Keys are merged into the existing 'requests'/'limits' dicts the converter
+        built from mem_limit/cpus/deploy. Conflicts (a key already set by those
+        shortcuts) are rejected rather than silently overridden. Resource names and
+        values are passed through generically so any Kubernetes resource can be set.
+        """
+        if not isinstance(src, dict):
+            raise ComposeConverterError(
+                f"Invalid 'x-inspect_k8s_sandbox.resources' type: {type(src)}. "
+                f"Expected dict. {self.context}"
+            )
+        resources = result.setdefault("resources", {})
+        for section in ("requests", "limits"):
+            if (values := src.pop(section, None)) is None:
+                continue
+            if not isinstance(values, dict):
+                raise ComposeConverterError(
+                    f"Invalid 'x-inspect_k8s_sandbox.resources.{section}' type: "
+                    f"{type(values)}. Expected dict. {self.context}"
+                )
+            target = resources.setdefault(section, {})
+            for key, value in values.items():
+                if key in target:
+                    raise ComposeConverterError(
+                        f"Conflicting '{section}.{key}' in "
+                        f"'x-inspect_k8s_sandbox.resources': already set to "
+                        f"'{target[key]}' (likely via mem_limit/cpus/deploy). "
+                        f"{self.context}"
+                    )
+                target[key] = value
+        if src:
+            raise ComposeConverterError(
+                f"Unsupported key(s) in 'x-inspect_k8s_sandbox.resources': "
+                f"{set(src)}. Only 'requests' and 'limits' are supported. "
+                f"{self.context}"
+            )
 
     def _user_to_security_context(self, user: str | int) -> dict[str, Any]:
         def parse_int(value: str) -> int:
