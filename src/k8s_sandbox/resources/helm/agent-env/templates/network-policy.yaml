@@ -50,6 +50,16 @@ spec:
     {{- range .Values.allowDomains }}
       - matchPattern: "{{ . }}"
     {{- end }}
+      # Restrict egress to TLS/443 and require the ClientHello SNI to match an
+      # allowed domain. Wildcard SNI matching requires Cilium >= 1.18.
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+          serverNames:
+          {{- range .Values.allowDomains }}
+            - "{{ . }}"
+          {{- end }}
     {{- end }}
     {{- with .Values.allowEntities }}
     - toEntities:

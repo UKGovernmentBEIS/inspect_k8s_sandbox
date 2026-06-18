@@ -113,6 +113,11 @@ from a variety of sources:
       - "*.rubygems.org"
     ```
 
+    !!! warning
+
+        Egress is restricted to 443 and wildcard subdomains (e.g. `*.aisi.org`) require cilium >= 1.18 due to
+        [SNI limiting](https://docs.cilium.io/en/latest/security/policy/layer4/#limit-tls-server-name-indication-sni).
+
     !!! note
 
         An entry of e.g. `aisi.org` won't allow access to the subdomain of

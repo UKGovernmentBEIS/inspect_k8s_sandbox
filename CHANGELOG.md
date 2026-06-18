@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **BREAKING CHANGE**: Harden `allowDomain` so that SNI limiting is applied in cilium, which will break wildcard domains (e.g. `*.aisi.org.uk`). This also restricts all traffic to HTTPS. Wildcard domains will work with cilium >= 1.18.
 - Add a per-service `x-inspect_k8s_sandbox.resources` extension to the compose-to-helm converter for declaring Kubernetes resource `requests`/`limits` (e.g. request-only `ephemeral-storage`) that the `mem_limit`/`cpus`/`deploy.resources` shortcuts cannot express. Keys are merged into the resources derived from those shortcuts; conflicts are rejected rather than silently overridden.
 - Propagate the caller's context into the pod-operation worker thread to ensure that Inspect sandbox config overrides are honoured.
 - Raise typed `PodReplacedError` / `ContainerRestartedError` (instead of `RuntimeError`) when a pod operation detects the pod has been replaced or its container restarted, and refresh the cached pod identity so subsequent operations target the new pod instead of looping against a stale UID. `restarted_container_behavior="warn"` now also refreshes (previously left the cached UID stale).

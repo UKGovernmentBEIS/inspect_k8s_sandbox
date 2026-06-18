@@ -467,6 +467,32 @@ def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> 
     assert normal_spec.get("egress") != []
 
 
+def test_allow_domains_egress_requires_matching_sni(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-values.yaml"
+    )
+
+    cnps = _get_documents(documents, "CiliumNetworkPolicy")
+    egress_policy = next(
+        cnp for cnp in cnps if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )
+    fqdn_rules = [rule for rule in egress_policy["spec"]["egress"] if "toFQDNs" in rule]
+    assert len(fqdn_rules) == 1
+    fqdn_rule = fqdn_rules[0]
+
+    allow_domains = ["pypi.org", "*.debian.org"]
+    assert [entry["matchPattern"] for entry in fqdn_rule["toFQDNs"]] == allow_domains
+
+    # Egress to pinned IPs is constrained to TLS/443 with an SNI matching an allowed
+    # domain, so a shared-CDN IP cannot be reused to reach off-list origins.
+    to_ports = fqdn_rule["toPorts"]
+    assert len(to_ports) == 1
+    assert to_ports[0]["ports"] == [{"port": "443", "protocol": "TCP"}]
+    assert to_ports[0]["serverNames"] == allow_domains
+
+
 def _run_helm_template(
     chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
 ) -> list[dict[str, Any]]:
