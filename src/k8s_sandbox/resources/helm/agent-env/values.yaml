@@ -13,13 +13,15 @@ allowDomains: []
 # - "pypi.org"
 # - "files.pythonhosted.org"
 # --  Extra ports opened to the resolved IPs of allowDomains, as a list of
-# {port, protocol} (protocol defaults to ANY = TCP+UDP). These are pinned by IP
-# only with no SNI/Host check, so only open ports you trust on those IPs. 80 and
-# 443 may only be listed with protocol UDP (e.g. QUIC); TCP/ANY there is rejected
-# as it would disable the identity check above.
-# @default -- Empty list (only 80/443 are reachable)
+# {port, protocol, domain}. protocol defaults to ANY (TCP+UDP); domain (optional)
+# scopes the port to one allowDomains entry, otherwise it applies to all of them.
+# These are pinned by IP only with no SNI/Host check, so only open ports you trust
+# on those IPs. 80 and 443 may only be listed with protocol UDP (e.g. QUIC); TCP/ANY
+# there is rejected as it would disable the identity check above.
+# @default -- Empty list (only 80/443 are reachable on allowedDomains)
 allowDomainsPorts: []
 # - port: 22
+#   domain: github.com
 # - port: 443
 #   protocol: UDP
 # -- A list of CIDR ranges (e.g. 1.1.1.1/32) that pods within the agent environment are

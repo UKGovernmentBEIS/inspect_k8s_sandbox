@@ -542,6 +542,50 @@ def test_allow_domains_ports_rejects_identity_bypassing_ports(
         )
 
 
+def test_allow_domains_ports_scopes_to_a_single_domain(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-ports-scoped-values.yaml"
+    )
+
+    egress = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )["spec"]["egress"]
+    fqdn_rules = [r for r in egress if "toFQDNs" in r]
+
+    # The shared rule (the one carrying the SNI/Host identity checks) takes the
+    # unscoped port; the scoped port becomes its own single-domain rule.
+    shared = next(
+        r for r in fqdn_rules if any("serverNames" in tp for tp in r["toPorts"])
+    )
+    scoped = [r for r in fqdn_rules if r is not shared]
+
+    shared_extra = next(
+        tp for tp in shared["toPorts"] if "serverNames" not in tp and "rules" not in tp
+    )
+    assert [(p["port"], p["protocol"]) for p in shared_extra["ports"]] == [
+        ("8008", "ANY")
+    ]
+
+    assert len(scoped) == 1
+    assert [m["matchPattern"] for m in scoped[0]["toFQDNs"]] == ["github.com"]
+    assert scoped[0]["toPorts"] == [{"ports": [{"port": "22", "protocol": "ANY"}]}]
+
+
+def test_allow_domains_ports_rejects_unlisted_scope_domain(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    # A scoped domain that is not in allowDomains would never resolve, so the
+    # chart must refuse to render rather than emit an inert rule.
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(
+            chart_dir, test_resources_dir / "allow-domains-ports-bad-domain-values.yaml"
+        )
+
+
 def _run_helm_template(
     chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
 ) -> list[dict[str, Any]]:

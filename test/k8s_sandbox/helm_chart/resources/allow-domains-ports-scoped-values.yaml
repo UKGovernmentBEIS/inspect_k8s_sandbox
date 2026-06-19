@@ -1,0 +1,10 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+allowDomains:
+  - "pypi.org"
+  - "github.com"
+allowDomainsPorts:
+  - port: 8008
+  - port: 22
+    domain: github.com

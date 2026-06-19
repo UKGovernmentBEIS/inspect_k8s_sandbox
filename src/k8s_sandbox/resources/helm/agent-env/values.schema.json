@@ -21,6 +21,9 @@
           },
           "protocol": {
             "type": "string"
+          },
+          "domain": {
+            "type": "string"
           }
         },
         "required": [

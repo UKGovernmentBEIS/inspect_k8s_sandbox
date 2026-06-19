@@ -98,7 +98,7 @@ from a variety of sources:
       default:
         image: ubuntu:24.04
         command: ["tail", "-f", "/dev/null"]
-    allowDomains:
+    allowDomains: # TCP on ports 80/443 allowed on all domains
       - "pypi.org"
       - "files.pythonhosted.org"
       - "bitbucket.org"
@@ -111,11 +111,16 @@ from a variety of sources:
       - "security.ubuntu.com"
       - "mirror.vinehost.net"
       - "*.rubygems.org"
+    allowDomainsPorts:
+      # Optionally allow specific ports, example to allow ssh cloning from github.com
+      - port: 22
+        protocol: TCP
+        domain: github.com # NOTE: must be in allowDomains list
     ```
 
     !!! warning
 
-        Egress is restricted to 443 and wildcard subdomains (e.g. `*.aisi.org`) require cilium >= 1.18 due to
+        By default, egress is restricted to 80/443 and wildcard subdomains (e.g. `*.aisi.org`) require cilium >= 1.18 due to
         [SNI limiting](https://docs.cilium.io/en/latest/security/policy/layer4/#limit-tls-server-name-indication-sni).
 
     !!! note
