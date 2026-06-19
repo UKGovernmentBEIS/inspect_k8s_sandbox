@@ -11,6 +11,23 @@
         "type": "string"
       }
     },
+    "allowDomainsPorts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "integer"
+          },
+          "protocol": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "port"
+        ]
+      }
+    },
     "allowEntities": {
       "type": "array",
       "items": {

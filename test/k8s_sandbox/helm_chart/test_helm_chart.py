@@ -494,10 +494,52 @@ def test_allow_domains_egress_enforces_identity_on_pinned_ips(
     assert by_port["443"]["ports"] == [{"port": "443", "protocol": "TCP"}]
     assert by_port["443"]["serverNames"] == allow_domains
 
-    # The glob is translated to an anchored regex for the Host header.
+    # The glob is translated to a case-insensitive, port-tolerant anchored regex
+    # for the Host header.
     assert by_port["80"]["ports"] == [{"port": "80", "protocol": "TCP"}]
     hosts = [rule["host"] for rule in by_port["80"]["rules"]["http"]]
-    assert hosts == ["^pypi[.]org$", "^[^.]+[.]debian[.]org$"]
+    assert hosts == [
+        "(?i)^pypi[.]org(:[0-9]+)?$",
+        "(?i)^[^.]+[.]debian[.]org(:[0-9]+)?$",
+    ]
+
+
+def test_allow_domains_ports_opens_extra_ports_ip_pinned(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-ports-values.yaml"
+    )
+
+    egress_policy = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )
+    fqdn_rule = next(r for r in egress_policy["spec"]["egress"] if "toFQDNs" in r)
+
+    # The extra ports are the toPorts entry with neither serverNames nor http
+    # rules (IP-pinned only). protocol defaults to ANY; 443 may be added as UDP.
+    extra = next(
+        tp
+        for tp in fqdn_rule["toPorts"]
+        if "serverNames" not in tp and "rules" not in tp
+    )
+    assert [(p["port"], p["protocol"]) for p in extra["ports"]] == [
+        ("22", "ANY"),
+        ("443", "UDP"),
+    ]
+
+
+def test_allow_domains_ports_rejects_identity_bypassing_ports(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    # Listing 80/443 with anything but UDP would disable the SNI/Host check, so
+    # the chart must refuse to render.
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(
+            chart_dir, test_resources_dir / "allow-domains-ports-invalid-values.yaml"
+        )
 
 
 def _run_helm_template(

@@ -4,15 +4,24 @@
 global:
   nameOverride: ""
   fullnameOverride: ""
-# --  A list of fully qualified domain names that pods within the agent
-# environment are allowed to access. Egress is allowed only on ports 80/443 and
-# the request identity must match an entry: the TLS SNI on 443 and the HTTP Host
-# header on 80. This stops an allowed domain that shares a CDN IP from being used
-# to reach off-list origins. Wildcard SNI matching (443) requires Cilium >= 1.18.
+# --  Domains the agent environment may reach. Egress is restricted to ports
+# 80/443 and the request identity must match an entry (TLS SNI on 443, HTTP Host
+# on 80). Use allowDomainsPorts to open other ports. Wildcard entries require
+# Cilium >= 1.18.
 # @default -- Empty list (no internet access)
 allowDomains: []
 # - "pypi.org"
 # - "files.pythonhosted.org"
+# --  Extra ports opened to the resolved IPs of allowDomains, as a list of
+# {port, protocol} (protocol defaults to ANY = TCP+UDP). These are pinned by IP
+# only with no SNI/Host check, so only open ports you trust on those IPs. 80 and
+# 443 may only be listed with protocol UDP (e.g. QUIC); TCP/ANY there is rejected
+# as it would disable the identity check above.
+# @default -- Empty list (only 80/443 are reachable)
+allowDomainsPorts: []
+# - port: 22
+# - port: 443
+#   protocol: UDP
 # -- A list of CIDR ranges (e.g. 1.1.1.1/32) that pods within the agent environment are
 # allowed to access.
 # @default -- Empty list (no additional CIDR ranges compared to default policies)

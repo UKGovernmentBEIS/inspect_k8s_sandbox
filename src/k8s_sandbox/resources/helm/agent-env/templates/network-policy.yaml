@@ -50,14 +50,10 @@ spec:
     {{- range .Values.allowDomains }}
       - matchPattern: "{{ . }}"
     {{- end }}
-      # allowDomains only pins resolved IPs; allowed domains behind shared CDN
-      # edges (Cloudflare, Fastly) resolve to IPs that also front unrelated
-      # origins, so the request identity must match an allowed domain too:
-      # the TLS SNI on 443, and the HTTP Host header on 80 (keeping apt-over-HTTP
-      # working). Otherwise a client reaches an off-list origin on a pinned IP via
-      # a forged SNI/Host. The Host value is an anchored regex translated from the
-      # glob ([.] is a literal dot, [^.]+ is one wildcard label). Wildcard SNI
-      # matching (443) requires Cilium >= 1.18.
+      # Enforce the request identity on the pinned IPs (TLS SNI on 443, HTTP Host
+      # on 80) so a pinned IP cannot be reused to reach a different host. Host is a
+      # case-insensitive anchored regex built from the glob. Wildcard SNI (443)
+      # requires Cilium >= 1.18.
       toPorts:
         - ports:
             - port: "443"
@@ -72,8 +68,20 @@ spec:
           rules:
             http:
             {{- range .Values.allowDomains }}
-              - host: "^{{ . | replace "." "[.]" | replace "*" "[^.]+" }}$"
+              - host: "(?i)^{{ . | replace "." "[.]" | replace "*" "[^.]+" }}(:[0-9]+)?$"
             {{- end }}
+        {{- if .Values.allowDomainsPorts }}
+        # Extra ports to the same pinned IPs. IP-pinned only (no identity check).
+        - ports:
+          {{- range .Values.allowDomainsPorts }}
+          {{- $proto := .protocol | default "ANY" | upper }}
+          {{- if and (or (eq (toString .port) "80") (eq (toString .port) "443")) (ne $proto "UDP") }}
+          {{- fail (printf "allowDomainsPorts: port %v protocol %s is not allowed -- TCP/ANY on 80/443 disables the SNI/Host identity check and re-opens the shared-CDN-IP bypass. Use protocol UDP on these ports (e.g. for QUIC/HTTP3), or choose a different port." .port $proto) }}
+          {{- end }}
+            - port: "{{ .port }}"
+              protocol: {{ $proto }}
+          {{- end }}
+        {{- end }}
     {{- end }}
     {{- with .Values.allowEntities }}
     - toEntities:
