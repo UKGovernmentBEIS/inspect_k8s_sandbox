@@ -467,7 +467,7 @@ def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> 
     assert normal_spec.get("egress") != []
 
 
-def test_allow_domains_egress_requires_matching_sni(
+def test_allow_domains_egress_enforces_identity_on_pinned_ips(
     chart_dir: Path, test_resources_dir: Path
 ) -> None:
     documents = _run_helm_template(
@@ -485,12 +485,19 @@ def test_allow_domains_egress_requires_matching_sni(
     allow_domains = ["pypi.org", "*.debian.org"]
     assert [entry["matchPattern"] for entry in fqdn_rule["toFQDNs"]] == allow_domains
 
-    # Egress to pinned IPs is constrained to TLS/443 with an SNI matching an allowed
-    # domain, so a shared-CDN IP cannot be reused to reach off-list origins.
-    to_ports = fqdn_rule["toPorts"]
-    assert len(to_ports) == 1
-    assert to_ports[0]["ports"] == [{"port": "443", "protocol": "TCP"}]
-    assert to_ports[0]["serverNames"] == allow_domains
+    # Egress to pinned IPs is constrained to 80/443, and the request identity must
+    # match an allowed domain, so a shared-CDN IP cannot be reused to reach off-list
+    # origins: the TLS SNI on 443, and the HTTP Host header on 80.
+    by_port = {tp["ports"][0]["port"]: tp for tp in fqdn_rule["toPorts"]}
+    assert set(by_port) == {"443", "80"}
+
+    assert by_port["443"]["ports"] == [{"port": "443", "protocol": "TCP"}]
+    assert by_port["443"]["serverNames"] == allow_domains
+
+    # The glob is translated to an anchored regex for the Host header.
+    assert by_port["80"]["ports"] == [{"port": "80", "protocol": "TCP"}]
+    hosts = [rule["host"] for rule in by_port["80"]["rules"]["http"]]
+    assert hosts == ["^pypi[.]org$", "^[^.]+[.]debian[.]org$"]
 
 
 def _run_helm_template(

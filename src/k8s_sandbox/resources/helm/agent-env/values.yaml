@@ -5,8 +5,10 @@ global:
   nameOverride: ""
   fullnameOverride: ""
 # --  A list of fully qualified domain names that pods within the agent
-# environment are allowed to access. Egress to these is restricted to TLS/443
-# and wildcard matching requires Cilium >= 1.18.
+# environment are allowed to access. Egress is allowed only on ports 80/443 and
+# the request identity must match an entry: the TLS SNI on 443 and the HTTP Host
+# header on 80. This stops an allowed domain that shares a CDN IP from being used
+# to reach off-list origins. Wildcard SNI matching (443) requires Cilium >= 1.18.
 # @default -- Empty list (no internet access)
 allowDomains: []
 # - "pypi.org"

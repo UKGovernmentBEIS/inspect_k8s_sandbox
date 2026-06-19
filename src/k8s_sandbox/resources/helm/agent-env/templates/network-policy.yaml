@@ -50,8 +50,14 @@ spec:
     {{- range .Values.allowDomains }}
       - matchPattern: "{{ . }}"
     {{- end }}
-      # Restrict egress to TLS/443 and require the ClientHello SNI to match an
-      # allowed domain. Wildcard SNI matching requires Cilium >= 1.18.
+      # allowDomains only pins resolved IPs; allowed domains behind shared CDN
+      # edges (Cloudflare, Fastly) resolve to IPs that also front unrelated
+      # origins, so the request identity must match an allowed domain too:
+      # the TLS SNI on 443, and the HTTP Host header on 80 (keeping apt-over-HTTP
+      # working). Otherwise a client reaches an off-list origin on a pinned IP via
+      # a forged SNI/Host. The Host value is an anchored regex translated from the
+      # glob ([.] is a literal dot, [^.]+ is one wildcard label). Wildcard SNI
+      # matching (443) requires Cilium >= 1.18.
       toPorts:
         - ports:
             - port: "443"
@@ -60,6 +66,14 @@ spec:
           {{- range .Values.allowDomains }}
             - "{{ . }}"
           {{- end }}
+        - ports:
+            - port: "80"
+              protocol: TCP
+          rules:
+            http:
+            {{- range .Values.allowDomains }}
+              - host: "^{{ . | replace "." "[.]" | replace "*" "[^.]+" }}$"
+            {{- end }}
     {{- end }}
     {{- with .Values.allowEntities }}
     - toEntities:
