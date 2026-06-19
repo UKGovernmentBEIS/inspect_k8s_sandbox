@@ -60,6 +60,10 @@ spec:
     {{- range .Values.allowDomains }}
       - matchPattern: "{{ . }}"
     {{- end }}
+      {{- if has "*" .Values.allowDomains }}
+      # allowDomains includes "*" (allow all): identity enforcement is moot and
+      # serverNames has no allow-all form, so all resolved IPs are permitted.
+      {{- else }}
       # Enforce the request identity on the pinned IPs (TLS SNI on 443, HTTP Host
       # on 80) so a pinned IP cannot be reused to reach a different host. Host is a
       # case-insensitive anchored regex built from the glob. Wildcard SNI (443)
@@ -94,6 +98,7 @@ spec:
           {{- end }}
           {{- end }}
         {{- end }}
+      {{- end }}
     {{- /* Extra ports with a domain are scoped to that domain only, via their own rule. */}}
     {{- range $p := .Values.allowDomainsPorts }}
     {{- if $p.domain }}

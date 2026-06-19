@@ -586,6 +586,26 @@ def test_allow_domains_ports_rejects_unlisted_scope_domain(
         )
 
 
+def test_allow_domains_wildcard_all_skips_identity_enforcement(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-wildcard-all-values.yaml"
+    )
+
+    egress = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )["spec"]["egress"]
+    fqdn_rule = next(r for r in egress if "toFQDNs" in r)
+
+    # "*" (allow all) has no valid serverNames form, so no identity-enforcing
+    # toPorts is emitted -- egress to all resolved IPs is permitted on all ports.
+    assert [m["matchPattern"] for m in fqdn_rule["toFQDNs"]] == ["*"]
+    assert "toPorts" not in fqdn_rule
+
+
 def _run_helm_template(
     chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
 ) -> list[dict[str, Any]]:
