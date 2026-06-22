@@ -360,7 +360,7 @@ async def test_exec_non_utf8_output_is_replaced(sandbox: K8sSandboxEnvironment) 
     result = await sandbox.exec(["bash", "-c", r"printf 'before \xbb after'"])
 
     assert result.success
-    assert result.stdout == "before � after"
+    assert result.stdout == "before \ufffd after"
 
 
 async def test_exec_background_returns(sandbox: K8sSandboxEnvironment) -> None:

@@ -70,7 +70,7 @@ def test_truncates_unicode_without_raising_decode_error():
     actual = str(sut)
 
     # The incomplete trailing character becomes a single replacement character.
-    assert actual == "abcd�"
+    assert actual == "abcd\ufffd"
     assert sut.truncated
 
 
@@ -79,7 +79,7 @@ def test_replaces_interior_invalid_utf8(invalid_utf8: bytes):
 
     sut.append(b"abcde" + invalid_utf8 + b"fghij")
 
-    assert str(sut) == "abcde�fghij"
+    assert str(sut) == "abcde\ufffdfghij"
     assert not sut.truncated
 
 
@@ -88,7 +88,7 @@ def test_replaces_invalid_utf8_at_end_if_not_truncated(invalid_utf8: bytes):
 
     sut.append(b"abcde" + invalid_utf8)
 
-    assert str(sut) == "abcde�"
+    assert str(sut) == "abcde\ufffd"
     assert not sut.truncated
 
 

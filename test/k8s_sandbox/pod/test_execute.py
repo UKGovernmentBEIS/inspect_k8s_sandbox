@@ -174,7 +174,7 @@ class TestNonUtf8Output:
         result = executor._handle_shell_output(ws, user=None, timeout=None)
 
         assert result.returncode == 0
-        assert result.stdout == "before � after"
+        assert result.stdout == "before \ufffd after"
 
     def test_binary_byte_on_stderr(self) -> None:
         ws = _make_ws_client(
@@ -186,7 +186,7 @@ class TestNonUtf8Output:
         result = executor._handle_shell_output(ws, user=None, timeout=None)
 
         assert result.returncode == 0
-        assert result.stderr == "warn � done\n"
+        assert result.stderr == "warn \ufffd done\n"
 
     def test_binary_byte_in_earlier_frame_than_sentinel(self) -> None:
         ws = _make_ws_client(
@@ -197,7 +197,7 @@ class TestNonUtf8Output:
         result = executor._handle_shell_output(ws, user=None, timeout=None)
 
         assert result.returncode == 0
-        assert result.stdout == "raw � bytesmore"
+        assert result.stdout == "raw \ufffd bytesmore"
 
 
 class TestRunuserErrors:
