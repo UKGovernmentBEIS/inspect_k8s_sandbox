@@ -1118,6 +1118,91 @@ x-inspect_k8s_sandbox:
     assert "Unsupported key(s) in 'x-inspect_k8s_sandbox'" in str(exc_info.value)
 
 
+### x-k8s extension alias
+
+
+def test_converts_allow_domains_via_x_k8s_alias(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # 'x-k8s' is a shorthand alias for the verbose 'x-inspect_k8s_sandbox' key.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-k8s:
+  allow_domains:
+    - example.com
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["allowDomains"] == ["example.com"]
+
+
+def test_converts_service_extension_via_x_k8s_alias(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-k8s:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"] == {
+        "requests": {"ephemeral-storage": "80Gi"},
+    }
+
+
+def test_rejects_both_extension_keys_at_top_level(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-inspect_k8s_sandbox:
+  allow_domains:
+    - example.com
+x-k8s:
+  allow_entities:
+    - world
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Specify only one of" in str(exc_info.value)
+
+
+def test_rejects_both_extension_keys_on_service(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+    x-k8s:
+      resources:
+        limits:
+          ephemeral-storage: 80Gi
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Specify only one of" in str(exc_info.value)
+
+
 ### Network elements
 
 
