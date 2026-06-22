@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Fix `exec()` raising `UnicodeDecodeError` when a command writes non-UTF-8 bytes to stdout/stderr. Invalid bytes are now replaced with the unicode replacement character (matching Inspect's other sandboxes) instead of aborting the call.
+- Support replacement rather than throwing `UnicodeDecodeError` when a command writes non-UTF-8 bytes to stdout/stderr.
 - Propagate the caller's context into the pod-operation worker thread to ensure that Inspect sandbox config overrides are honoured.
 - Raise typed `PodReplacedError` / `ContainerRestartedError` (instead of `RuntimeError`) when a pod operation detects the pod has been replaced or its container restarted, and refresh the cached pod identity so subsequent operations target the new pod instead of looping against a stale UID. `restarted_container_behavior="warn"` now also refreshes (previously left the cached UID stale).
 - Fix `exec(input=...)` failing with "Connection reset by peer" for large inputs (e.g. injecting a ~28 MiB binary): stdin is now written to the pod in ≤1 MiB WebSocket frames instead of a single oversized frame. `write_file` shares the same chunking helper.

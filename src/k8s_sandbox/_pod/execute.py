@@ -193,16 +193,15 @@ class ExecuteOperation(PodOperation):
             )
 
     def _filter_sentinel_and_returncode(self, frame: bytes) -> tuple[bytes, int | None]:
-        # The sentinel is ASCII, so decode-with-replace detects it without raising on
-        # binary subprocess output. Only raw bytes pass through, so the replacement
-        # chars can't reach the caller. Assumption: sentinel isn't split across frames.
-        probe = frame.decode("utf-8", errors="replace")
-        match = COMPLETED_SENTINEL_PATTERN.search(probe)
-        if match is None:
+        # latin-1 maps each byte 1:1 to a codepoint, so it decodes arbitrary binary
+        # without raising and re-encodes losslessly. We use it only to locate and strip
+        # the ASCII sentinel; the surrounding bytes round-trip unchanged.
+        # Assumption: the sentinel is not split across frames.
+        decoded = frame.decode("latin-1")
+        split_frame = re.split(COMPLETED_SENTINEL_PATTERN, decoded)
+        if len(split_frame) == 1:
             return frame, None
-        # The matched sentinel is ASCII, so its bytes appear verbatim in the raw frame.
-        sentinel_bytes = match.group(0).encode("ascii")
-        return frame.replace(sentinel_bytes, b"", 1), int(match.group(1))
+        return (split_frame[0] + split_frame[2]).encode("latin-1"), int(split_frame[1])
 
     def _verify_output_limit(
         self, stdout: LimitedBuffer, stderr: LimitedBuffer

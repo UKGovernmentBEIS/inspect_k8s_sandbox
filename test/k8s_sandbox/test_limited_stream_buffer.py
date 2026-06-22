@@ -69,9 +69,8 @@ def test_truncates_unicode_without_raising_decode_error():
     sut.append("abcd😀".encode("utf-8"))
     actual = str(sut)
 
-    # The 4-byte character is simply discarded.
-    assert actual == "abcd"
-    assert _count_bytes(actual) == 4
+    # The incomplete trailing character becomes a single replacement character.
+    assert actual == "abcd�"
     assert sut.truncated
 
 

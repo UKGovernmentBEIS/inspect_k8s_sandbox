@@ -163,7 +163,7 @@ class TestBrokenPipeWithoutSentinel:
 
 
 class TestNonUtf8Output:
-    """A command emitting non-UTF-8 bytes must not abort exec() (issue #206)."""
+    """A command emitting non-UTF-8 bytes must not abort exec()."""
 
     def test_binary_byte_with_sentinel_in_same_frame(self) -> None:
         ws = _make_ws_client(

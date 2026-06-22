@@ -357,8 +357,6 @@ async def test_exec_timeout_terminates_foreground_commands(
 
 
 async def test_exec_non_utf8_output_is_replaced(sandbox: K8sSandboxEnvironment) -> None:
-    # A stray non-utf-8 byte on stdout must not abort exec() (issue #206); the
-    # invalid byte is replaced rather than raising a UnicodeDecodeError.
     result = await sandbox.exec(["bash", "-c", r"printf 'before \xbb after'"])
 
     assert result.success

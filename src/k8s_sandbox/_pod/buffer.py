@@ -4,9 +4,9 @@ class LimitedBuffer:
 
     Once the buffer is full, `truncated` is set and further appends are ignored.
 
-    The buffer can be converted to a string (utf-8). Invalid utf-8 bytes are replaced
-    with the unicode replacement character; an incomplete trailing character left by
-    truncation is dropped.
+    The buffer can be converted to a string (utf-8). Invalid utf-8 bytes — including an
+    incomplete trailing character left by truncation — are replaced with the unicode
+    replacement character.
     """
 
     def __init__(self, limit: int) -> None:
@@ -23,11 +23,4 @@ class LimitedBuffer:
         self._buffer.extend(data[:remaining_space])
 
     def __str__(self) -> str:
-        try:
-            return self._buffer.decode("utf-8", errors="strict")
-        except UnicodeDecodeError as e:
-            # Drop an incomplete character left at the very end by truncation; replace
-            # any other invalid bytes (e.g. binary subprocess output) rather than raise.
-            if self.truncated and e.end == len(self._buffer):
-                return self._buffer[: e.start].decode("utf-8", errors="strict")
-            return self._buffer.decode("utf-8", errors="replace")
+        return self._buffer.decode("utf-8", errors="replace")
