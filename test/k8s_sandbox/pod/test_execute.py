@@ -162,6 +162,44 @@ class TestBrokenPipeWithoutSentinel:
             executor._handle_shell_output(ws, user=None, timeout=None)
 
 
+class TestNonUtf8Output:
+    """A command emitting non-UTF-8 bytes must not abort exec() (issue #206)."""
+
+    def test_binary_byte_with_sentinel_in_same_frame(self) -> None:
+        ws = _make_ws_client(
+            stdout_frames=[b"before \xbb after<completed-sentinel-value-0>"],
+        )
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user=None, timeout=None)
+
+        assert result.returncode == 0
+        assert result.stdout == "before � after"
+
+    def test_binary_byte_on_stderr(self) -> None:
+        ws = _make_ws_client(
+            stdout_frames=[b"<completed-sentinel-value-0>"],
+            stderr_frames=[b"warn \xbb done\n"],
+        )
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user=None, timeout=None)
+
+        assert result.returncode == 0
+        assert result.stderr == "warn � done\n"
+
+    def test_binary_byte_in_earlier_frame_than_sentinel(self) -> None:
+        ws = _make_ws_client(
+            stdout_frames=[b"raw \xbb bytes", b"more<completed-sentinel-value-0>"],
+        )
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user=None, timeout=None)
+
+        assert result.returncode == 0
+        assert result.stdout == "raw � bytesmore"
+
+
 class TestRunuserErrors:
     def test_user_command_runuser_error_with_sentinel_returns_result(self) -> None:
         ws = _make_ws_client(

@@ -75,22 +75,22 @@ def test_truncates_unicode_without_raising_decode_error():
     assert sut.truncated
 
 
-def test_raises_unicode_decode_error(invalid_utf8: bytes):
+def test_replaces_interior_invalid_utf8(invalid_utf8: bytes):
     sut = LimitedBuffer(1024)
 
     sut.append(b"abcde" + invalid_utf8 + b"fghij")
 
-    with pytest.raises(UnicodeDecodeError):
-        str(sut)
+    assert str(sut) == "abcde�fghij"
+    assert not sut.truncated
 
 
-def test_raises_unicode_decode_error_at_end_if_not_truncated(invalid_utf8: bytes):
+def test_replaces_invalid_utf8_at_end_if_not_truncated(invalid_utf8: bytes):
     sut = LimitedBuffer(1024)
 
     sut.append(b"abcde" + invalid_utf8)
 
-    with pytest.raises(UnicodeDecodeError):
-        str(sut)
+    assert str(sut) == "abcde�"
+    assert not sut.truncated
 
 
 def _count_bytes(string: str) -> int:

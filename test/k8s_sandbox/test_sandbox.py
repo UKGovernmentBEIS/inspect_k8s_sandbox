@@ -356,9 +356,13 @@ async def test_exec_timeout_terminates_foreground_commands(
     assert file_exists_result.success
 
 
-async def test_exec_unicode_decode_error(sandbox: K8sSandboxEnvironment) -> None:
-    with pytest.raises(UnicodeDecodeError):
-        await sandbox.exec(["head", "-c", "1024", "/bin/ls"])
+async def test_exec_non_utf8_output_is_replaced(sandbox: K8sSandboxEnvironment) -> None:
+    # A stray non-utf-8 byte on stdout must not abort exec() (issue #206); the
+    # invalid byte is replaced rather than raising a UnicodeDecodeError.
+    result = await sandbox.exec(["bash", "-c", r"printf 'before \xbb after'"])
+
+    assert result.success
+    assert result.stdout == "before � after"
 
 
 async def test_exec_background_returns(sandbox: K8sSandboxEnvironment) -> None:
