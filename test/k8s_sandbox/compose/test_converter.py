@@ -1,10 +1,13 @@
+import json
 import logging
 from pathlib import Path
 from typing import Any, Callable
 
+import jsonschema
 import pytest
 import yaml
 
+import k8s_sandbox
 from k8s_sandbox.compose._converter import (
     ComposeConverterError,
     convert_compose_to_helm_values,
@@ -584,6 +587,168 @@ services:
     assert "Unsupported key(s) in 'resources'" in str(exc_info.value)
 
 
+### Service-level x-inspect_k8s_sandbox extension
+
+
+def test_service_extension_request_only_ephemeral_storage(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # With no mem/cpu shortcuts there is no limits block; request-only is preserved.
+    assert result["services"]["my-service"]["resources"] == {
+        "requests": {"ephemeral-storage": "80Gi"},
+    }
+
+
+def test_service_extension_merges_into_existing_resources(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    mem_limit: 32g
+    cpus: 4.0
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # ephemeral-storage is merged into the Guaranteed-QoS requests block; memory/cpu
+    # remain in both requests and limits; ephemeral-storage is NOT added to limits.
+    assert result["services"]["my-service"]["resources"] == {
+        "limits": {"memory": "32Gi", "cpu": 4.0},
+        "requests": {"memory": "32Gi", "cpu": 4.0, "ephemeral-storage": "80Gi"},
+    }
+
+
+def test_service_extension_accepts_arbitrary_resource_names(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # The extension is a generic Kubernetes-resource escape hatch, not hardcoded to
+    # ephemeral-storage.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      resources:
+        limits:
+          hugepages-2Mi: 128Mi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"] == {
+        "limits": {"hugepages-2Mi": "128Mi"},
+    }
+
+
+def test_rejects_unsupported_service_extension_key(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      foo: 1
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported key(s) in service 'x-inspect_k8s_sandbox'" in str(
+        exc_info.value
+    )
+
+
+def test_rejects_unsupported_service_extension_resources_key(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # Only 'requests' and 'limits' are supported (Docker's 'reservations' is not).
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      resources:
+        reservations:
+          ephemeral-storage: 80Gi
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported key(s) in 'x-inspect_k8s_sandbox.resources'" in str(
+        exc_info.value
+    )
+
+
+def test_rejects_service_extension_resource_conflict(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # mem_limit populates requests.memory, so the extension may not also set it.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    mem_limit: 32g
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          memory: 16Gi
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Conflicting 'requests.memory'" in str(exc_info.value)
+
+
+def test_service_extension_output_validates_against_chart_schema(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: my-image
+    mem_limit: 32g
+    cpus: 4.0
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    schema_path = (
+        Path(k8s_sandbox.__file__).parent
+        / "resources"
+        / "helm"
+        / "agent-env"
+        / "values.schema.json"
+    )
+    schema = json.loads(schema_path.read_text())
+    # 'global' is injected by inspect at install time; add it to satisfy the schema.
+    jsonschema.validate({**result, "global": {}}, schema)
+
+
 def test_converts_user_to_security_context(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
@@ -951,6 +1116,91 @@ x-inspect_k8s_sandbox:
         convert_compose_to_helm_values(compose_path)
 
     assert "Unsupported key(s) in 'x-inspect_k8s_sandbox'" in str(exc_info.value)
+
+
+### x-k8s extension alias
+
+
+def test_converts_allow_domains_via_x_k8s_alias(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # 'x-k8s' is a shorthand alias for the verbose 'x-inspect_k8s_sandbox' key.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-k8s:
+  allow_domains:
+    - example.com
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["allowDomains"] == ["example.com"]
+
+
+def test_converts_service_extension_via_x_k8s_alias(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-k8s:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"] == {
+        "requests": {"ephemeral-storage": "80Gi"},
+    }
+
+
+def test_rejects_both_extension_keys_at_top_level(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-inspect_k8s_sandbox:
+  allow_domains:
+    - example.com
+x-k8s:
+  allow_entities:
+    - world
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Specify only one of" in str(exc_info.value)
+
+
+def test_rejects_both_extension_keys_on_service(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+    x-k8s:
+      resources:
+        limits:
+          ephemeral-storage: 80Gi
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Specify only one of" in str(exc_info.value)
 
 
 ### Network elements
