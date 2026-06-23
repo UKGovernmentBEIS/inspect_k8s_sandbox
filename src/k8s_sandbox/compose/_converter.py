@@ -14,6 +14,11 @@ COMPOSE_SCHEMA_PATH = (
     Path(__file__).parent.parent / "resources" / "compose" / "compose-spec.json"
 )
 
+# The canonical inspect_k8s_sandbox extension key is verbose; 'x-k8s' is a supported
+# shorthand alias. Both are accepted wherever the extension is read (top-level and
+# per-service). Listed canonical-first only for stable error messages.
+_EXTENSION_KEYS = ("x-inspect_k8s_sandbox", "x-k8s")
+
 
 class ComposeConverterError(Exception):
     """Raised when an error occurs converting a Docker Compose file to Helm values."""
@@ -52,9 +57,9 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
         result["volumes"] = _convert_volumes(volumes, compose_file)
     if networks := compose.pop("networks", None):
         result["networks"] = _convert_networks(networks, compose_file)
-    # The 'x-inspect_k8s_sandbox' key is used to add additional configuration to
-    # Docker Compose files for use in Helm values.
-    if extensions := compose.pop("x-inspect_k8s_sandbox", None):
+    # The 'x-inspect_k8s_sandbox' key (or its 'x-k8s' shorthand) is used to add
+    # additional configuration to Docker Compose files for use in Helm values.
+    if extensions := _pop_extension(compose, f"Compose file: '{compose_file}'."):
         result.update(_convert_extensions(extensions, compose_file))
     # Ignore the version key.
     compose.pop("version", None)
@@ -154,6 +159,22 @@ def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
             )
         result[network_name] = {}
     return result
+
+
+def _pop_extension(src: dict[str, Any], context: str) -> Any:
+    """Pop the inspect_k8s_sandbox extension value from src.
+
+    Both the canonical 'x-inspect_k8s_sandbox' key and the shorter 'x-k8s' alias are
+    accepted. Returns the extension value, or None if neither key is present. Raises
+    if both keys are present, since which one would win is ambiguous.
+    """
+    present = [key for key in _EXTENSION_KEYS if key in src]
+    if len(present) > 1:
+        raise ComposeConverterError(
+            f"Specify only one of {present}; 'x-k8s' is an alias for "
+            f"'x-inspect_k8s_sandbox'. {context}"
+        )
+    return src.pop(present[0]) if present else None
 
 
 def _convert_extensions(
@@ -292,6 +313,13 @@ class _ServiceConverter:
                 f"must be available for pulling from a container registry. "
                 f"{self.context}"
             )
+        # Apply the per-service extension ('x-inspect_k8s_sandbox' or its 'x-k8s'
+        # shorthand) after 'resources' has been built from mem_limit/cpus/deploy (so
+        # the merge target exists) but before the leftover-key guard (so it isn't
+        # flagged as unsupported).
+        extensions = _pop_extension(src, self.context)
+        if extensions is not None:
+            self._apply_service_extensions(extensions, result)
         if src:
             raise ComposeConverterError(
                 f"Unsupported key(s) in 'service': {set(src)}. {self.context}"
@@ -473,6 +501,68 @@ class _ServiceConverter:
         if "limits" in resources and "requests" not in resources:
             # Copy to avoid references which can result in anchors and aliases in YAML.
             resources["requests"] = resources["limits"].copy()
+
+    def _apply_service_extensions(
+        self, extensions: Any, result: dict[str, Any]
+    ) -> None:
+        """Apply the per-service 'x-inspect_k8s_sandbox' extension.
+
+        This is an escape hatch for expressing Kubernetes resources that the Docker
+        Compose shortcuts (mem_limit/cpus/deploy.resources) cannot, most notably
+        request-only resources such as 'ephemeral-storage'. Currently only a
+        'resources' block is supported.
+        """
+        if not isinstance(extensions, dict):
+            raise ComposeConverterError(
+                f"Invalid 'x-inspect_k8s_sandbox' type: {type(extensions)}. Expected "
+                f"dict. {self.context}"
+            )
+        if (resources := extensions.pop("resources", None)) is not None:
+            self._merge_extension_resources(resources, result)
+        if extensions:
+            raise ComposeConverterError(
+                f"Unsupported key(s) in service 'x-inspect_k8s_sandbox': "
+                f"{set(extensions)}. Only 'resources' is supported. {self.context}"
+            )
+
+    def _merge_extension_resources(self, src: Any, result: dict[str, Any]) -> None:
+        """Deep-merge an extension 'resources' block into the built resources.
+
+        Keys are merged into the existing 'requests'/'limits' dicts the converter
+        built from mem_limit/cpus/deploy. Conflicts (a key already set by those
+        shortcuts) are rejected rather than silently overridden. Resource names and
+        values are passed through generically so any Kubernetes resource can be set.
+        """
+        if not isinstance(src, dict):
+            raise ComposeConverterError(
+                f"Invalid 'x-inspect_k8s_sandbox.resources' type: {type(src)}. "
+                f"Expected dict. {self.context}"
+            )
+        resources = result.setdefault("resources", {})
+        for section in ("requests", "limits"):
+            if (values := src.pop(section, None)) is None:
+                continue
+            if not isinstance(values, dict):
+                raise ComposeConverterError(
+                    f"Invalid 'x-inspect_k8s_sandbox.resources.{section}' type: "
+                    f"{type(values)}. Expected dict. {self.context}"
+                )
+            target = resources.setdefault(section, {})
+            for key, value in values.items():
+                if key in target:
+                    raise ComposeConverterError(
+                        f"Conflicting '{section}.{key}' in "
+                        f"'x-inspect_k8s_sandbox.resources': already set to "
+                        f"'{target[key]}' (likely via mem_limit/cpus/deploy). "
+                        f"{self.context}"
+                    )
+                target[key] = value
+        if src:
+            raise ComposeConverterError(
+                f"Unsupported key(s) in 'x-inspect_k8s_sandbox.resources': "
+                f"{set(src)}. Only 'requests' and 'limits' are supported. "
+                f"{self.context}"
+            )
 
     def _user_to_security_context(self, user: str | int) -> dict[str, Any]:
         def parse_int(value: str) -> int:

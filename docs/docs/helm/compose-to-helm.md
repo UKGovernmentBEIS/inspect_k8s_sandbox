@@ -102,3 +102,45 @@ services:
     image: ubuntu
     network_mode: none
 ```
+
+## Resource Requests and Limits
+
+Use the per-service `x-inspect_k8s_sandbox` extension to set Kubernetes resource
+requests and limits that the Docker Compose shortcuts (`mem_limit`, `cpus` and
+`deploy.resources`) cannot express. The `resources` block is merged into the
+`requests`/`limits` that the converter derives from those shortcuts.
+
+The motivating case is a _request-only_ resource such as `ephemeral-storage` — a
+scheduling floor with no eviction cap:
+
+```yaml
+services:
+  default:
+    image: ubuntu
+    mem_limit: 32g
+    cpus: 4.0
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+```
+
+This produces the following Helm values for the service:
+
+```yaml
+services:
+  default:
+    resources:
+      limits: {memory: 32Gi, cpu: 4.0}
+      requests: {memory: 32Gi, cpu: 4.0, ephemeral-storage: 80Gi}
+```
+
+Resource names and values are passed through verbatim, so any Kubernetes resource
+(e.g. `hugepages-2Mi`) can be set under either `requests` or `limits`. Setting a
+key that a Compose shortcut already populated (e.g. `requests.memory` alongside
+`mem_limit`) is rejected rather than silently overridden.
+
+This extension exists because Docker Compose cannot express many Kubernetes
+resources. It covers CPU and memory requests/limits (via `cpus`/`mem_limit` and
+`deploy.resources`), but has no concept of a disk (`ephemeral-storage`) request or
+limit, nor of resources such as `hugepages-*`.
