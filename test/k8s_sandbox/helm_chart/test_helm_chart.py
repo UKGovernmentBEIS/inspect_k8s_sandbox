@@ -467,6 +467,145 @@ def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> 
     assert normal_spec.get("egress") != []
 
 
+def test_allow_domains_egress_enforces_identity_on_pinned_ips(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-values.yaml"
+    )
+
+    cnps = _get_documents(documents, "CiliumNetworkPolicy")
+    egress_policy = next(
+        cnp for cnp in cnps if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )
+    fqdn_rules = [rule for rule in egress_policy["spec"]["egress"] if "toFQDNs" in rule]
+    assert len(fqdn_rules) == 1
+    fqdn_rule = fqdn_rules[0]
+
+    allow_domains = ["pypi.org", "*.debian.org"]
+    assert [entry["matchPattern"] for entry in fqdn_rule["toFQDNs"]] == allow_domains
+
+    # Egress to pinned IPs is constrained to 80/443, and the request identity must
+    # match an allowed domain, so a shared-CDN IP cannot be reused to reach off-list
+    # origins: the TLS SNI on 443, and the HTTP Host header on 80.
+    by_port = {tp["ports"][0]["port"]: tp for tp in fqdn_rule["toPorts"]}
+    assert set(by_port) == {"443", "80"}
+
+    assert by_port["443"]["ports"] == [{"port": "443", "protocol": "TCP"}]
+    assert by_port["443"]["serverNames"] == allow_domains
+
+    # The glob is translated to a case-insensitive, port-tolerant anchored regex
+    # for the Host header.
+    assert by_port["80"]["ports"] == [{"port": "80", "protocol": "TCP"}]
+    hosts = [rule["host"] for rule in by_port["80"]["rules"]["http"]]
+    assert hosts == [
+        "(?i)^pypi[.]org(:[0-9]+)?$",
+        "(?i)^[^.]+[.]debian[.]org(:[0-9]+)?$",
+    ]
+
+
+def test_allow_domains_ports_opens_extra_ports_ip_pinned(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-ports-values.yaml"
+    )
+
+    egress_policy = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )
+    fqdn_rule = next(r for r in egress_policy["spec"]["egress"] if "toFQDNs" in r)
+
+    # The extra ports are the toPorts entry with neither serverNames nor http
+    # rules (IP-pinned only). protocol defaults to ANY; 443 may be added as UDP.
+    extra = next(
+        tp
+        for tp in fqdn_rule["toPorts"]
+        if "serverNames" not in tp and "rules" not in tp
+    )
+    assert [(p["port"], p["protocol"]) for p in extra["ports"]] == [
+        ("22", "ANY"),
+        ("443", "UDP"),
+    ]
+
+
+def test_allow_domains_ports_rejects_identity_bypassing_ports(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    # Listing 80/443 with anything but UDP would disable the SNI/Host check, so
+    # the chart must refuse to render.
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(
+            chart_dir, test_resources_dir / "allow-domains-ports-invalid-values.yaml"
+        )
+
+
+def test_allow_domains_ports_scopes_to_a_single_domain(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-ports-scoped-values.yaml"
+    )
+
+    egress = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )["spec"]["egress"]
+    fqdn_rules = [r for r in egress if "toFQDNs" in r]
+
+    # The shared rule (the one carrying the SNI/Host identity checks) takes the
+    # unscoped port; the scoped port becomes its own single-domain rule.
+    shared = next(
+        r for r in fqdn_rules if any("serverNames" in tp for tp in r["toPorts"])
+    )
+    scoped = [r for r in fqdn_rules if r is not shared]
+
+    shared_extra = next(
+        tp for tp in shared["toPorts"] if "serverNames" not in tp and "rules" not in tp
+    )
+    assert [(p["port"], p["protocol"]) for p in shared_extra["ports"]] == [
+        ("8008", "ANY")
+    ]
+
+    assert len(scoped) == 1
+    assert [m["matchPattern"] for m in scoped[0]["toFQDNs"]] == ["github.com"]
+    assert scoped[0]["toPorts"] == [{"ports": [{"port": "22", "protocol": "ANY"}]}]
+
+
+def test_allow_domains_ports_rejects_unlisted_scope_domain(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    # A scoped domain that is not in allowDomains would never resolve, so the
+    # chart must refuse to render rather than emit an inert rule.
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(
+            chart_dir, test_resources_dir / "allow-domains-ports-bad-domain-values.yaml"
+        )
+
+
+def test_allow_domains_wildcard_all_skips_identity_enforcement(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-wildcard-all-values.yaml"
+    )
+
+    egress = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )["spec"]["egress"]
+    fqdn_rule = next(r for r in egress if "toFQDNs" in r)
+
+    # "*" (allow all) has no valid serverNames form, so no identity-enforcing
+    # toPorts is emitted -- egress to all resolved IPs is permitted on all ports.
+    assert [m["matchPattern"] for m in fqdn_rule["toFQDNs"]] == ["*"]
+    assert "toPorts" not in fqdn_rule
+
+
 def _run_helm_template(
     chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
 ) -> list[dict[str, Any]]:

@@ -1,0 +1,8 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+allowDomains:
+  - "pypi.org"
+# port 443 without protocol UDP must be rejected by the chart.
+allowDomainsPorts:
+  - port: 443
