@@ -22,6 +22,7 @@ from k8s_sandbox._logger import (
     log_trace,
 )
 from k8s_sandbox._pod import Pod
+from k8s_sandbox._pod.snapshot import list_pods
 
 DEFAULT_CHART = Path(__file__).parent / "resources" / "helm" / "agent-env"
 DEFAULT_TIMEOUT = 600  # 10 minutes
@@ -236,7 +237,8 @@ class Release:
         try:
             pods = await loop.run_in_executor(
                 None,
-                lambda: client.list_namespaced_pod(
+                lambda: list_pods(
+                    client,
                     self._namespace,
                     label_selector=f"app.kubernetes.io/instance={self.release_name}",
                 ),
@@ -245,37 +247,22 @@ class Release:
             _raise_runtime_error(
                 "Failed to list pods.", release=self.release_name, from_exception=e
             )
-        if not pods.items:
+        if not pods:
             _raise_runtime_error("No pods found.", release=self.release_name)
         sandboxes = dict()
-        for pod in pods.items:
-            assert pod.metadata is not None
-            assert pod.metadata.labels is not None
-            assert pod.spec is not None
-            assert pod.status is not None
-            assert pod.status.container_statuses is not None
-            service_name = pod.metadata.labels.get("inspect/service")
+        for pod in pods:
+            service_name = pod.labels.get("inspect/service")
             # Depending on the Helm chart, some Pods may not have a service label.
             # These should not be considered to be a sandbox pod (as per our docs).
             if service_name is not None:
-                default_container_name = pod.spec.containers[0].name
-                default_container_restart_count = next(
-                    (
-                        container_status.restart_count
-                        for container_status in pod.status.container_statuses
-                        if container_status.name == default_container_name
-                    ),
-                    0,
-                )
-                assert pod.metadata.name is not None
-                assert pod.metadata.uid is not None
+                default_container_name = pod.container_names[0]
                 sandboxes[service_name] = Pod(
-                    pod.metadata.name,
+                    pod.name,
                     self._namespace,
                     self._context_name,
                     default_container_name,
-                    pod.metadata.uid,
-                    default_container_restart_count,
+                    pod.uid,
+                    pod.restart_count_for(default_container_name),
                     self.restarted_container_behavior,
                 )
         return sandboxes
