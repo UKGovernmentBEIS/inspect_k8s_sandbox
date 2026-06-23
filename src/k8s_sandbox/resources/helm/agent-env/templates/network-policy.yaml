@@ -46,9 +46,69 @@ spec:
           io.kubernetes.pod.namespace: {{ .Release.Namespace }}
           {{- include "agentEnv.selectorLabels" $ | nindent 10 }}
     {{- if .Values.allowDomains }}
+    {{- /* Validate allowDomainsPorts before rendering: no identity-bypassing 80/443, scoped domains must be allowed. */}}
+    {{- range $p := .Values.allowDomainsPorts }}
+    {{- $proto := $p.protocol | default "ANY" | upper }}
+    {{- if and (or (eq (toString $p.port) "80") (eq (toString $p.port) "443")) (ne $proto "UDP") }}
+    {{- fail (printf "allowDomainsPorts: port %v protocol %s is not allowed -- TCP/ANY on 80/443 disables the SNI/Host identity check and re-opens the shared-CDN-IP bypass. Use protocol UDP on these ports (e.g. for QUIC/HTTP3), or choose a different port." $p.port $proto) }}
+    {{- end }}
+    {{- if and $p.domain (not (has $p.domain $.Values.allowDomains)) }}
+    {{- fail (printf "allowDomainsPorts: domain %q (port %v) must also appear in allowDomains" $p.domain $p.port) }}
+    {{- end }}
+    {{- end }}
     - toFQDNs:
     {{- range .Values.allowDomains }}
       - matchPattern: "{{ . }}"
+    {{- end }}
+      {{- if has "*" .Values.allowDomains }}
+      # allowDomains includes "*" (allow all): identity enforcement is moot and
+      # serverNames has no allow-all form, so all resolved IPs are permitted.
+      {{- else }}
+      # Enforce the request identity on the pinned IPs (TLS SNI on 443, HTTP Host
+      # on 80) so a pinned IP cannot be reused to reach a different host. Host is a
+      # case-insensitive anchored regex built from the glob. Wildcard SNI (443)
+      # requires Cilium >= 1.18.
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+          serverNames:
+          {{- range .Values.allowDomains }}
+            - "{{ . }}"
+          {{- end }}
+        - ports:
+            - port: "80"
+              protocol: TCP
+          rules:
+            http:
+            {{- range .Values.allowDomains }}
+              - host: "(?i)^{{ . | replace "." "[.]" | replace "*" "[^.]+" }}(:[0-9]+)?$"
+            {{- end }}
+        {{- /* Extra ports without a domain apply to every allowDomains IP (IP-pinned, no identity check). */}}
+        {{- $hasUnscoped := false }}
+        {{- range .Values.allowDomainsPorts }}
+        {{- if not .domain }}{{ $hasUnscoped = true }}{{ end }}
+        {{- end }}
+        {{- if $hasUnscoped }}
+        - ports:
+          {{- range .Values.allowDomainsPorts }}
+          {{- if not .domain }}
+            - port: "{{ .port }}"
+              protocol: {{ .protocol | default "ANY" | upper }}
+          {{- end }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- /* Extra ports with a domain are scoped to that domain only, via their own rule. */}}
+    {{- range $p := .Values.allowDomainsPorts }}
+    {{- if $p.domain }}
+    - toFQDNs:
+      - matchPattern: "{{ $p.domain }}"
+      toPorts:
+        - ports:
+            - port: "{{ $p.port }}"
+              protocol: {{ $p.protocol | default "ANY" | upper }}
+    {{- end }}
     {{- end }}
     {{- end }}
     {{- with .Values.allowEntities }}
