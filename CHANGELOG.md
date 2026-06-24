@@ -8,6 +8,7 @@
 - Propagate the caller's context into the pod-operation worker thread to ensure that Inspect sandbox config overrides are honoured.
 - Raise typed `PodReplacedError` / `ContainerRestartedError` (instead of `RuntimeError`) when a pod operation detects the pod has been replaced or its container restarted, and refresh the cached pod identity so subsequent operations target the new pod instead of looping against a stale UID. `restarted_container_behavior="warn"` now also refreshes (previously left the cached UID stale).
 - Fix `exec(input=...)` failing with "Connection reset by peer" for large inputs (e.g. injecting a ~28 MiB binary): stdin is now written to the pod in ≤1 MiB WebSocket frames instead of a single oversized frame. `write_file` shares the same chunking helper.
+- Parse pod reads from the raw API JSON (`_preload_content=False`) instead of the kubernetes client's model deserialization, which serialized under high concurrency and stalled evals running many concurrent clusters with `TimeoutError`s.
 
 ## 2026-05-07 0.5.0
 
