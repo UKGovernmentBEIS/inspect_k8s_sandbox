@@ -193,17 +193,15 @@ class ExecuteOperation(PodOperation):
             )
 
     def _filter_sentinel_and_returncode(self, frame: bytes) -> tuple[bytes, int | None]:
-        # We don't support returning binary data from an exec() command and are expected
-        # to raise a UnicodeDecodeError if we encounter one, so errors="strict".
-        # Assumption: individual frames are valid utf-8 (i.e. characters are not split
-        # across frames).
-        decoded = frame.decode("utf-8", errors="strict")
+        # latin-1 maps each byte 1:1 to a codepoint, so it decodes arbitrary binary
+        # without raising and re-encodes losslessly. We use it only to locate and strip
+        # the ASCII sentinel; the surrounding bytes round-trip unchanged.
+        # Assumption: the sentinel is not split across frames.
+        decoded = frame.decode("latin-1")
         split_frame = re.split(COMPLETED_SENTINEL_PATTERN, decoded)
         if len(split_frame) == 1:
             return frame, None
-        # Remove the sentinel value from the stdout frame.
-        filtered = split_frame[0] + split_frame[2]
-        return filtered.encode("utf-8"), int(split_frame[1])
+        return (split_frame[0] + split_frame[2]).encode("latin-1"), int(split_frame[1])
 
     def _verify_output_limit(
         self, stdout: LimitedBuffer, stderr: LimitedBuffer

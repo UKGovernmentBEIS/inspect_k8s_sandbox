@@ -356,9 +356,11 @@ async def test_exec_timeout_terminates_foreground_commands(
     assert file_exists_result.success
 
 
-async def test_exec_unicode_decode_error(sandbox: K8sSandboxEnvironment) -> None:
-    with pytest.raises(UnicodeDecodeError):
-        await sandbox.exec(["head", "-c", "1024", "/bin/ls"])
+async def test_exec_non_utf8_output_is_replaced(sandbox: K8sSandboxEnvironment) -> None:
+    result = await sandbox.exec(["bash", "-c", r"printf 'before \xbb after'"])
+
+    assert result.success
+    assert result.stdout == "before \ufffd after"
 
 
 async def test_exec_background_returns(sandbox: K8sSandboxEnvironment) -> None:
