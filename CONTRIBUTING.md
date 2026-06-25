@@ -105,6 +105,25 @@ your code; the check simply fails.
 Consider using the recommended [Rewrap](https://stkb.github.io/Rewrap/) extension
 (`.vscode/extensions.json`) for VS Code to wrap Markdown text at 88 characters.
 
+## Changelog
+
+If appropriate, add an entry under the `## Unreleased` heading in `CHANGELOG.md` when
+submitting a PR.
+
+## Releasing
+
+Releases are published manually using uv's standard
+[build](https://docs.astral.sh/uv/guides/package/#building-your-package) and
+[publish](https://docs.astral.sh/uv/guides/package/#publishing-your-package) flow —
+this guide does not duplicate those steps.
+
+The repo-specific parts are:
+
+- Bump `version` in `pyproject.toml` and run `uv lock` to update `uv.lock`.
+- Replace the `## Unreleased` heading in `CHANGELOG.md` with `## <YYYY-MM-DD> <version>`
+  (see existing entries for the format).
+- After merging, tag the release commit `vX.Y.Z` and push the tag.
+
 ## Conventions
 
 ### Package Structure and API Visibility
