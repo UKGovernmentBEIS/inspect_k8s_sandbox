@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-25 0.6.1
+
+- no changes - version bump only
+
 ## 2026-06-25 0.6.0
 
 - Replace non-UTF-8 bytes in command output rather than throwing `UnicodeDecodeError`.
