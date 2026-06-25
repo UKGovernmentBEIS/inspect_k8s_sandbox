@@ -107,8 +107,8 @@ Consider using the recommended [Rewrap](https://stkb.github.io/Rewrap/) extensio
 
 ## Changelog
 
-Every PR should add an entry under the `## Unreleased` heading in `CHANGELOG.md`. See
-[AGENTS.md](AGENTS.md) for how to write one.
+If appropriate, add an entry under the `## Unreleased` heading in `CHANGELOG.md` when
+submitting a PR.
 
 ## Releasing
 
