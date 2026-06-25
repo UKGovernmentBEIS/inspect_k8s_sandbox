@@ -105,6 +105,11 @@ your code; the check simply fails.
 Consider using the recommended [Rewrap](https://stkb.github.io/Rewrap/) extension
 (`.vscode/extensions.json`) for VS Code to wrap Markdown text at 88 characters.
 
+## Changelog
+
+Every PR should add an entry under the `## Unreleased` heading in `CHANGELOG.md`. See
+[AGENTS.md](AGENTS.md) for how to write one.
+
 ## Releasing
 
 Releases are published manually using uv's standard
@@ -118,8 +123,6 @@ The repo-specific parts are:
 - Replace the `## Unreleased` heading in `CHANGELOG.md` with `## <YYYY-MM-DD> <version>`
   (see existing entries for the format).
 - After merging, tag the release commit `vX.Y.Z` and push the tag.
-
-See [AGENTS.md](AGENTS.md) for how to write changelog entries.
 
 ## Conventions
 
