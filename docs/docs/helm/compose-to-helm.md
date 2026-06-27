@@ -90,6 +90,29 @@ x-inspect_k8s_sandbox:
     - world
 ```
 
+## Service Accounts
+
+Use the top-level `x-inspect_k8s_sandbox` extension to select a ServiceAccount and
+control Kubernetes API token access. The ServiceAccount must already exist by default,
+which allows concurrent sandbox releases to reference an externally managed identity:
+
+```yaml
+services:
+  myservice:
+    image: ubuntu
+x-inspect_k8s_sandbox:
+  service_account_name: dedicated-sandbox-api-client
+  service_account_create: false
+  automount_service_account_token: true
+  allow_entities:
+    - kube-apiserver
+```
+
+Only enable `automount_service_account_token` when sandbox code must call the Kubernetes
+API. See [Service accounts and Kubernetes API
+access](built-in-chart.md#service-accounts-and-kubernetes-api-access) for the security
+and RBAC requirements.
+
 ## Network Modes
 
 The only supported `network_mode` is `none`, which completely isolates a service from

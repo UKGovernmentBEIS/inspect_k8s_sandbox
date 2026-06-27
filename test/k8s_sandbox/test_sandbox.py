@@ -115,6 +115,21 @@ async def test_exec_with_error_via_bash(sandbox: K8sSandboxEnvironment) -> None:
     assert "command not found" in result.stderr.casefold()
 
 
+async def test_service_account_token_not_mounted(
+    sandbox: K8sSandboxEnvironment,
+) -> None:
+    result = await sandbox.exec(
+        [
+            "test",
+            "!",
+            "-e",
+            "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        ]
+    )
+
+    assert result.success
+
+
 async def test_exec_flushes_stderr(sandbox: K8sSandboxEnvironment) -> None:
     head_limit = 1024  # 1 KiB
 

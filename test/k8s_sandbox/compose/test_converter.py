@@ -1103,6 +1103,53 @@ x-inspect_k8s_sandbox:
     assert "Invalid 'allow_entities' type" in str(exc_info.value)
 
 
+def test_converts_service_account_options(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-k8s:
+  automount_service_account_token: true
+  service_account_create: false
+  service_account_name: my-sa
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["automountServiceAccountToken"] is True
+    assert result["serviceAccountCreate"] is False
+    assert result["serviceAccountName"] == "my-sa"
+
+
+@pytest.mark.parametrize(
+    ("setting", "value", "expected_type"),
+    [
+        ("automount_service_account_token", '"true"', "bool"),
+        ("service_account_create", '"false"', "bool"),
+        ("service_account_name", "42", "str"),
+    ],
+)
+def test_rejects_invalid_service_account_options(
+    tmp_compose: TmpComposeFixture,
+    setting: str,
+    value: str,
+    expected_type: str,
+) -> None:
+    compose_path = tmp_compose(f"""
+services:
+  my-service:
+    image: my-image
+x-k8s:
+  {setting}: {value}
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert f"Invalid '{setting}' type" in str(exc_info.value)
+    assert f"Expected {expected_type}" in str(exc_info.value)
+
+
 def test_rejects_unsupported_extension_key(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:

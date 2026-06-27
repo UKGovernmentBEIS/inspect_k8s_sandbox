@@ -206,11 +206,27 @@ def test_no_service_account_by_default(chart_dir: Path) -> None:
     assert _get_documents(documents, "ServiceAccount") == []
     for stateful_set in _get_documents(documents, "StatefulSet"):
         spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is False
         assert "serviceAccountName" not in spec
 
 
-def test_service_account_name(chart_dir: Path) -> None:
+def test_service_account_name_uses_existing_account_by_default(
+    chart_dir: Path,
+) -> None:
     documents = _run_helm_template(chart_dir, set_str="serviceAccountName=my-sa")
+
+    assert _get_documents(documents, "ServiceAccount") == []
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is False
+        assert spec["serviceAccountName"] == "my-sa"
+
+
+def test_service_account_creation_requires_opt_in(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, set_str="serviceAccountName=my-sa,serviceAccountCreate=true"
+    )
 
     service_accounts = _get_documents(documents, "ServiceAccount")
     assert len(service_accounts) == 1
@@ -220,6 +236,39 @@ def test_service_account_name(chart_dir: Path) -> None:
     for stateful_set in _get_documents(documents, "StatefulSet"):
         spec = stateful_set["spec"]["template"]["spec"]
         assert spec["serviceAccountName"] == "my-sa"
+
+
+@pytest.mark.parametrize("service_account_name", ["null", "true", "123"])
+def test_service_account_name_preserves_yaml_scalar_strings(
+    chart_dir: Path, service_account_name: str
+) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        set_str="serviceAccountCreate=true",
+        set_string=f"serviceAccountName={service_account_name}",
+    )
+
+    service_accounts = _get_documents(documents, "ServiceAccount")
+    assert service_accounts[0]["metadata"]["name"] == service_account_name
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["serviceAccountName"] == service_account_name
+
+
+def test_service_account_creation_requires_name(chart_dir: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(chart_dir, set_str="serviceAccountCreate=true")
+
+
+def test_service_account_token_automount_requires_opt_in(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, set_str="automountServiceAccountToken=true"
+    )
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is True
 
 
 def test_init_containers(chart_dir: Path, test_resources_dir: Path) -> None:
@@ -607,7 +656,10 @@ def test_allow_domains_wildcard_all_skips_identity_enforcement(
 
 
 def _run_helm_template(
-    chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
+    chart_dir: Path,
+    values_file: Path | None = None,
+    set_str: str | None = None,
+    set_string: str | None = None,
 ) -> list[dict[str, Any]]:
     cmd = [
         "helm",
@@ -620,6 +672,8 @@ def _run_helm_template(
         cmd += ["-f", str(values_file)]
     if set_str:
         cmd += ["--set", set_str]
+    if set_string:
+        cmd += ["--set-string", set_string]
 
     result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
     return list(yaml.safe_load_all(result.stdout))
