@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-- **BREAKING CHANGE**: Sandbox pods no longer mount Kubernetes service-account API
-  tokens by default. Set `automountServiceAccountToken: true` only for sandboxes that
-  require Kubernetes API access. Docker Compose users can set
+- **BREAKING CHANGE**: Sandbox pods created by the built-in Helm chart no longer mount
+  Kubernetes service-account API tokens by default. Set
+  `automountServiceAccountToken: true` only for sandboxes that require Kubernetes API
+  access. Docker Compose users can set
   `x-k8s.automount_service_account_token: true`.
 - **BREAKING CHANGE**: `serviceAccountName` now selects an existing ServiceAccount by
   default. Set `serviceAccountCreate: true` to retain automatic creation by the Helm

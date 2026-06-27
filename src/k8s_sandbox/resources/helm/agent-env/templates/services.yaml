@@ -35,7 +35,7 @@ spec:
       {{- end }}
       automountServiceAccountToken: {{ $.Values.automountServiceAccountToken }}
       {{- if $.Values.serviceAccountName }}
-      serviceAccountName: {{ $.Values.serviceAccountName }}
+      serviceAccountName: {{ $.Values.serviceAccountName | quote }}
       {{- end }}
       {{- /* Do not leak info on services via env vars */}}
       enableServiceLinks: false
