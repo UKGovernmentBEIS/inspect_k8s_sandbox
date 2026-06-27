@@ -4,8 +4,13 @@
 
 - **BREAKING CHANGE**: Sandbox pods no longer mount Kubernetes service-account API
   tokens by default. Set `automountServiceAccountToken: true` only for sandboxes that
-  require Kubernetes API access. `serviceAccountName` continues to support cloud
-  workload identity such as IRSA without exposing the Kubernetes API token.
+  require Kubernetes API access. Docker Compose users can set
+  `x-k8s.automount_service_account_token: true`.
+- **BREAKING CHANGE**: `serviceAccountName` now selects an existing ServiceAccount by
+  default. Set `serviceAccountCreate: true` to retain automatic creation by the Helm
+  chart.
+- Add `service_account_name`, `service_account_create`, and
+  `automount_service_account_token` to the top-level Docker Compose `x-k8s` extension.
 
 ## 2026-06-25 0.6.1
 

@@ -159,6 +159,9 @@ labels: {}
 # pods. Keep disabled for cloud workload identity such as IRSA, which injects a
 # provider-specific token separately.
 automountServiceAccountToken: false
-# -- Service account name. When set, a ServiceAccount is created with this name
-# and pods will use it.
+# -- Whether to create the selected ServiceAccount. Keep disabled to use an externally
+# managed ServiceAccount across concurrent sandbox releases.
+serviceAccountCreate: false
+# -- Service account name for sandbox pods. The account must already exist unless
+# `serviceAccountCreate` is enabled.
 serviceAccountName: null

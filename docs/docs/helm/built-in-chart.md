@@ -86,13 +86,21 @@ limitations on using gVisor versus `runc`.
 ## Service accounts and Kubernetes API access
 
 Sandbox pods do not mount a Kubernetes service-account API token by default. You can
-still set `serviceAccountName` for cloud workload identity such as IRSA; provider
-integrations inject their own projected token separately.
+set `serviceAccountName` to select an externally managed ServiceAccount for cloud
+workload identity such as IRSA; provider integrations inject their own projected token
+separately. The chart does not create the account by default, so its annotations and
+RBAC can be managed independently and concurrent sandbox releases can reference it
+without Helm ownership conflicts.
+
+Set `serviceAccountCreate: true` if the chart should create the selected account. This
+retains the previous behavior, but a fixed account name cannot be owned by multiple
+concurrent Helm releases.
 
 Only opt into a Kubernetes API token when sandbox code must call the Kubernetes API:
 
 ```yaml
 serviceAccountName: dedicated-sandbox-api-client
+serviceAccountCreate: false
 automountServiceAccountToken: true
 allowEntities:
   - kube-apiserver
@@ -105,6 +113,10 @@ allowEntities:
     least-privileged ServiceAccount and do not reuse the identity used by Inspect,
     Helm, an operator, or another controller. API network access is controlled
     separately; the example permits it through the built-in Cilium policy.
+
+    Concurrent samples that select the same ServiceAccount share its Kubernetes
+    identity. Scope RBAC so one sandbox cannot access another sandbox's resources
+    unless that is explicitly intended.
 
 See [Kubernetes workload security](../security/kubernetes-workloads.md) for RBAC and
 admission-control guidance.

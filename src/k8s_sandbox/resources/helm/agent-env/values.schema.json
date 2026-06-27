@@ -227,6 +227,9 @@
     "automountServiceAccountToken": {
       "type": "boolean"
     },
+    "serviceAccountCreate": {
+      "type": "boolean"
+    },
     "serviceAccountName": {
       "type": ["string", "null"]
     }

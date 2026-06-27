@@ -210,8 +210,23 @@ def test_no_service_account_by_default(chart_dir: Path) -> None:
         assert "serviceAccountName" not in spec
 
 
-def test_service_account_name(chart_dir: Path) -> None:
+def test_service_account_name_uses_existing_account_by_default(
+    chart_dir: Path,
+) -> None:
     documents = _run_helm_template(chart_dir, set_str="serviceAccountName=my-sa")
+
+    assert _get_documents(documents, "ServiceAccount") == []
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is False
+        assert spec["serviceAccountName"] == "my-sa"
+
+
+def test_service_account_creation_requires_opt_in(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, set_str="serviceAccountName=my-sa,serviceAccountCreate=true"
+    )
 
     service_accounts = _get_documents(documents, "ServiceAccount")
     assert len(service_accounts) == 1
@@ -220,8 +235,12 @@ def test_service_account_name(chart_dir: Path) -> None:
 
     for stateful_set in _get_documents(documents, "StatefulSet"):
         spec = stateful_set["spec"]["template"]["spec"]
-        assert spec["automountServiceAccountToken"] is False
         assert spec["serviceAccountName"] == "my-sa"
+
+
+def test_service_account_creation_requires_name(chart_dir: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(chart_dir, set_str="serviceAccountCreate=true")
 
 
 def test_service_account_token_automount_requires_opt_in(chart_dir: Path) -> None:
