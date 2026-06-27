@@ -83,6 +83,32 @@ limitations on using gVisor versus `runc`.
     about the "lower level" OCI runtimes (like `runc` or `runsc`) which are used to
     actually run the container processes.
 
+## Service accounts and Kubernetes API access
+
+Sandbox pods do not mount a Kubernetes service-account API token by default. You can
+still set `serviceAccountName` for cloud workload identity such as IRSA; provider
+integrations inject their own projected token separately.
+
+Only opt into a Kubernetes API token when sandbox code must call the Kubernetes API:
+
+```yaml
+serviceAccountName: dedicated-sandbox-api-client
+automountServiceAccountToken: true
+allowEntities:
+  - kube-apiserver
+```
+
+!!! danger
+
+    Enabling `automountServiceAccountToken` exposes the selected ServiceAccount's
+    Kubernetes API credentials to untrusted sandbox code. Use a dedicated,
+    least-privileged ServiceAccount and do not reuse the identity used by Inspect,
+    Helm, an operator, or another controller. API network access is controlled
+    separately; the example permits it through the built-in Cilium policy.
+
+See [Kubernetes workload security](../security/kubernetes-workloads.md) for RBAC and
+admission-control guidance.
+
 ## Internet access
 
 !!! danger

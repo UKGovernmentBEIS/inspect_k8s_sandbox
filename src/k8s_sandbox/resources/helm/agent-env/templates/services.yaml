@@ -33,6 +33,7 @@ spec:
       {{- if ne $service.runtimeClassName "CLUSTER_DEFAULT" }}
       runtimeClassName: {{ $service.runtimeClassName | default "gvisor" }}
       {{- end }}
+      automountServiceAccountToken: {{ $.Values.automountServiceAccountToken }}
       {{- if $.Values.serviceAccountName }}
       serviceAccountName: {{ $.Values.serviceAccountName }}
       {{- end }}

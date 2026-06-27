@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **BREAKING CHANGE**: Sandbox pods no longer mount Kubernetes service-account API
+  tokens by default. Set `automountServiceAccountToken: true` only for sandboxes that
+  require Kubernetes API access. `serviceAccountName` continues to support cloud
+  workload identity such as IRSA without exposing the Kubernetes API token.
+
 ## 2026-06-25 0.6.1
 
 - no changes - version bump only

@@ -206,6 +206,7 @@ def test_no_service_account_by_default(chart_dir: Path) -> None:
     assert _get_documents(documents, "ServiceAccount") == []
     for stateful_set in _get_documents(documents, "StatefulSet"):
         spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is False
         assert "serviceAccountName" not in spec
 
 
@@ -219,7 +220,18 @@ def test_service_account_name(chart_dir: Path) -> None:
 
     for stateful_set in _get_documents(documents, "StatefulSet"):
         spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is False
         assert spec["serviceAccountName"] == "my-sa"
+
+
+def test_service_account_token_automount_requires_opt_in(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, set_str="automountServiceAccountToken=true"
+    )
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is True
 
 
 def test_init_containers(chart_dir: Path, test_resources_dir: Path) -> None:

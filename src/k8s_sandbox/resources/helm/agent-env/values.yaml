@@ -155,6 +155,10 @@ annotations: {}
   # inspectTaskName: "task-name"
 # -- A dict of labels to apply to resources within the agent environment.
 labels: {}
+# -- Whether to mount the selected ServiceAccount's Kubernetes API token in sandbox
+# pods. Keep disabled for cloud workload identity such as IRSA, which injects a
+# provider-specific token separately.
+automountServiceAccountToken: false
 # -- Service account name. When set, a ServiceAccount is created with this name
 # and pods will use it.
 serviceAccountName: null

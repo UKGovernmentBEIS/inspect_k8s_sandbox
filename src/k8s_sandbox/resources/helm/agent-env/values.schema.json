@@ -224,6 +224,9 @@
     "labels": {
       "type": "object"
     },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
     "serviceAccountName": {
       "type": ["string", "null"]
     }

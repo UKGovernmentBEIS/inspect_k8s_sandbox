@@ -12,6 +12,7 @@
 | allowDomainsPorts | list | Empty list (only 80/443 are reachable on allowedDomains) | Extra ports opened to the domains in `allowDomains`, as a list of {port, protocol, domain}. `protocol` defaults to ANY (TCP+UDP) and `domain` (optional) scopes the port to one allowDomains entry. If `domain` is not included, it will apply to all allowed domains. |
 | allowEntities | list | Empty list (no additional entities compared to default policies) | A list of Cilium entities (e.g. "world") that pods within the agent environment are allowed to access. |
 | annotations | object | `{}` | A dict of annotations to apply to resources within the agent environment. |
+| automountServiceAccountToken | bool | `false` | Whether to mount the selected ServiceAccount's Kubernetes API token in sandbox pods. Keep disabled for cloud workload identity such as IRSA, which injects a provider-specific token separately. |
 | corednsCommand | list | `["/coredns","-conf","/etc/coredns/Corefile"]` | The command to use for the coredns container. |
 | corednsImage | string | `"coredns/coredns:1.8.3"` | The image to use for the coredns container. |
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
