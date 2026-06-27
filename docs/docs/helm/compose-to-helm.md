@@ -100,7 +100,7 @@ which allows concurrent sandbox releases to reference an externally managed iden
 services:
   myservice:
     image: ubuntu
-x-k8s:
+x-inspect_k8s_sandbox:
   service_account_name: dedicated-sandbox-api-client
   service_account_create: false
   automount_service_account_token: true
