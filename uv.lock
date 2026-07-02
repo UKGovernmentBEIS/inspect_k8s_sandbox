@@ -839,7 +839,7 @@ wheels = [
 
 [[package]]
 name = "inspect-k8s-sandbox"
-version = "0.6.1"
+version = "0.13.0"
 source = { editable = "." }
 dependencies = [
     { name = "inspect-ai" },
