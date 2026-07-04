@@ -254,38 +254,37 @@ class _ServiceConverter:
         _transform(
             src, "user", result, "securityContext", self._user_to_security_context
         )
-        # security_opt: map a `seccomp=<path>` entry to a Localhost seccompProfile,
-        # merged into securityContext (which `user` above may also populate). Any other
-        # security_opt entries (e.g. `apparmor=`, `no-new-privileges`) have no k8s
-        # mapping here and are rejected rather than silently dropped, so a workload
+        # security_opt: map a seccomp entry (`seccomp=<value>` or `seccomp:<value>`) to
+        # a seccompProfile in securityContext (which `user` above may also populate).
+        # Any other security_opt entries (e.g. `apparmor=`, `no-new-privileges`) have no
+        # k8s mapping here and are rejected rather than silently dropped, so a workload
         # can't believe a security control is applied when it isn't.
         if (security_opt := src.pop("security_opt", None)) is not None:
             entries = security_opt if isinstance(security_opt, list) else [security_opt]
-            seccomp = [
-                e for e in entries if isinstance(e, str) and e.startswith("seccomp=")
-            ]
-            other = [
-                e
-                for e in entries
-                if not (isinstance(e, str) and e.startswith("seccomp="))
-            ]
-            if other:
+            seccomp_profile = None
+            unsupported = []
+            for entry in entries:
+                option, value = _split_security_opt(entry)
+                if option == "seccomp":
+                    seccomp_profile = self._seccomp_to_profile(value)
+                else:
+                    unsupported.append(entry)
+            if unsupported:
                 raise ComposeConverterError(
-                    f"Unsupported 'security_opt' entries: {other}. Only "
-                    f"'seccomp=<path>' is supported. {self.context}"
+                    f"Unsupported 'security_opt' entries: {unsupported}. Only "
+                    f"'seccomp=<value>' is supported. {self.context}"
                 )
-            if seccomp:
-                sec = result.setdefault("securityContext", {})
-                sec["seccompProfile"] = {
-                    "type": "Localhost",
-                    "localhostProfile": seccomp[0][len("seccomp=") :],
-                }
-        # memswap_limit: no per-pod swap knob in k8s and nodes are swap-off by default,
-        # so `memswap_limit == mem_limit` (disable swap) is already the ambient
-        # behavior.
-        if src.pop("memswap_limit", None) is not None:
+            if seccomp_profile is not None:
+                result.setdefault("securityContext", {})["seccompProfile"] = (
+                    seccomp_profile
+                )
+        # memswap_limit: k8s exposes no Compose-equivalent per-container swap limit, so
+        # this Docker-only knob has no conversion target and is ignored (the rest of the
+        # config still converts).
+        if (memswap_limit := src.pop("memswap_limit", None)) is not None:
             logger.info(
-                f"Ignoring 'memswap_limit': k8s nodes run swap off. {self.context}"
+                f"Ignoring 'memswap_limit: {memswap_limit}': Kubernetes does not "
+                f"expose a Compose-equivalent per-container swap limit. {self.context}"
             )
         # Check for network_mode first
         network_mode = src.pop("network_mode", None)
@@ -618,6 +617,23 @@ class _ServiceConverter:
             f"str. {self.context}"
         )
 
+    def _seccomp_to_profile(self, value: str | None) -> dict[str, str]:
+        # Docker's special seccomp values map to k8s built-in profile types; anything
+        # else is treated as a custom profile path (k8s `Localhost`).
+        if value == "unconfined":
+            return {"type": "Unconfined"}
+        if value == "builtin":
+            return {"type": "RuntimeDefault"}
+        # k8s resolves `localhostProfile` relative to the kubelet's seccomp root, so it
+        # must be a non-empty, descending relative path (no absolute or `..` paths).
+        if not value or value.startswith("/") or ".." in value.split("/"):
+            raise ComposeConverterError(
+                f"Invalid seccomp profile in 'security_opt': '{value}'. Expected "
+                f"'unconfined', 'builtin', or a relative profile path (no absolute "
+                f"paths or '..'). {self.context}"
+            )
+        return {"type": "Localhost", "localhostProfile": value}
+
     def _duration_to_seconds(self, value: str) -> int:
         """Convert Docker Compose duration format (e.g., '30s', '1m') to seconds.
 
@@ -635,6 +651,19 @@ class _ServiceConverter:
         minutes = int(match.group("minutes") or 0)
         seconds = int(match.group("seconds") or 0)
         return hours * 3600 + minutes * 60 + seconds
+
+
+def _split_security_opt(entry: Any) -> tuple[str | None, str | None]:
+    # Compose accepts both `option=value` and `option:value` forms; split on whichever
+    # separator appears first. Returns (None, None) for non-string entries so the caller
+    # treats them as unsupported.
+    if not isinstance(entry, str):
+        return None, None
+    separators = [i for i, ch in enumerate(entry) if ch in "=:"]
+    if not separators:
+        return entry, None
+    idx = min(separators)
+    return entry[:idx], entry[idx + 1 :]
 
 
 def _make_volume_name_k8s_compliant(value: str) -> str:

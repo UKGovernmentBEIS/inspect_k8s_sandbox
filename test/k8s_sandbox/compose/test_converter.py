@@ -868,6 +868,87 @@ services:
     jsonschema.validate({**result, "global": {}}, schema)
 
 
+def test_converts_security_opt_seccomp_colon_separator(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # Compose accepts both `option=value` and `option:value`.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    security_opt:
+      - "seccomp:profiles/no-aslr.json"
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"]["seccompProfile"] == {
+        "type": "Localhost",
+        "localhostProfile": "profiles/no-aslr.json",
+    }
+
+
+def test_converts_security_opt_seccomp_unconfined(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # Docker's `seccomp=unconfined` maps to the k8s Unconfined profile type, not a
+    # Localhost profile literally named "unconfined".
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    security_opt:
+      - seccomp=unconfined
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"]["seccompProfile"] == {
+        "type": "Unconfined",
+    }
+
+
+def test_converts_security_opt_seccomp_builtin(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # Docker's built-in default profile maps to the runtime's default on k8s.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    security_opt:
+      - seccomp=builtin
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"]["seccompProfile"] == {
+        "type": "RuntimeDefault",
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "seccomp=/etc/seccomp/profile.json",  # absolute
+        "seccomp=../escape.json",  # path traversal
+        "seccomp=profiles/../../escape.json",  # traversal mid-path
+        "seccomp=",  # empty
+    ],
+)
+def test_rejects_invalid_seccomp_profile_path(
+    value: str, tmp_compose: TmpComposeFixture
+) -> None:
+    compose_path = tmp_compose(f"""
+services:
+  my-service:
+    security_opt:
+      - "{value}"
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Invalid seccomp profile" in str(exc_info.value)
+
+
 def test_rejects_non_seccomp_security_opt(
     tmp_compose: TmpComposeFixture,
 ) -> None:
@@ -922,10 +1003,11 @@ services:
     with caplog.at_level(logging.INFO):
         result = convert_compose_to_helm_values(compose_path)
 
-    # memswap_limit is dropped (not carried into output) and an info log is emitted.
+    # memswap_limit is dropped (not carried into output) and an info log naming the
+    # ignored value is emitted.
     assert "memswap_limit" not in result["services"]["my-service"]
     assert any(
-        "Ignoring 'memswap_limit'" in record.message for record in caplog.records
+        "Ignoring 'memswap_limit: 1G'" in record.message for record in caplog.records
     )
 
 
