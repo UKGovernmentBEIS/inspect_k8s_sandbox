@@ -802,6 +802,133 @@ services:
     assert "Invalid 'user' value" in str(exc_info.value)
 
 
+def test_converts_security_opt_seccomp(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    security_opt:
+      - seccomp=./profiles/no-aslr.json
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"]["seccompProfile"] == {
+        "type": "Localhost",
+        "localhostProfile": "./profiles/no-aslr.json",
+    }
+
+
+def test_merges_seccomp_into_user_security_context(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # `user` and `security_opt` both populate securityContext; neither clobbers the
+    # other.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    user: 1000:1001
+    security_opt:
+      - seccomp=./profiles/no-aslr.json
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"] == {
+        "runAsUser": 1000,
+        "runAsGroup": 1001,
+        "seccompProfile": {
+            "type": "Localhost",
+            "localhostProfile": "./profiles/no-aslr.json",
+        },
+    }
+
+
+def test_seccomp_output_validates_against_chart_schema(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: my-image
+    security_opt:
+      - seccomp=./profiles/no-aslr.json
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    schema_path = (
+        Path(k8s_sandbox.__file__).parent
+        / "resources"
+        / "helm"
+        / "agent-env"
+        / "values.schema.json"
+    )
+    schema = json.loads(schema_path.read_text())
+    # 'global' is injected by inspect at install time; add it to satisfy the schema.
+    jsonschema.validate({**result, "global": {}}, schema)
+
+
+def test_rejects_non_seccomp_security_opt(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # Non-seccomp security_opt entries have no k8s mapping and must be rejected rather
+    # than silently dropped (so a security control isn't believed-applied when it
+    # isn't).
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    security_opt:
+      - no-new-privileges:true
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported 'security_opt' entries" in str(exc_info.value)
+
+
+def test_rejects_non_seccomp_security_opt_alongside_seccomp(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # A valid seccomp entry does not excuse an unsupported sibling entry.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    security_opt:
+      - seccomp=./profiles/no-aslr.json
+      - apparmor=unconfined
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported 'security_opt' entries" in str(exc_info.value)
+    assert "apparmor=unconfined" in str(exc_info.value)
+
+
+def test_ignores_memswap_limit(
+    caplog: pytest.LogCaptureFixture, tmp_compose: TmpComposeFixture
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    mem_limit: 1G
+    memswap_limit: 1G
+""")
+
+    with caplog.at_level(logging.INFO):
+        result = convert_compose_to_helm_values(compose_path)
+
+    # memswap_limit is dropped (not carried into output) and an info log is emitted.
+    assert "memswap_limit" not in result["services"]["my-service"]
+    assert any(
+        "Ignoring 'memswap_limit'" in record.message for record in caplog.records
+    )
+
+
 def test_ignores_init_true(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:

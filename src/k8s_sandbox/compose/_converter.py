@@ -254,6 +254,39 @@ class _ServiceConverter:
         _transform(
             src, "user", result, "securityContext", self._user_to_security_context
         )
+        # security_opt: map a `seccomp=<path>` entry to a Localhost seccompProfile,
+        # merged into securityContext (which `user` above may also populate). Any other
+        # security_opt entries (e.g. `apparmor=`, `no-new-privileges`) have no k8s
+        # mapping here and are rejected rather than silently dropped, so a workload
+        # can't believe a security control is applied when it isn't.
+        if (security_opt := src.pop("security_opt", None)) is not None:
+            entries = security_opt if isinstance(security_opt, list) else [security_opt]
+            seccomp = [
+                e for e in entries if isinstance(e, str) and e.startswith("seccomp=")
+            ]
+            other = [
+                e
+                for e in entries
+                if not (isinstance(e, str) and e.startswith("seccomp="))
+            ]
+            if other:
+                raise ComposeConverterError(
+                    f"Unsupported 'security_opt' entries: {other}. Only "
+                    f"'seccomp=<path>' is supported. {self.context}"
+                )
+            if seccomp:
+                sec = result.setdefault("securityContext", {})
+                sec["seccompProfile"] = {
+                    "type": "Localhost",
+                    "localhostProfile": seccomp[0][len("seccomp=") :],
+                }
+        # memswap_limit: no per-pod swap knob in k8s and nodes are swap-off by default,
+        # so `memswap_limit == mem_limit` (disable swap) is already the ambient
+        # behavior.
+        if src.pop("memswap_limit", None) is not None:
+            logger.info(
+                f"Ignoring 'memswap_limit': k8s nodes run swap off. {self.context}"
+            )
         # Check for network_mode first
         network_mode = src.pop("network_mode", None)
         networks = src.get("networks")

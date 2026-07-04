@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Compose to HELM: Map `security_opt: ["seccomp=<path>"]` to a `Localhost` `seccompProfile` in the pod's `securityContext` (merged with any `user:`-derived context; non-`seccomp=` entries are rejected).
+- Compose to HELM: Ignore `memswap_limit` with an info log, since Kubernetes has no per-pod swap knob and nodes run with swap off by default.
+
 ## 2026-06-25 0.6.1
 
 - no changes - version bump only
