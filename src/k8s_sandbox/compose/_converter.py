@@ -260,10 +260,11 @@ class _ServiceConverter:
         # k8s mapping here and are rejected rather than silently dropped, so a workload
         # can't believe a security control is applied when it isn't.
         if (security_opt := src.pop("security_opt", None)) is not None:
-            entries = security_opt if isinstance(security_opt, list) else [security_opt]
+            # The Compose schema constrains `security_opt` to an array, so a scalar is
+            # already rejected by `_validate_compose` before we get here.
             seccomp_profile = None
             unsupported = []
-            for entry in entries:
+            for entry in security_opt:
                 option, value = _split_security_opt(entry)
                 if option == "seccomp":
                     seccomp_profile = self._seccomp_to_profile(value)
@@ -272,7 +273,8 @@ class _ServiceConverter:
             if unsupported:
                 raise ComposeConverterError(
                     f"Unsupported 'security_opt' entries: {unsupported}. Only "
-                    f"'seccomp=<value>' is supported. {self.context}"
+                    f"'seccomp=<value>' (or 'seccomp:<value>') is supported. "
+                    f"{self.context}"
                 )
             if seccomp_profile is not None:
                 result.setdefault("securityContext", {})["seccompProfile"] = (
@@ -622,6 +624,9 @@ class _ServiceConverter:
         # else is treated as a custom profile path (k8s `Localhost`).
         if value == "unconfined":
             return {"type": "Unconfined"}
+        # `builtin` is Docker's (undocumented) value for its built-in default profile;
+        # k8s `RuntimeDefault` (the container runtime's default profile) is the closest
+        # analog, though the runtime's default may differ slightly from Docker's.
         if value == "builtin":
             return {"type": "RuntimeDefault"}
         # k8s resolves `localhostProfile` relative to the kubelet's seccomp root, so it
@@ -632,6 +637,16 @@ class _ServiceConverter:
                 f"'unconfined', 'builtin', or a relative profile path (no absolute "
                 f"paths or '..'). {self.context}"
             )
+        # Unlike the built-in profile types, a Localhost profile file is not shipped by
+        # the converter: it must already exist on every node. This isn't verified here,
+        # so a missing file surfaces only as a pod launch failure, not a conversion
+        # error.
+        logger.warning(
+            f"seccomp profile '{value}' maps to a k8s Localhost profile; the file must "
+            f"be pre-staged on every node under the kubelet seccomp root (default "
+            f"'/var/lib/kubelet/seccomp/{value}'). A missing profile fails at pod "
+            f"launch, not conversion. {self.context}"
+        )
         return {"type": "Localhost", "localhostProfile": value}
 
     def _duration_to_seconds(self, value: str) -> int:

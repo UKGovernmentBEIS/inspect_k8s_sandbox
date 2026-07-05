@@ -887,16 +887,17 @@ services:
     }
 
 
+@pytest.mark.parametrize("sep", ["=", ":"])
 def test_converts_security_opt_seccomp_unconfined(
-    tmp_compose: TmpComposeFixture,
+    sep: str, tmp_compose: TmpComposeFixture
 ) -> None:
     # Docker's `seccomp=unconfined` maps to the k8s Unconfined profile type, not a
-    # Localhost profile literally named "unconfined".
-    compose_path = tmp_compose("""
+    # Localhost profile literally named "unconfined". Both `=` and `:` are accepted.
+    compose_path = tmp_compose(f"""
 services:
   my-service:
     security_opt:
-      - seccomp=unconfined
+      - "seccomp{sep}unconfined"
 """)
 
     result = convert_compose_to_helm_values(compose_path)
@@ -906,15 +907,17 @@ services:
     }
 
 
+@pytest.mark.parametrize("sep", ["=", ":"])
 def test_converts_security_opt_seccomp_builtin(
-    tmp_compose: TmpComposeFixture,
+    sep: str, tmp_compose: TmpComposeFixture
 ) -> None:
-    # Docker's built-in default profile maps to the runtime's default on k8s.
-    compose_path = tmp_compose("""
+    # Docker's built-in default profile maps to the runtime's default on k8s. Both `=`
+    # and `:` are accepted.
+    compose_path = tmp_compose(f"""
 services:
   my-service:
     security_opt:
-      - seccomp=builtin
+      - "seccomp{sep}builtin"
 """)
 
     result = convert_compose_to_helm_values(compose_path)
@@ -987,6 +990,44 @@ services:
 
     assert "Unsupported 'security_opt' entries" in str(exc_info.value)
     assert "apparmor=unconfined" in str(exc_info.value)
+
+
+def test_rejects_scalar_security_opt(tmp_compose: TmpComposeFixture) -> None:
+    # The Compose schema requires `security_opt` to be a list, so a scalar is rejected
+    # up front by schema validation (never reaching the seccomp conversion logic).
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    security_opt: seccomp=unconfined
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "failed validation against the Compose schema" in str(exc_info.value)
+
+
+def test_warns_localhost_seccomp_profile_must_be_prestaged(
+    caplog: pytest.LogCaptureFixture, tmp_compose: TmpComposeFixture
+) -> None:
+    # A Localhost profile file isn't shipped by the converter; warn that it must be
+    # pre-staged on every node, since a missing file only fails at pod launch.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    security_opt:
+      - seccomp=profiles/no-aslr.json
+""")
+
+    with caplog.at_level(logging.WARNING):
+        convert_compose_to_helm_values(compose_path)
+
+    assert any(
+        "/var/lib/kubelet/seccomp/" in record.message
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    )
 
 
 def test_ignores_memswap_limit(
