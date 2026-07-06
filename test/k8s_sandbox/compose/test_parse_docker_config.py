@@ -2,9 +2,13 @@ from pathlib import Path
 from typing import Callable
 
 import pytest
+import yaml
 from inspect_ai.util import ComposeBuild, ComposeConfig
 
-from k8s_sandbox.compose._compose import parse_docker_config
+from k8s_sandbox.compose._compose import (
+    ComposeConfigValuesSource,
+    parse_docker_config,
+)
 
 TmpFileFixture = Callable[[str, str], Path]
 
@@ -79,3 +83,27 @@ def test_unsupported_file_type(tmp_file: TmpFileFixture) -> None:
 
     with pytest.raises(ValueError, match="neither a Dockerfile nor a Docker Compose"):
         parse_docker_config(str(values_file))
+
+
+def test_security_opt_reaches_converter_via_compose_entrypoint(
+    tmp_file: TmpFileFixture,
+) -> None:
+    # The ("k8s", "compose.yaml") entrypoint parses through inspect_ai's ComposeConfig
+    # before the converter runs. Guards against that model silently rejecting
+    # security_opt/memswap_limit (and so never reaching the converter).
+    compose_file = tmp_file(
+        "compose.yaml",
+        "services:\n"
+        "  default:\n"
+        "    image: ubuntu:24.04\n"
+        "    memswap_limit: 512m\n"
+        "    security_opt:\n"
+        "      - seccomp=unconfined\n",
+    )
+
+    config = parse_docker_config(str(compose_file))
+    with ComposeConfigValuesSource(config).values_file() as values_file:
+        values = yaml.safe_load(values_file.read_text())
+
+    security_context = values["services"]["default"]["securityContext"]
+    assert security_context["seccompProfile"] == {"type": "Unconfined"}
