@@ -533,7 +533,7 @@ def _get_timeout() -> int:
     return timeout
 
 
-def _install_semaphore() -> AsyncContextManager[Any]:
+def _install_semaphore() -> AsyncContextManager[object]:
     # Limit concurrent subprocess calls to `helm install` and `helm uninstall`.
     # Use distinct semaphores for each operation to avoid deadlocks where all permits
     # are acquired by the "install" operations which are waiting for cluster resources
@@ -543,7 +543,7 @@ def _install_semaphore() -> AsyncContextManager[Any]:
     return concurrency("helm-install", _get_environ_int("INSPECT_MAX_HELM_INSTALL", 8))
 
 
-def _uninstall_semaphore() -> AsyncContextManager[Any]:
+def _uninstall_semaphore() -> AsyncContextManager[object]:
     return concurrency(
         "helm-uninstall", _get_environ_int("INSPECT_MAX_HELM_UNINSTALL", 8)
     )
