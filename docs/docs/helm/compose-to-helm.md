@@ -161,10 +161,10 @@ A `security_opt` **seccomp** entry (`seccomp=<value>` or `seccomp:<value>`) is c
 to a `seccompProfile` in the pod's `securityContext` (merged with any context derived
 from `user`). Docker's special values map to Kubernetes profile types:
 
-| Compose value | Kubernetes `seccompProfile` |
-| --- | --- |
-| `seccomp=unconfined` | `{type: Unconfined}` |
-| `seccomp=builtin` | `{type: RuntimeDefault}` |
+| Compose value                  | Kubernetes `seccompProfile`                                 |
+| ------------------------------ | ----------------------------------------------------------- |
+| `seccomp=unconfined`           | `{type: Unconfined}`                                        |
+| `seccomp=builtin`              | `{type: RuntimeDefault}`                                    |
 | `seccomp=<relative/path.json>` | `{type: Localhost, localhostProfile: <relative/path.json>}` |
 
 Notes:
@@ -177,8 +177,8 @@ Notes:
   passed through as `localhostProfile`. **Kubernetes resolves this relative to the
   kubelet's seccomp root, so the profile file must already be pre-staged on every node
   (default `/var/lib/kubelet/seccomp/<path>`).** This is not verified at conversion time;
-  a missing profile fails only when the pod is launched. The converter logs a warning as
-  a reminder.
+  a missing profile fails only when the pod is launched. The converter logs an info-level
+  reminder.
 - Non-seccomp entries (e.g. `apparmor=...`, `no-new-privileges`) have no mapping here and
   are rejected rather than silently dropped, so a workload can't believe a security
   control is applied when it isn't.

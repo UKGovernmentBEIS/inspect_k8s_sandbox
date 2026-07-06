@@ -1008,11 +1008,11 @@ services:
     assert "failed validation against the Compose schema" in str(exc_info.value)
 
 
-def test_warns_localhost_seccomp_profile_must_be_prestaged(
+def test_logs_localhost_seccomp_profile_must_be_prestaged(
     caplog: pytest.LogCaptureFixture, tmp_compose: TmpComposeFixture
 ) -> None:
-    # A Localhost profile file isn't shipped by the converter; warn that it must be
-    # pre-staged on every node, since a missing file only fails at pod launch.
+    # A Localhost profile file isn't shipped by the converter; log a reminder that it
+    # must be pre-staged on every node, since a missing file only fails at pod launch.
     compose_path = tmp_compose("""
 services:
   my-service:
@@ -1020,13 +1020,13 @@ services:
       - seccomp=profiles/no-aslr.json
 """)
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         convert_compose_to_helm_values(compose_path)
 
     assert any(
         "/var/lib/kubelet/seccomp/" in record.message
         for record in caplog.records
-        if record.levelno == logging.WARNING
+        if record.levelno == logging.INFO
     )
 
 

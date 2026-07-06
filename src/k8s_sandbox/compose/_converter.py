@@ -638,7 +638,7 @@ class _ServiceConverter:
         # the converter: it must already exist on every node. This isn't verified here,
         # so a missing file surfaces only as a pod launch failure, not a conversion
         # error.
-        logger.warning(
+        logger.info(
             f"seccomp profile '{value}' maps to a k8s Localhost profile; the file must "
             f"be pre-staged on every node under the kubelet seccomp root (default "
             f"'/var/lib/kubelet/seccomp/{value}'). A missing profile fails at pod "
