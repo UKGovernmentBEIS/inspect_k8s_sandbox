@@ -256,9 +256,6 @@ class _ServiceConverter:
         )
         # security_opt: map a seccomp entry (`seccomp=<value>` or `seccomp:<value>`) to
         # a seccompProfile in securityContext (which `user` above may also populate).
-        # Any other security_opt entries (e.g. `apparmor=`, `no-new-privileges`) have no
-        # k8s mapping here and are rejected rather than silently dropped, so a workload
-        # can't believe a security control is applied when it isn't.
         if (security_opt := src.pop("security_opt", None)) is not None:
             # The Compose schema constrains `security_opt` to an array, so a scalar is
             # already rejected by `_validate_compose` before we get here.
