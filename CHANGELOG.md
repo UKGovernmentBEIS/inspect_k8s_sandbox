@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The package and bundled `agent-env` chart versions are now unified, both jumping to
+  `0.13.0` (intervening numbers are unused).
+
 ## 2026-06-25 0.6.1
 
 - no changes - version bump only

@@ -119,7 +119,8 @@ this guide does not duplicate those steps.
 
 The repo-specific parts are:
 
-- Bump `version` in `pyproject.toml` and run `uv lock` to update `uv.lock`.
+- Bump `version` in `pyproject.toml` and run `uv lock` to update `uv.lock`. Set the
+  bundled `agent-env` chart version in `Chart.yaml` to match.
 - Replace the `## Unreleased` heading in `CHANGELOG.md` with `## <YYYY-MM-DD> <version>`
   (see existing entries for the format).
 - After merging, tag the release commit `vX.Y.Z` and push the tag.
