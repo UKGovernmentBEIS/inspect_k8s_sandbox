@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Require `inspect-ai>=0.3.236`.
 - The package and bundled `agent-env` chart versions are now unified, both jumping to
   `0.13.0` (intervening numbers are unused).
 
