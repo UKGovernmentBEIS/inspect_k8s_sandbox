@@ -144,3 +144,57 @@ This extension exists because Docker Compose cannot express many Kubernetes
 resources. It covers CPU and memory requests/limits (via `cpus`/`mem_limit` and
 `deploy.resources`), but has no concept of a disk (`ephemeral-storage`) request or
 limit, nor of resources such as `hugepages-*`.
+
+### Swap (`memswap_limit`)
+
+`memswap_limit` is ignored (with an info-level log) because Kubernetes has no
+Compose-equivalent per-container swap limit. On typical clusters, swap is disabled on
+nodes, so this is a no-op. However, if your cluster enables swap (via the Kubernetes
+[NodeSwap](https://kubernetes.io/docs/concepts/cluster-administration/swap-memory-management/)
+feature) and your Compose file set `memswap_limit` equal to `mem_limit` to disable swap
+for the container, the converted workload may instead be able to use swap. If that
+matters, disable swap at the node or pod level.
+
+## Security Options
+
+A `security_opt` **seccomp** entry (`seccomp=<value>` or `seccomp:<value>`) is converted
+to a `seccompProfile` in the pod's `securityContext` (merged with any context derived
+from `user`). Docker's special values map to Kubernetes profile types:
+
+| Compose value                  | Kubernetes `seccompProfile`                                 |
+| ------------------------------ | ----------------------------------------------------------- |
+| `seccomp=unconfined`           | `{type: Unconfined}`                                        |
+| `seccomp=builtin`              | `{type: RuntimeDefault}`                                    |
+| `seccomp=<relative/path.json>` | `{type: Localhost, localhostProfile: <relative/path.json>}` |
+
+Notes:
+
+- `builtin` is Docker's (undocumented) value for its built-in default profile.
+  `RuntimeDefault` — the container runtime's default profile — is the closest Kubernetes
+  analog, though the runtime's default may differ slightly from Docker's built-in
+  profile.
+- A profile path must be relative and descending (no absolute paths or `..`); it is
+  passed through as `localhostProfile`. **Kubernetes resolves this relative to the
+  kubelet's seccomp root, so the profile file must already be pre-staged on every node
+  (default `/var/lib/kubelet/seccomp/<path>`).** This is not verified at conversion time;
+  a missing profile fails only when the pod is launched. The converter logs an info-level
+  reminder.
+- Non-seccomp entries (e.g. `apparmor=...`, `no-new-privileges`) have no mapping here and
+  are rejected rather than silently dropped, so a workload can't believe a security
+  control is applied when it isn't.
+- **Runtime caveat (gVisor).** A seccomp profile only changes which syscalls the kernel
+  *allows*; it can't add syscalls the runtime doesn't implement. The chart defaults to the
+  `gvisor` runtime, whose `personality()` does not support `ADDR_NO_RANDOMIZE`. So a
+  profile that permits `personality` in order to run `setarch -R` (the portable way to
+  disable ASLR, e.g. for exploitation workloads) has no effect under gVisor — `setarch -R`
+  fails with `EINVAL` regardless of the profile. Set `runtime: runc` on the service
+  (mapped to `runtimeClassName: runc`) for those workloads.
+
+```yaml
+services:
+  my-service:
+    image: ubuntu
+    runtime: runc  # gVisor (the default) can't disable ASLR; see the runtime caveat above
+    security_opt:
+      - seccomp=profiles/no-aslr.json
+```
