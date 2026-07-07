@@ -103,6 +103,7 @@ def test_security_opt_reaches_converter_via_compose_entrypoint(
 
     config = parse_docker_config(str(compose_file))
     with ComposeConfigValuesSource(config).values_file() as values_file:
+        assert values_file is not None
         values = yaml.safe_load(values_file.read_text())
 
     security_context = values["services"]["default"]["securityContext"]
