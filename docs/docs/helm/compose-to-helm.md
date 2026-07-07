@@ -182,11 +182,19 @@ Notes:
 - Non-seccomp entries (e.g. `apparmor=...`, `no-new-privileges`) have no mapping here and
   are rejected rather than silently dropped, so a workload can't believe a security
   control is applied when it isn't.
+- **Runtime caveat (gVisor).** A seccomp profile only changes which syscalls the kernel
+  *allows*; it can't add syscalls the runtime doesn't implement. The chart defaults to the
+  `gvisor` runtime, whose `personality()` does not support `ADDR_NO_RANDOMIZE`. So a
+  profile that permits `personality` in order to run `setarch -R` (the portable way to
+  disable ASLR, e.g. for exploitation workloads) has no effect under gVisor — `setarch -R`
+  fails with `EINVAL` regardless of the profile. Set `runtime: runc` on the service
+  (mapped to `runtimeClassName: runc`) for those workloads.
 
 ```yaml
 services:
   my-service:
     image: ubuntu
+    runtime: runc  # gVisor (the default) can't disable ASLR; see the runtime caveat above
     security_opt:
       - seccomp=profiles/no-aslr.json
 ```
