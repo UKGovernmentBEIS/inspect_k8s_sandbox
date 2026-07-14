@@ -17,10 +17,20 @@ from kubernetes.client import (  # type: ignore
 from k8s_sandbox._diagnostics import describe_release_pods
 
 
-def _pod(name: str, phase: str, container_statuses, labels=None) -> V1Pod:
+def _pod(
+    name: str,
+    phase: str,
+    container_statuses,
+    labels=None,
+    init_container_statuses=None,
+) -> V1Pod:
     return V1Pod(
         metadata=V1ObjectMeta(name=name, labels=labels or {}),
-        status=V1PodStatus(phase=phase, container_statuses=container_statuses),
+        status=V1PodStatus(
+            phase=phase,
+            container_statuses=container_statuses,
+            init_container_statuses=init_container_statuses,
+        ),
     )
 
 
@@ -80,6 +90,51 @@ def test_surfaces_image_pull_backoff_reason_message_and_image() -> None:
     assert "ImagePullBackOff" in summary
     assert "Back-off pulling image" in summary
     assert "nonexistent.invalid/nope:latest" in summary
+
+
+def test_surfaces_failing_init_container_cause() -> None:
+    # A failing init container leaves the app container merely "waiting
+    # (PodInitializing)"; the actionable cause lives in the init container's status.
+    init_container = V1ContainerStatus(
+        name="setup",
+        image="busybox:1.36",
+        image_id="",
+        ready=False,
+        restart_count=2,
+        state=V1ContainerState(
+            waiting=V1ContainerStateWaiting(reason="CrashLoopBackOff")
+        ),
+        last_state=V1ContainerState(
+            terminated=V1ContainerStateTerminated(reason="Error", exit_code=1)
+        ),
+    )
+    app_container = V1ContainerStatus(
+        name="default",
+        image="busybox:1.36",
+        image_id="",
+        ready=False,
+        restart_count=0,
+        state=V1ContainerState(
+            waiting=V1ContainerStateWaiting(reason="PodInitializing")
+        ),
+    )
+    pods = [
+        _pod(
+            "rel-default",
+            "Pending",
+            container_statuses=[app_container],
+            init_container_statuses=[init_container],
+        )
+    ]
+
+    with _patch_client(pods):
+        summary = describe_release_pods(None, "default", "rel")
+
+    assert summary is not None
+    assert "init container 'setup'" in summary
+    assert "Error" in summary
+    assert "exit code 1" in summary
+    assert "restarted 2 time(s)" in summary
 
 
 def test_surfaces_failed_scheduling_event_when_pod_has_no_container_statuses() -> None:

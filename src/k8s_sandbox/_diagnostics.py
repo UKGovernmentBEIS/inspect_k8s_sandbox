@@ -54,6 +54,13 @@ def _collect_diagnostics(
         pod_names.add(pod.metadata.name)
         if pod.status is None:
             continue
+        # Init containers run to completion before the app containers start, so a
+        # failing init container leaves the app container merely "waiting
+        # (PodInitializing)"; the actionable cause is in the init container's status.
+        for container in pod.status.init_container_statuses or []:
+            line = _describe_container(container, is_init=True)
+            if line is not None:
+                lines.append(line)
         for container in pod.status.container_statuses or []:
             line = _describe_container(container)
             if line is not None:
@@ -80,7 +87,9 @@ def _describe_warning_events(
     return lines
 
 
-def _describe_container(container: V1ContainerStatus) -> str | None:
+def _describe_container(
+    container: V1ContainerStatus, is_init: bool = False
+) -> str | None:
     """Describe a single container's problematic state, or None if it looks healthy."""
     state = container.state
     last_state = container.last_state
@@ -109,7 +118,8 @@ def _describe_container(container: V1ContainerStatus) -> str | None:
     if not parts:
         return None
 
-    line = f"container '{container.name}': " + "; ".join(parts)
+    kind = "init container" if is_init else "container"
+    line = f"{kind} '{container.name}': " + "; ".join(parts)
     if container.restart_count:
         line += f", restarted {container.restart_count} time(s)"
     if container.image:
