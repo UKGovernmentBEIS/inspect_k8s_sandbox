@@ -14,6 +14,11 @@ COMPOSE_SCHEMA_PATH = (
     Path(__file__).parent.parent / "resources" / "compose" / "compose-spec.json"
 )
 
+# The canonical inspect_k8s_sandbox extension key is verbose; 'x-k8s' is a supported
+# shorthand alias. Both are accepted wherever the extension is read (top-level and
+# per-service). Listed canonical-first only for stable error messages.
+_EXTENSION_KEYS = ("x-inspect_k8s_sandbox", "x-k8s")
+
 
 class ComposeConverterError(Exception):
     """Raised when an error occurs converting a Docker Compose file to Helm values."""
@@ -52,9 +57,9 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
         result["volumes"] = _convert_volumes(volumes, compose_file)
     if networks := compose.pop("networks", None):
         result["networks"] = _convert_networks(networks, compose_file)
-    # The 'x-inspect_k8s_sandbox' key is used to add additional configuration to
-    # Docker Compose files for use in Helm values.
-    if extensions := compose.pop("x-inspect_k8s_sandbox", None):
+    # The 'x-inspect_k8s_sandbox' key (or its 'x-k8s' shorthand) is used to add
+    # additional configuration to Docker Compose files for use in Helm values.
+    if extensions := _pop_extension(compose, f"Compose file: '{compose_file}'."):
         result.update(_convert_extensions(extensions, compose_file))
     # Ignore the version key.
     compose.pop("version", None)
@@ -156,6 +161,22 @@ def _convert_networks(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
     return result
 
 
+def _pop_extension(src: dict[str, Any], context: str) -> Any:
+    """Pop the inspect_k8s_sandbox extension value from src.
+
+    Both the canonical 'x-inspect_k8s_sandbox' key and the shorter 'x-k8s' alias are
+    accepted. Returns the extension value, or None if neither key is present. Raises
+    if both keys are present, since which one would win is ambiguous.
+    """
+    present = [key for key in _EXTENSION_KEYS if key in src]
+    if len(present) > 1:
+        raise ComposeConverterError(
+            f"Specify only one of {present}; 'x-k8s' is an alias for "
+            f"'x-inspect_k8s_sandbox'. {context}"
+        )
+    return src.pop(present[0]) if present else None
+
+
 def _convert_extensions(
     extensions: dict[str, Any], compose_file: Path
 ) -> dict[str, Any]:
@@ -233,6 +254,37 @@ class _ServiceConverter:
         _transform(
             src, "user", result, "securityContext", self._user_to_security_context
         )
+        # security_opt: map a seccomp entry (`seccomp=<value>` or `seccomp:<value>`) to
+        # a seccompProfile in securityContext (which `user` above may also populate).
+        if (security_opt := src.pop("security_opt", None)) is not None:
+            # The Compose schema constrains `security_opt` to an array, so a scalar is
+            # already rejected by `_validate_compose` before we get here.
+            seccomp_profile = None
+            unsupported = []
+            for entry in security_opt:
+                option, value = _split_security_opt(entry)
+                if option == "seccomp":
+                    seccomp_profile = self._seccomp_to_profile(value)
+                else:
+                    unsupported.append(entry)
+            if unsupported:
+                raise ComposeConverterError(
+                    f"Unsupported 'security_opt' entries: {unsupported}. Only "
+                    f"'seccomp=<value>' (or 'seccomp:<value>') is supported. "
+                    f"{self.context}"
+                )
+            if seccomp_profile is not None:
+                result.setdefault("securityContext", {})["seccompProfile"] = (
+                    seccomp_profile
+                )
+        # memswap_limit: k8s exposes no Compose-equivalent per-container swap limit, so
+        # this Docker-only knob has no conversion target and is ignored (the rest of the
+        # config still converts).
+        if (memswap_limit := src.pop("memswap_limit", None)) is not None:
+            logger.info(
+                f"Ignoring 'memswap_limit: {memswap_limit}': Kubernetes does not "
+                f"expose a Compose-equivalent per-container swap limit. {self.context}"
+            )
         # Check for network_mode first
         network_mode = src.pop("network_mode", None)
         networks = src.get("networks")
@@ -292,6 +344,13 @@ class _ServiceConverter:
                 f"must be available for pulling from a container registry. "
                 f"{self.context}"
             )
+        # Apply the per-service extension ('x-inspect_k8s_sandbox' or its 'x-k8s'
+        # shorthand) after 'resources' has been built from mem_limit/cpus/deploy (so
+        # the merge target exists) but before the leftover-key guard (so it isn't
+        # flagged as unsupported).
+        extensions = _pop_extension(src, self.context)
+        if extensions is not None:
+            self._apply_service_extensions(extensions, result)
         if src:
             raise ComposeConverterError(
                 f"Unsupported key(s) in 'service': {set(src)}. {self.context}"
@@ -474,6 +533,68 @@ class _ServiceConverter:
             # Copy to avoid references which can result in anchors and aliases in YAML.
             resources["requests"] = resources["limits"].copy()
 
+    def _apply_service_extensions(
+        self, extensions: Any, result: dict[str, Any]
+    ) -> None:
+        """Apply the per-service 'x-inspect_k8s_sandbox' extension.
+
+        This is an escape hatch for expressing Kubernetes resources that the Docker
+        Compose shortcuts (mem_limit/cpus/deploy.resources) cannot, most notably
+        request-only resources such as 'ephemeral-storage'. Currently only a
+        'resources' block is supported.
+        """
+        if not isinstance(extensions, dict):
+            raise ComposeConverterError(
+                f"Invalid 'x-inspect_k8s_sandbox' type: {type(extensions)}. Expected "
+                f"dict. {self.context}"
+            )
+        if (resources := extensions.pop("resources", None)) is not None:
+            self._merge_extension_resources(resources, result)
+        if extensions:
+            raise ComposeConverterError(
+                f"Unsupported key(s) in service 'x-inspect_k8s_sandbox': "
+                f"{set(extensions)}. Only 'resources' is supported. {self.context}"
+            )
+
+    def _merge_extension_resources(self, src: Any, result: dict[str, Any]) -> None:
+        """Deep-merge an extension 'resources' block into the built resources.
+
+        Keys are merged into the existing 'requests'/'limits' dicts the converter
+        built from mem_limit/cpus/deploy. Conflicts (a key already set by those
+        shortcuts) are rejected rather than silently overridden. Resource names and
+        values are passed through generically so any Kubernetes resource can be set.
+        """
+        if not isinstance(src, dict):
+            raise ComposeConverterError(
+                f"Invalid 'x-inspect_k8s_sandbox.resources' type: {type(src)}. "
+                f"Expected dict. {self.context}"
+            )
+        resources = result.setdefault("resources", {})
+        for section in ("requests", "limits"):
+            if (values := src.pop(section, None)) is None:
+                continue
+            if not isinstance(values, dict):
+                raise ComposeConverterError(
+                    f"Invalid 'x-inspect_k8s_sandbox.resources.{section}' type: "
+                    f"{type(values)}. Expected dict. {self.context}"
+                )
+            target = resources.setdefault(section, {})
+            for key, value in values.items():
+                if key in target:
+                    raise ComposeConverterError(
+                        f"Conflicting '{section}.{key}' in "
+                        f"'x-inspect_k8s_sandbox.resources': already set to "
+                        f"'{target[key]}' (likely via mem_limit/cpus/deploy). "
+                        f"{self.context}"
+                    )
+                target[key] = value
+        if src:
+            raise ComposeConverterError(
+                f"Unsupported key(s) in 'x-inspect_k8s_sandbox.resources': "
+                f"{set(src)}. Only 'requests' and 'limits' are supported. "
+                f"{self.context}"
+            )
+
     def _user_to_security_context(self, user: str | int) -> dict[str, Any]:
         def parse_int(value: str) -> int:
             try:
@@ -495,6 +616,36 @@ class _ServiceConverter:
             f"str. {self.context}"
         )
 
+    def _seccomp_to_profile(self, value: str | None) -> dict[str, str]:
+        # Docker's special seccomp values map to k8s built-in profile types; anything
+        # else is treated as a custom profile path (k8s `Localhost`).
+        if value == "unconfined":
+            return {"type": "Unconfined"}
+        # `builtin` is Docker's (undocumented) value for its built-in default profile;
+        # k8s `RuntimeDefault` (the container runtime's default profile) is the closest
+        # analog, though the runtime's default may differ slightly from Docker's.
+        if value == "builtin":
+            return {"type": "RuntimeDefault"}
+        # k8s resolves `localhostProfile` relative to the kubelet's seccomp root, so it
+        # must be a non-empty, descending relative path (no absolute or `..` paths).
+        if not value or value.startswith("/") or ".." in value.split("/"):
+            raise ComposeConverterError(
+                f"Invalid seccomp profile in 'security_opt': '{value}'. Expected "
+                f"'unconfined', 'builtin', or a relative profile path (no absolute "
+                f"paths or '..'). {self.context}"
+            )
+        # Unlike the built-in profile types, a Localhost profile file is not shipped by
+        # the converter: it must already exist on every node. This isn't verified here,
+        # so a missing file surfaces only as a pod launch failure, not a conversion
+        # error.
+        logger.info(
+            f"seccomp profile '{value}' maps to a k8s Localhost profile; the file must "
+            f"be pre-staged on every node under the kubelet seccomp root (default "
+            f"'/var/lib/kubelet/seccomp/{value}'). A missing profile fails at pod "
+            f"launch, not conversion. {self.context}"
+        )
+        return {"type": "Localhost", "localhostProfile": value}
+
     def _duration_to_seconds(self, value: str) -> int:
         """Convert Docker Compose duration format (e.g., '30s', '1m') to seconds.
 
@@ -512,6 +663,19 @@ class _ServiceConverter:
         minutes = int(match.group("minutes") or 0)
         seconds = int(match.group("seconds") or 0)
         return hours * 3600 + minutes * 60 + seconds
+
+
+def _split_security_opt(entry: Any) -> tuple[str | None, str | None]:
+    # Compose accepts both `option=value` and `option:value` forms; split on whichever
+    # separator appears first. Returns (None, None) for non-string entries so the caller
+    # treats them as unsupported.
+    if not isinstance(entry, str):
+        return None, None
+    separators = [i for i, ch in enumerate(entry) if ch in "=:"]
+    if not separators:
+        return entry, None
+    idx = min(separators)
+    return entry[:idx], entry[idx + 1 :]
 
 
 def _make_volume_name_k8s_compliant(value: str) -> str:

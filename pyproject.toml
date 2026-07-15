@@ -1,12 +1,12 @@
 [project]
 name = "inspect-k8s-sandbox"
-version = "0.5.0"
+version = "0.13.0"
 description = "A Kubernetes Sandbox Environment for Inspect"
 authors = [{name = "UK AI Security Institute"}]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "inspect-ai>=0.3.161",
+  "inspect-ai>=0.3.236",
   "kubernetes>=35.0.0",
   "jsonschema>=4.23.0",
   "tenacity>=8.0.0",

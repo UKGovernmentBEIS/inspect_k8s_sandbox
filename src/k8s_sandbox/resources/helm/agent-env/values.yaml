@@ -4,12 +4,24 @@
 global:
   nameOverride: ""
   fullnameOverride: ""
-# -- A list of fully qualified domain names that pods within the agent environment are
-# allowed to access.
+# --  Domains the agent environment may reach. Egress is restricted to ports
+# 80/443 and the request identity must match an entry (TLS SNI on 443, HTTP Host
+# on 80). Use allowDomainsPorts to open other ports. Wildcard entries require
+# Cilium >= 1.18.
 # @default -- Empty list (no internet access)
 allowDomains: []
 # - "pypi.org"
 # - "files.pythonhosted.org"
+# --  Extra ports opened to the domains in `allowDomains`, as a list of {port,
+# protocol, domain}. `protocol` defaults to ANY (TCP+UDP) and `domain` (optional)
+# scopes the port to one allowDomains entry. If `domain` is not included, it will
+# apply to all allowed domains.
+# @default -- Empty list (only 80/443 are reachable on allowedDomains)
+allowDomainsPorts: []
+# - port: 22
+#   domain: github.com
+# - port: 443
+#   protocol: UDP
 # -- A list of CIDR ranges (e.g. 1.1.1.1/32) that pods within the agent environment are
 # allowed to access.
 # @default -- Empty list (no additional CIDR ranges compared to default policies)
@@ -139,8 +151,7 @@ volumes: {}
 # template engine then converted to YAML.
 additionalResources: []
 # -- A dict of annotations to apply to resources within the agent environment.
-annotations:
-  {}
+annotations: {}
   # inspectTaskName: "task-name"
 # -- A dict of labels to apply to resources within the agent environment.
 labels: {}

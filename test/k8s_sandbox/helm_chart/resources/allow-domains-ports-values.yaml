@@ -1,0 +1,10 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+allowDomains:
+  - "pypi.org"
+  - "*.debian.org"
+allowDomainsPorts:
+  - port: 22
+  - port: 443
+    protocol: udp

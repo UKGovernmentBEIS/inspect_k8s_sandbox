@@ -2,9 +2,26 @@
 
 ## Unreleased
 
-- Propagate the caller's context into the pod-operation worker thread to ensure that Inspect sandbox config overrides are honoured.
-- Raise typed `PodReplacedError` / `ContainerRestartedError` (instead of `RuntimeError`) when a pod operation detects the pod has been replaced or its container restarted, and refresh the cached pod identity so subsequent operations target the new pod instead of looping against a stale UID. `restarted_container_behavior="warn"` now also refreshes (previously left the cached UID stale).
-- Fix `exec(input=...)` failing with "Connection reset by peer" for large inputs (e.g. injecting a ~28 MiB binary): stdin is now written to the pod in ≤1 MiB WebSocket frames instead of a single oversized frame. `write_file` shares the same chunking helper.
+- Compose to HELM: Support the `security_opt` seccomp option (mapped to a pod `seccompProfile`) and ignore the unsupported `memswap_limit`. See [Compose to Helm](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/) for details.
+- The package and bundled `agent-env` chart versions are now unified, both jumping to
+  `0.13.0` (intervening numbers are unused).
+
+## 2026-06-25 0.6.1
+
+- no changes - version bump only
+
+## 2026-06-25 0.6.0
+
+- Replace non-UTF-8 bytes in command output rather than throwing `UnicodeDecodeError`.
+- **BREAKING CHANGE**: `allowDomains` egress is now restricted to ports 80/443, with the request identity enforced (TLS SNI on 443, HTTP `Host` on 80) rather than just the resolved IP. Wildcard entries require Cilium >= 1.18. New `allowDomainsPorts` opens other ports to those domains (IP-pinned; see `values.yaml`).
+- Add a per-service `x-inspect_k8s_sandbox.resources` compose extension (alias `x-k8s`) for Kubernetes resource `requests`/`limits` (e.g. `ephemeral-storage`) that the `mem_limit`/`cpus`/`deploy.resources` shortcuts cannot express. Merged with those shortcuts; conflicts are rejected.
+- Add optional `serviceAccountName` to the agent-env Helm chart for IRSA-based S3 access from sandbox pods.
+- Honour Inspect sandbox config overrides (e.g. exec output size limits) that were previously ignored on Kubernetes.
+- Recover from pod replacement or container restart instead of looping against the old pod, and raise typed `PodReplacedError` / `ContainerRestartedError` (was `RuntimeError`).
+- Include the cause's type and message in `K8sError`'s string.
+- Don't misreport a user command's own stderr as a `runuser` configuration error under `exec(user=...)`.
+- Fix `exec(input=...)` and `write_file` failing with "Connection reset by peer" for large inputs (e.g. a ~28 MiB binary).
+- Fix `TimeoutError`s in high-concurrency evals (many concurrent clusters).
 
 ## 2026-05-07 0.5.0
 

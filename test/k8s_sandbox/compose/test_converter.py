@@ -1,10 +1,13 @@
+import json
 import logging
 from pathlib import Path
 from typing import Any, Callable
 
+import jsonschema
 import pytest
 import yaml
 
+import k8s_sandbox
 from k8s_sandbox.compose._converter import (
     ComposeConverterError,
     convert_compose_to_helm_values,
@@ -584,6 +587,168 @@ services:
     assert "Unsupported key(s) in 'resources'" in str(exc_info.value)
 
 
+### Service-level x-inspect_k8s_sandbox extension
+
+
+def test_service_extension_request_only_ephemeral_storage(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # With no mem/cpu shortcuts there is no limits block; request-only is preserved.
+    assert result["services"]["my-service"]["resources"] == {
+        "requests": {"ephemeral-storage": "80Gi"},
+    }
+
+
+def test_service_extension_merges_into_existing_resources(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    mem_limit: 32g
+    cpus: 4.0
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # ephemeral-storage is merged into the Guaranteed-QoS requests block; memory/cpu
+    # remain in both requests and limits; ephemeral-storage is NOT added to limits.
+    assert result["services"]["my-service"]["resources"] == {
+        "limits": {"memory": "32Gi", "cpu": 4.0},
+        "requests": {"memory": "32Gi", "cpu": 4.0, "ephemeral-storage": "80Gi"},
+    }
+
+
+def test_service_extension_accepts_arbitrary_resource_names(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # The extension is a generic Kubernetes-resource escape hatch, not hardcoded to
+    # ephemeral-storage.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      resources:
+        limits:
+          hugepages-2Mi: 128Mi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"] == {
+        "limits": {"hugepages-2Mi": "128Mi"},
+    }
+
+
+def test_rejects_unsupported_service_extension_key(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      foo: 1
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported key(s) in service 'x-inspect_k8s_sandbox'" in str(
+        exc_info.value
+    )
+
+
+def test_rejects_unsupported_service_extension_resources_key(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # Only 'requests' and 'limits' are supported (Docker's 'reservations' is not).
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      resources:
+        reservations:
+          ephemeral-storage: 80Gi
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported key(s) in 'x-inspect_k8s_sandbox.resources'" in str(
+        exc_info.value
+    )
+
+
+def test_rejects_service_extension_resource_conflict(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # mem_limit populates requests.memory, so the extension may not also set it.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    mem_limit: 32g
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          memory: 16Gi
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Conflicting 'requests.memory'" in str(exc_info.value)
+
+
+def test_service_extension_output_validates_against_chart_schema(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: my-image
+    mem_limit: 32g
+    cpus: 4.0
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    schema_path = (
+        Path(k8s_sandbox.__file__).parent
+        / "resources"
+        / "helm"
+        / "agent-env"
+        / "values.schema.json"
+    )
+    schema = json.loads(schema_path.read_text())
+    # 'global' is injected by inspect at install time; add it to satisfy the schema.
+    jsonschema.validate({**result, "global": {}}, schema)
+
+
 def test_converts_user_to_security_context(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
@@ -635,6 +800,256 @@ services:
         convert_compose_to_helm_values(compose_path)
 
     assert "Invalid 'user' value" in str(exc_info.value)
+
+
+def test_converts_security_opt_seccomp(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    security_opt:
+      - seccomp=./profiles/no-aslr.json
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"]["seccompProfile"] == {
+        "type": "Localhost",
+        "localhostProfile": "./profiles/no-aslr.json",
+    }
+
+
+def test_merges_seccomp_into_user_security_context(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # `user` and `security_opt` both populate securityContext; neither clobbers the
+    # other.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    user: 1000:1001
+    security_opt:
+      - seccomp=./profiles/no-aslr.json
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"] == {
+        "runAsUser": 1000,
+        "runAsGroup": 1001,
+        "seccompProfile": {
+            "type": "Localhost",
+            "localhostProfile": "./profiles/no-aslr.json",
+        },
+    }
+
+
+def test_seccomp_output_validates_against_chart_schema(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: my-image
+    security_opt:
+      - seccomp=./profiles/no-aslr.json
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    schema_path = (
+        Path(k8s_sandbox.__file__).parent
+        / "resources"
+        / "helm"
+        / "agent-env"
+        / "values.schema.json"
+    )
+    schema = json.loads(schema_path.read_text())
+    # 'global' is injected by inspect at install time; add it to satisfy the schema.
+    jsonschema.validate({**result, "global": {}}, schema)
+
+
+def test_converts_security_opt_seccomp_colon_separator(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # Compose accepts both `option=value` and `option:value`.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    security_opt:
+      - "seccomp:profiles/no-aslr.json"
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"]["seccompProfile"] == {
+        "type": "Localhost",
+        "localhostProfile": "profiles/no-aslr.json",
+    }
+
+
+@pytest.mark.parametrize("sep", ["=", ":"])
+def test_converts_security_opt_seccomp_unconfined(
+    sep: str, tmp_compose: TmpComposeFixture
+) -> None:
+    # Docker's `seccomp=unconfined` maps to the k8s Unconfined profile type, not a
+    # Localhost profile literally named "unconfined". Both `=` and `:` are accepted.
+    compose_path = tmp_compose(f"""
+services:
+  my-service:
+    security_opt:
+      - "seccomp{sep}unconfined"
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"]["seccompProfile"] == {
+        "type": "Unconfined",
+    }
+
+
+@pytest.mark.parametrize("sep", ["=", ":"])
+def test_converts_security_opt_seccomp_builtin(
+    sep: str, tmp_compose: TmpComposeFixture
+) -> None:
+    # Docker's built-in default profile maps to the runtime's default on k8s. Both `=`
+    # and `:` are accepted.
+    compose_path = tmp_compose(f"""
+services:
+  my-service:
+    security_opt:
+      - "seccomp{sep}builtin"
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"]["seccompProfile"] == {
+        "type": "RuntimeDefault",
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "seccomp=/etc/seccomp/profile.json",  # absolute
+        "seccomp=../escape.json",  # path traversal
+        "seccomp=profiles/../../escape.json",  # traversal mid-path
+        "seccomp=",  # empty
+    ],
+)
+def test_rejects_invalid_seccomp_profile_path(
+    value: str, tmp_compose: TmpComposeFixture
+) -> None:
+    compose_path = tmp_compose(f"""
+services:
+  my-service:
+    security_opt:
+      - "{value}"
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Invalid seccomp profile" in str(exc_info.value)
+
+
+def test_rejects_non_seccomp_security_opt(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # Non-seccomp security_opt entries have no k8s mapping and must be rejected rather
+    # than silently dropped (so a security control isn't believed-applied when it
+    # isn't).
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    security_opt:
+      - no-new-privileges:true
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported 'security_opt' entries" in str(exc_info.value)
+
+
+def test_rejects_non_seccomp_security_opt_alongside_seccomp(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # A valid seccomp entry does not excuse an unsupported sibling entry.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    security_opt:
+      - seccomp=./profiles/no-aslr.json
+      - apparmor=unconfined
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Unsupported 'security_opt' entries" in str(exc_info.value)
+    assert "apparmor=unconfined" in str(exc_info.value)
+
+
+def test_rejects_scalar_security_opt(tmp_compose: TmpComposeFixture) -> None:
+    # The Compose schema requires `security_opt` to be a list, so a scalar is rejected
+    # up front by schema validation (never reaching the seccomp conversion logic).
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    security_opt: seccomp=unconfined
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "failed validation against the Compose schema" in str(exc_info.value)
+
+
+def test_logs_localhost_seccomp_profile_must_be_prestaged(
+    caplog: pytest.LogCaptureFixture, tmp_compose: TmpComposeFixture
+) -> None:
+    # A Localhost profile file isn't shipped by the converter; log a reminder that it
+    # must be pre-staged on every node, since a missing file only fails at pod launch.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    security_opt:
+      - seccomp=profiles/no-aslr.json
+""")
+
+    with caplog.at_level(logging.INFO):
+        convert_compose_to_helm_values(compose_path)
+
+    assert any(
+        "/var/lib/kubelet/seccomp/" in record.message
+        for record in caplog.records
+        if record.levelno == logging.INFO
+    )
+
+
+def test_ignores_memswap_limit(
+    caplog: pytest.LogCaptureFixture, tmp_compose: TmpComposeFixture
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    mem_limit: 1G
+    memswap_limit: 1G
+""")
+
+    with caplog.at_level(logging.INFO):
+        result = convert_compose_to_helm_values(compose_path)
+
+    # memswap_limit is dropped (not carried into output) and an info log naming the
+    # ignored value is emitted.
+    assert "memswap_limit" not in result["services"]["my-service"]
+    assert any(
+        "Ignoring 'memswap_limit: 1G'" in record.message for record in caplog.records
+    )
 
 
 def test_ignores_init_true(tmp_compose: TmpComposeFixture) -> None:
@@ -951,6 +1366,91 @@ x-inspect_k8s_sandbox:
         convert_compose_to_helm_values(compose_path)
 
     assert "Unsupported key(s) in 'x-inspect_k8s_sandbox'" in str(exc_info.value)
+
+
+### x-k8s extension alias
+
+
+def test_converts_allow_domains_via_x_k8s_alias(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # 'x-k8s' is a shorthand alias for the verbose 'x-inspect_k8s_sandbox' key.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-k8s:
+  allow_domains:
+    - example.com
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["allowDomains"] == ["example.com"]
+
+
+def test_converts_service_extension_via_x_k8s_alias(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-k8s:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"] == {
+        "requests": {"ephemeral-storage": "80Gi"},
+    }
+
+
+def test_rejects_both_extension_keys_at_top_level(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-inspect_k8s_sandbox:
+  allow_domains:
+    - example.com
+x-k8s:
+  allow_entities:
+    - world
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Specify only one of" in str(exc_info.value)
+
+
+def test_rejects_both_extension_keys_on_service(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    x-inspect_k8s_sandbox:
+      resources:
+        requests:
+          ephemeral-storage: 80Gi
+    x-k8s:
+      resources:
+        limits:
+          ephemeral-storage: 80Gi
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Specify only one of" in str(exc_info.value)
 
 
 ### Network elements

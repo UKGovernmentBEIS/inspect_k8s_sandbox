@@ -1,6 +1,6 @@
 # agent-env
 
-![Version: 0.12.0](https://img.shields.io/badge/Version-0.12.0-informational?style=flat-square)
+![Version: 0.13.0](https://img.shields.io/badge/Version-0.13.0-informational?style=flat-square)
 
 ## Values
 
@@ -8,7 +8,8 @@
 |-----|------|---------|-------------|
 | additionalResources | list | `[]` | A list of additional resources to deploy within the agent environment. They're passed through the Helm template engine. String values are passed through the template engine then converted to YAML. |
 | allowCIDR | list | Empty list (no additional CIDR ranges compared to default policies) | A list of CIDR ranges (e.g. 1.1.1.1/32) that pods within the agent environment are allowed to access. |
-| allowDomains | list | Empty list (no internet access) | A list of fully qualified domain names that pods within the agent environment are allowed to access. |
+| allowDomains | list | Empty list (no internet access) | Domains the agent environment may reach. Egress is restricted to ports 80/443 and the request identity must match an entry (TLS SNI on 443, HTTP Host on 80). Use allowDomainsPorts to open other ports. Wildcard entries require Cilium >= 1.18. |
+| allowDomainsPorts | list | Empty list (only 80/443 are reachable on allowedDomains) | Extra ports opened to the domains in `allowDomains`, as a list of {port, protocol, domain}. `protocol` defaults to ANY (TCP+UDP) and `domain` (optional) scopes the port to one allowDomains entry. If `domain` is not included, it will apply to all allowed domains. |
 | allowEntities | list | Empty list (no additional entities compared to default policies) | A list of Cilium entities (e.g. "world") that pods within the agent environment are allowed to access. |
 | annotations | object | `{}` | A dict of annotations to apply to resources within the agent environment. |
 | corednsCommand | list | `["/coredns","-conf","/etc/coredns/Corefile"]` | The command to use for the coredns container. |

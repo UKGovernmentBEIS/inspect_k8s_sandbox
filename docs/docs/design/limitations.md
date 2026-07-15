@@ -41,9 +41,10 @@ chart](../helm//built-in-chart.md#resource-requests-and-limits).
 
 You can reduce the impact of a container restarting by using persistent volumes.
 
-The framework will issue a warning if a container restarts during an eval. If you set
-the `restarted_container_behaviour` parameter to `raise`, the eval will fail the sample
-if it detects a container restart.
+The framework will issue a warning if a container restarts during an eval. If a
+subsequent `exec()` fails after a detected restart, the restart is raised as the cause
+regardless of mode. If you set the `restarted_container_behaviour` parameter to `raise`,
+the eval will fail the sample immediately on detection, even if `exec()` has not failed.
 
 ??? question "Why not use Jobs over StatefulSets?"
 
