@@ -4,6 +4,7 @@ from kubernetes.client import (  # type: ignore
     CoreV1Event,
     CoreV1EventList,
     V1ContainerState,
+    V1ContainerStateRunning,
     V1ContainerStateTerminated,
     V1ContainerStateWaiting,
     V1ContainerStatus,
