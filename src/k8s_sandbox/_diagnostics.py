@@ -49,7 +49,7 @@ def _collect_diagnostics(
     lines: list[str] = []
     pod_names: set[str] = set()
     for pod in pods.items:
-        if pod.metadata is None:
+        if pod.metadata is None or pod.metadata.name is None:
             continue
         pod_names.add(pod.metadata.name)
         if pod.status is None:
