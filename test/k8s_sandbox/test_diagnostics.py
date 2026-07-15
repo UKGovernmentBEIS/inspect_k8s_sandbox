@@ -180,7 +180,7 @@ def test_returns_none_when_all_containers_healthy_and_no_events() -> None:
         image_id="",
         ready=True,
         restart_count=0,
-        state=V1ContainerState(running={"started_at": None}),
+        state=V1ContainerState(running=V1ContainerStateRunning(started_at=None)),
     )
     pods = [_pod("rel-default", "Running", [container])]
 
