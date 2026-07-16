@@ -104,6 +104,9 @@ def _describe_container(
             detail += f": {waiting.message}"
         parts.append(f"waiting ({detail})")
     if terminated is not None:
+        # Init containers run to completion: exit 0 is success, not a symptom.
+        if is_init and terminated.exit_code == 0:
+            return None
         parts.append(
             f"terminated {terminated.reason} (exit code {terminated.exit_code})"
         )

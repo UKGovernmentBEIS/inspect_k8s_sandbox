@@ -138,6 +138,85 @@ def test_surfaces_failing_init_container_cause() -> None:
     assert "restarted 2 time(s)" in summary
 
 
+def test_omits_completed_init_container_when_app_container_failing() -> None:
+    # Only the app container's failure is reported; the completed (exit 0) init
+    # container is omitted.
+    init_container = V1ContainerStatus(
+        name="setup",
+        image="busybox:1.36",
+        image_id="",
+        ready=True,
+        restart_count=0,
+        state=V1ContainerState(
+            terminated=V1ContainerStateTerminated(reason="Completed", exit_code=0)
+        ),
+    )
+    app_container = V1ContainerStatus(
+        name="default",
+        image="busybox:1.36",
+        image_id="",
+        ready=False,
+        restart_count=3,
+        state=V1ContainerState(
+            waiting=V1ContainerStateWaiting(reason="CrashLoopBackOff")
+        ),
+        last_state=V1ContainerState(
+            terminated=V1ContainerStateTerminated(reason="Error", exit_code=1)
+        ),
+    )
+    pods = [
+        _pod(
+            "rel-default",
+            "Running",
+            container_statuses=[app_container],
+            init_container_statuses=[init_container],
+        )
+    ]
+
+    with _patch_client(pods):
+        summary = describe_release_pods(None, "default", "rel")
+
+    assert summary is not None
+    assert "init container" not in summary
+    assert "container 'default'" in summary
+    assert "exit code 1" in summary
+
+
+def test_returns_none_when_init_completed_and_app_healthy() -> None:
+    # A healthy pod with a completed init container produces no diagnostics at all.
+    init_container = V1ContainerStatus(
+        name="setup",
+        image="busybox:1.36",
+        image_id="",
+        ready=True,
+        restart_count=0,
+        state=V1ContainerState(
+            terminated=V1ContainerStateTerminated(reason="Completed", exit_code=0)
+        ),
+    )
+    app_container = V1ContainerStatus(
+        name="default",
+        image="busybox:1.36",
+        image_id="",
+        ready=True,
+        restart_count=0,
+        state=V1ContainerState(running=V1ContainerStateRunning(started_at=None)),
+    )
+    pods = [
+        _pod(
+            "rel-default",
+            "Running",
+            container_statuses=[app_container],
+            init_container_statuses=[init_container],
+        )
+    ]
+
+    with _patch_client(pods):
+        summary = describe_release_pods(None, "default", "rel")
+
+    assert summary is None
+
+
 def test_surfaces_failed_scheduling_event_when_pod_has_no_container_statuses() -> None:
     # An unschedulable pod stays Pending with no container statuses; the actionable
     # detail is in a FailedScheduling Warning event.
