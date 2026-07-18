@@ -7,6 +7,9 @@ from typing import Any, Callable
 
 import jsonschema
 import yaml
+from inspect_ai.util import NetworkAccess
+
+from k8s_sandbox._network_access import network_access_to_helm_values
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +60,22 @@ def convert_compose_to_helm_values(compose_file: Path) -> dict[str, Any]:
         result["volumes"] = _convert_volumes(volumes, compose_file)
     if networks := compose.pop("networks", None):
         result["networks"] = _convert_networks(networks, compose_file)
-    # The 'x-inspect_k8s_sandbox' key (or its 'x-k8s' shorthand) is used to add
-    # additional configuration to Docker Compose files for use in Helm values.
-    if extensions := _pop_extension(compose, f"Compose file: '{compose_file}'."):
-        result.update(_convert_extensions(extensions, compose_file))
+    # The shared, cross-provider 'x-inspect-network' extension carries the full egress
+    # vocabulary. The k8s-native 'x-inspect_k8s_sandbox' key (or its 'x-k8s' alias) is
+    # still accepted for allow_domains/allow_entities. Both normalize through
+    # NetworkAccess; specifying both is ambiguous and rejected.
+    shared_network = compose.pop("x-inspect-network", None)
+    legacy_extension = _pop_extension(compose, f"Compose file: '{compose_file}'.")
+    if shared_network is not None and legacy_extension is not None:
+        raise ComposeConverterError(
+            f"Specify only one of 'x-inspect-network' or '{_EXTENSION_KEYS[0]}' "
+            f"(alias '{_EXTENSION_KEYS[1]}'); 'x-inspect-network' is the "
+            f"cross-provider egress extension. Compose file: '{compose_file}'."
+        )
+    if shared_network is not None:
+        result.update(_convert_shared_network_extension(shared_network, compose_file))
+    elif legacy_extension is not None:
+        result.update(_convert_extensions(legacy_extension, compose_file))
     # Ignore the version key.
     compose.pop("version", None)
     if compose:
@@ -177,32 +192,46 @@ def _pop_extension(src: dict[str, Any], context: str) -> Any:
     return src.pop(present[0]) if present else None
 
 
+def _convert_shared_network_extension(
+    shared: Any, compose_file: Path
+) -> dict[str, Any]:
+    """Validate a top-level 'x-inspect-network' block and serialize to Helm values."""
+    try:
+        na = NetworkAccess.model_validate(shared)
+    except Exception as e:  # pydantic ValidationError
+        raise ComposeConverterError(
+            f"Invalid 'x-inspect-network' policy: {e}. Compose file: '{compose_file}'."
+        ) from e
+    return network_access_to_helm_values(na)
+
+
 def _convert_extensions(
     extensions: dict[str, Any], compose_file: Path
 ) -> dict[str, Any]:
-    result: dict[str, Any] = dict()
-    if allow_domains := extensions.pop("allow_domains", None):
-        if not isinstance(allow_domains, list):
-            raise ComposeConverterError(
-                f"Invalid 'allow_domains' type: {type(allow_domains)}. "
-                f"Expected list. "
-                f"Compose file: '{compose_file}'."
-            )
-        result["allowDomains"] = allow_domains
-    if allow_entities := extensions.pop("allow_entities", None):
-        if not isinstance(allow_entities, list):
-            raise ComposeConverterError(
-                f"Invalid 'allow_entities' type: {type(allow_entities)}. "
-                f"Expected list. "
-                f"Compose file: '{compose_file}'."
-            )
-        result["allowEntities"] = allow_entities
+    # Legacy k8s-native surface: allow_domains + allow_entities, normalized through
+    # NetworkAccess so output matches the shared surface (empty lists omitted).
+    allow_domains = extensions.pop("allow_domains", None)
+    if allow_domains is not None and not isinstance(allow_domains, list):
+        raise ComposeConverterError(
+            f"Invalid 'allow_domains' type: {type(allow_domains)}. Expected list. "
+            f"Compose file: '{compose_file}'."
+        )
+    allow_entities = extensions.pop("allow_entities", None)
+    if allow_entities is not None and not isinstance(allow_entities, list):
+        raise ComposeConverterError(
+            f"Invalid 'allow_entities' type: {type(allow_entities)}. Expected list. "
+            f"Compose file: '{compose_file}'."
+        )
     if extensions:
         raise ComposeConverterError(
             f"Unsupported key(s) in 'x-inspect_k8s_sandbox': {set(extensions)}. "
             f"Compose file: '{compose_file}'."
         )
-    return result
+    na = NetworkAccess(
+        allow_domains=allow_domains or [],
+        allow_entities=allow_entities or [],
+    )
+    return network_access_to_helm_values(na)
 
 
 class _ServiceConverter:

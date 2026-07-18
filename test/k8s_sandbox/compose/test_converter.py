@@ -1629,3 +1629,50 @@ services:
     # Single service should keep its original name
     assert "my-service" in result["services"]
     assert "default" not in result["services"]
+
+
+def test_converts_shared_x_inspect_network_full_vocab(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-inspect-network:
+  allow_domains:
+    - example.com
+  allow_cidr:
+    - 1.1.1.1/32
+  allow_domains_ports:
+    - port: 22
+      domain: example.com
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["allowDomains"] == ["example.com"]
+    assert result["allowCIDR"] == ["1.1.1.1/32"]
+    assert result["allowDomainsPorts"] == [{"port": 22, "domain": "example.com"}]
+
+
+def test_rejects_shared_and_legacy_extension_conflict(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # x-inspect-network is the cross-provider egress key; combining it with the legacy
+    # k8s-native key is ambiguous and must be rejected.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+x-inspect-network:
+  allow_domains:
+    - example.com
+x-inspect_k8s_sandbox:
+  allow_entities:
+    - world
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Specify only one of" in str(exc_info.value)
