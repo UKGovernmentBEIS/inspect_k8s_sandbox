@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A Helm release which fails to uninstall during cleanup is now reported by name, with the `inspect sandbox cleanup k8s <release>` command to remove it. Previously the failure was silent and the release was left installed in the cluster.
 - On Helm install failure, the raised error now includes pod diagnostics.
 - Compose to HELM: Support the `security_opt` seccomp option (mapped to a pod `seccompProfile`) and ignore the unsupported `memswap_limit`. See [Compose to Helm](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/) for details.
 - The package and bundled `agent-env` chart versions are now unified, both jumping to

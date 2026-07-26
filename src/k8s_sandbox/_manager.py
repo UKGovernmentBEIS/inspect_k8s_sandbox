@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextvars import ContextVar
 
 from rich import box, print
@@ -11,6 +12,8 @@ from rich.table import Table
 from k8s_sandbox._helm import Release, get_all_release_names
 from k8s_sandbox._helm import uninstall as helm_uninstall
 from k8s_sandbox._kubernetes_api import get_current_context_name, get_default_namespace
+
+logger = logging.getLogger(__name__)
 
 
 class HelmReleaseManager:
@@ -72,11 +75,25 @@ class HelmReleaseManager:
             self._print_cleanup_instructions()
             return
         _print_do_not_interrupt()
-        tasks = [release.uninstall(quiet=False) for release in self._installed_releases]
+        releases = list(self._installed_releases)
+        tasks = [release.uninstall(quiet=False) for release in releases]
         # Clear the list before awaiting the tasks to prevent other calls to this method
         # from interfering.
         self._installed_releases.clear()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # An uninstall which raises here is not retried and the release has already
+        # been dropped from tracking, so it would otherwise be left installed with no
+        # record of it anywhere. Name it and say how to remove it.
+        for release, result in zip(releases, results):
+            if isinstance(result, BaseException):
+                logger.error(
+                    "Failed to uninstall Helm release '%s'. It is still installed in "
+                    "the cluster and will not be retried. Remove it with: "
+                    "inspect sandbox cleanup k8s %s",
+                    release.release_name,
+                    release.release_name,
+                    exc_info=result,
+                )
 
     def _print_cleanup_instructions(self) -> None:
         table = Table(
