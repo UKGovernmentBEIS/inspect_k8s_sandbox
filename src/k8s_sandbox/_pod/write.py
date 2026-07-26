@@ -28,10 +28,15 @@ class WriteFileOperation(PodOperation):
         # stream in v4.channel.k8s.io (which means the websocket connection would never
         # close).
         head_command = f"head -c {file_size}"
+        dst_quoted = shlex.quote(dst.as_posix())
+        # `head -c N` exits 0 even on a short read, silently leaving a truncated file.
+        # Verify the byte count so a short write fails -> PodError -> retry.
+        # https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225
+        verify_command = f'[ "$(wc -c < {dst_quoted})" -eq {file_size} ]'
         command = [
             "/bin/sh",
             "-c",
-            f"{mkdir_command} && {head_command} > {shlex.quote(dst.as_posix())}",
+            f"{mkdir_command} && {head_command} > {dst_quoted} && {verify_command}",
         ]
         yield from self.create_websocket_client_for_exec(
             command=command,

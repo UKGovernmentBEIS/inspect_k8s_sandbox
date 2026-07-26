@@ -25,6 +25,7 @@ containers which you'd like `K8sSandboxEnvironment` to directly interact with (i
 * `sync`
 * `echo`
 * `head`
+* `wc`
 * `cat`
 * `mkdir`
 * `timeout`
