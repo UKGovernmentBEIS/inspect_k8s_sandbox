@@ -112,8 +112,8 @@ async def test_cleanup_all_reports_failures_and_raises(
     assert attempted == ["aaaaaaaa", "bbbbbbbb"]
     assert "Failed to uninstall 1 of 2" in str(exc_info.value.message)
     output = capsys.readouterr().out
-    assert "bbbbbbbb" in output
     assert "inspect sandbox cleanup k8s bbbbbbbb" in output
+    assert "inspect sandbox cleanup k8s aaaaaaaa" not in output
     assert "Complete." not in output
 
 

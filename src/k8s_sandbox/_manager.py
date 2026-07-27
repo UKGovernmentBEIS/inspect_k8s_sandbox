@@ -97,22 +97,10 @@ class HelmReleaseManager:
                 )
 
     def _print_cleanup_instructions(self) -> None:
-        table = Table(
-            title="K8s Sandbox Releases (not yet cleaned up):",
-            box=box.SQUARE_DOUBLE_HEAD,
-            show_lines=True,
-            title_style="bold",
-            title_justify="left",
+        _print_release_cleanup_table(
+            "K8s Sandbox Releases (not yet cleaned up):",
+            [release.release_name for release in self._installed_releases],
         )
-        table.add_column("Release(s)", no_wrap=True)
-        table.add_column("Cleanup")
-        for release in self._installed_releases:
-            table.add_row(
-                release.release_name,
-                f"[blue]inspect sandbox cleanup k8s {release.release_name}[/blue]",
-            )
-        print("")
-        print(table)
         print(
             "\nCleanup all sandbox releases with: "
             "[blue]inspect sandbox cleanup k8s[/blue]\n"
@@ -148,24 +136,6 @@ async def uninstall_all_unmanaged_releases() -> None:
             table.add_row(f"[red]{release}[/red]")
         print(table)
 
-    def _print_failures(releases: list[str]) -> None:
-        table = Table(
-            title="Releases which failed to uninstall:",
-            box=box.SQUARE_DOUBLE_HEAD,
-            show_lines=True,
-            title_style="bold",
-            title_justify="left",
-        )
-        table.add_column("Release(s)", no_wrap=True)
-        table.add_column("Retry")
-        for release in releases:
-            table.add_row(
-                release,
-                f"[blue]inspect sandbox cleanup k8s {release}[/blue]",
-            )
-        print("")
-        print(table)
-
     namespace = get_default_namespace(context_name=None)
     releases = await get_all_release_names(namespace, context_name=None)
     if len(releases) == 0:
@@ -193,12 +163,31 @@ async def uninstall_all_unmanaged_releases() -> None:
         if isinstance(result, BaseException)
     ]
     if failed:
-        _print_failures(failed)
+        _print_release_cleanup_table("Releases which failed to uninstall:", failed)
         raise PrerequisiteError(
             f"Failed to uninstall {len(failed)} of {len(releases)} Inspect sandbox "
             f"release(s). Some of their resources may still exist in the cluster."
         )
     print("Complete.")
+
+
+def _print_release_cleanup_table(title: str, release_names: list[str]) -> None:
+    table = Table(
+        title=title,
+        box=box.SQUARE_DOUBLE_HEAD,
+        show_lines=True,
+        title_style="bold",
+        title_justify="left",
+    )
+    table.add_column("Release(s)", no_wrap=True)
+    table.add_column("Cleanup")
+    for release_name in release_names:
+        table.add_row(
+            release_name,
+            f"[blue]inspect sandbox cleanup k8s {release_name}[/blue]",
+        )
+    print("")
+    print(table)
 
 
 def _print_do_not_interrupt() -> None:

@@ -2,8 +2,7 @@
 
 ## Unreleased
 
-- `inspect sandbox cleanup k8s` (with no release name) now lists any releases which failed to uninstall and exits non-zero, rather than reporting `Complete.` and exiting 0. This matches `inspect sandbox cleanup k8s <release>`, which already exited non-zero on failure.
-- A Helm release which fails to uninstall during cleanup is now reported by name, with the `inspect sandbox cleanup k8s <release>` command to remove it. Previously the failure was silent and the release was left installed in the cluster.
+- Helm releases which fail to uninstall are now reported by name, along with the `inspect sandbox cleanup k8s <release>` command to retry them. This covers both end-of-task cleanup and `inspect sandbox cleanup k8s` (with no release name), which now exits non-zero instead of reporting `Complete.`.
 - On Helm install failure, the raised error now includes pod diagnostics.
 - Compose to HELM: Support the `security_opt` seccomp option (mapped to a pod `seccompProfile`) and ignore the unsupported `memswap_limit`. See [Compose to Helm](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/) for details.
 - The package and bundled `agent-env` chart versions are now unified, both jumping to
