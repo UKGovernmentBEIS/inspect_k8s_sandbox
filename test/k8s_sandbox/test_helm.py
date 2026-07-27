@@ -734,3 +734,47 @@ async def test_helm_labels_appear_on_release_secret(
             assert secret_labels.labels.get(key) == value
     finally:
         await release.uninstall(quiet=True)
+
+
+async def test_install_error_includes_pod_diagnostics() -> None:
+    release = Release(
+        __file__,
+        chart_path=Path("/non_existent_chart"),
+        values_source=ValuesSource.none(),
+        context_name=None,
+    )
+    result = ExecResult(
+        success=False,
+        returncode=1,
+        stdout="",
+        stderr="Error: INSTALLATION FAILED: resource Pod/default/x not ready.\n",
+    )
+    diagnostics = "container 'default': last terminated OOMKilled (exit code 137)"
+
+    with patch("k8s_sandbox._helm.describe_release_pods", return_value=diagnostics):
+        with pytest.raises(RuntimeError) as excinfo:
+            await release._raise_install_error(result)
+
+    assert "OOMKilled" in str(excinfo.value)
+    assert "137" in str(excinfo.value)
+
+
+async def test_install_error_omits_diagnostics_when_unavailable() -> None:
+    release = Release(
+        __file__,
+        chart_path=Path("/non_existent_chart"),
+        values_source=ValuesSource.none(),
+        context_name=None,
+    )
+    result = ExecResult(
+        success=False,
+        returncode=1,
+        stdout="",
+        stderr="Error: INSTALLATION FAILED: resource Pod/default/x not ready.\n",
+    )
+
+    with patch("k8s_sandbox._helm.describe_release_pods", return_value=None):
+        with pytest.raises(RuntimeError) as excinfo:
+            await release._raise_install_error(result)
+
+    assert "Helm install failed." in str(excinfo.value)
