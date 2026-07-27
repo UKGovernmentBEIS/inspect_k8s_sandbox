@@ -30,6 +30,82 @@ def test_default_chart(chart_dir: Path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "set_str",
+    [
+        pytest.param(None, id="networks-disabled"),
+        pytest.param(
+            "networks.default.driver=k8s", id="default-service-without-network"
+        ),
+    ],
+)
+def test_sandbox_default_deny_ingress_matches_no_sources(
+    chart_dir: Path, set_str: str | None
+) -> None:
+    documents = _run_helm_template(chart_dir, set_str=set_str)
+
+    policies = _get_documents(documents, "CiliumNetworkPolicy")
+    default_deny_ingress = next(
+        (
+            policy
+            for policy in policies
+            if policy["metadata"]["name"].endswith("-sandbox-default-deny-ingress")
+        ),
+        None,
+    )
+
+    assert default_deny_ingress is not None
+    assert default_deny_ingress["spec"]["enableDefaultDeny"] == {
+        "ingress": True,
+        "egress": False,
+    }
+    assert default_deny_ingress["spec"]["ingress"] == [{"fromEntities": []}]
+
+
+def test_default_chart_keeps_same_sandbox_ingress_allow(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir)
+
+    policies = _get_documents(documents, "CiliumNetworkPolicy")
+    default_service_ingress = next(
+        policy
+        for policy in policies
+        if policy["metadata"]["name"].endswith("-svc-default-ingress")
+    )
+
+    assert default_service_ingress["spec"]["ingress"][0]["fromEndpoints"] == [
+        {
+            "matchLabels": {
+                "io.kubernetes.pod.namespace": "default",
+                "app.kubernetes.io/name": "agent-env",
+                "app.kubernetes.io/instance": "my-release",
+            }
+        }
+    ]
+
+
+def test_default_deny_composes_with_hawk_ssh_allow(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        test_resources_dir / "additional-resources-template-block-values.yaml",
+    )
+
+    policies = _get_documents(documents, "CiliumNetworkPolicy")
+    hawk_ssh_ingress = next(
+        policy
+        for policy in policies
+        if policy["metadata"]["name"].endswith("-sandbox-default-external-ingress")
+    )
+
+    assert hawk_ssh_ingress["spec"]["ingress"] == [
+        {
+            "fromEntities": ["all"],
+            "toPorts": [{"ports": [{"port": "2222", "protocol": "TCP"}]}],
+        }
+    ]
+
+
 def test_additional_resources(chart_dir: Path, test_resources_dir: Path) -> None:
     documents = _run_helm_template(
         chart_dir, test_resources_dir / "additional-resources-values.yaml"

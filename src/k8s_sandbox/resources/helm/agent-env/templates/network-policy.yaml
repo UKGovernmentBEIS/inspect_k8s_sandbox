@@ -129,13 +129,19 @@ metadata:
   labels:
     {{- toYaml $.Values.labels | nindent 4 }}
 spec:
-  description: Default deny ingress. Allow other policies to be more specific.
+  description: |
+    Default deny ingress. The empty fromEntities selector matches no identities;
+    the non-empty ingress rule makes Cilium apply this policy's explicit
+    default-deny posture. Other policies provide permitted ingress.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: {{ .Release.Namespace }}
       {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
+  enableDefaultDeny:
+    ingress: true
+    egress: false
   ingress:
-    - {}
+    - fromEntities: []
 {{- if .Values.networks }}
   {{- range $svcName, $svc := .Values.services }}
     {{- if $svc.networks }}
