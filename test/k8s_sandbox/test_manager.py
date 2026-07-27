@@ -1,10 +1,16 @@
 import logging
 from typing import cast
 
-from pytest import LogCaptureFixture
+import pytest
+from inspect_ai._util.error import PrerequisiteError
+from pytest import CaptureFixture, LogCaptureFixture
 
+import k8s_sandbox._manager as manager_module
 from k8s_sandbox._helm import Release
-from k8s_sandbox._manager import HelmReleaseManager
+from k8s_sandbox._manager import (
+    HelmReleaseManager,
+    uninstall_all_unmanaged_releases,
+)
 
 
 class _FakeRelease:
@@ -61,3 +67,79 @@ async def test_uninstall_all_silent_when_every_uninstall_succeeds(
         await manager.uninstall_all(print_only=False)
 
     assert caplog.text == ""
+
+
+def _stub_unmanaged_releases(
+    monkeypatch: pytest.MonkeyPatch,
+    releases: list[str],
+    failing: set[str],
+    confirm: bool = True,
+) -> list[str]:
+    """Stubs out the cluster, returning the list which records uninstall attempts."""
+    attempted: list[str] = []
+
+    async def fake_get_all_release_names(namespace: str, context_name: str | None):
+        return releases
+
+    async def fake_uninstall(
+        release_name: str, namespace: str, context_name: str | None, quiet: bool
+    ) -> None:
+        attempted.append(release_name)
+        if release_name in failing:
+            raise RuntimeError(f"Helm uninstall failed. {release_name}")
+
+    monkeypatch.setattr(
+        manager_module, "get_default_namespace", lambda context_name: "default"
+    )
+    monkeypatch.setattr(
+        manager_module, "get_all_release_names", fake_get_all_release_names
+    )
+    monkeypatch.setattr(manager_module, "helm_uninstall", fake_uninstall)
+    monkeypatch.setattr(manager_module.Confirm, "ask", lambda *args, **kwargs: confirm)
+    return attempted
+
+
+async def test_cleanup_all_reports_failures_and_raises(
+    monkeypatch: pytest.MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    attempted = _stub_unmanaged_releases(
+        monkeypatch, ["aaaaaaaa", "bbbbbbbb"], failing={"bbbbbbbb"}
+    )
+
+    with pytest.raises(PrerequisiteError) as exc_info:
+        await uninstall_all_unmanaged_releases()
+
+    assert attempted == ["aaaaaaaa", "bbbbbbbb"]
+    assert "Failed to uninstall 1 of 2" in str(exc_info.value.message)
+    output = capsys.readouterr().out
+    assert "bbbbbbbb" in output
+    assert "inspect sandbox cleanup k8s bbbbbbbb" in output
+    assert "Complete." not in output
+
+
+async def test_cleanup_all_completes_when_every_uninstall_succeeds(
+    monkeypatch: pytest.MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    attempted = _stub_unmanaged_releases(
+        monkeypatch, ["aaaaaaaa", "bbbbbbbb"], failing=set()
+    )
+
+    await uninstall_all_unmanaged_releases()
+
+    assert attempted == ["aaaaaaaa", "bbbbbbbb"]
+    output = capsys.readouterr().out
+    assert "Complete." in output
+    assert "failed to uninstall" not in output.casefold()
+
+
+async def test_cleanup_all_uninstalls_nothing_when_not_confirmed(
+    monkeypatch: pytest.MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    attempted = _stub_unmanaged_releases(
+        monkeypatch, ["aaaaaaaa"], failing={"aaaaaaaa"}, confirm=False
+    )
+
+    await uninstall_all_unmanaged_releases()
+
+    assert attempted == []
+    assert "Cancelled." in capsys.readouterr().out

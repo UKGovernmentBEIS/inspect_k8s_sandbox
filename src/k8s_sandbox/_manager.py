@@ -4,6 +4,7 @@ import asyncio
 import logging
 from contextvars import ContextVar
 
+from inspect_ai._util.error import PrerequisiteError  # TODO: Using private package.
 from rich import box, print
 from rich.panel import Panel
 from rich.prompt import Confirm
@@ -147,6 +148,24 @@ async def uninstall_all_unmanaged_releases() -> None:
             table.add_row(f"[red]{release}[/red]")
         print(table)
 
+    def _print_failures(releases: list[str]) -> None:
+        table = Table(
+            title="Releases which failed to uninstall:",
+            box=box.SQUARE_DOUBLE_HEAD,
+            show_lines=True,
+            title_style="bold",
+            title_justify="left",
+        )
+        table.add_column("Release(s)", no_wrap=True)
+        table.add_column("Retry")
+        for release in releases:
+            table.add_row(
+                release,
+                f"[blue]inspect sandbox cleanup k8s {release}[/blue]",
+            )
+        print("")
+        print(table)
+
     namespace = get_default_namespace(context_name=None)
     releases = await get_all_release_names(namespace, context_name=None)
     if len(releases) == 0:
@@ -167,7 +186,18 @@ async def uninstall_all_unmanaged_releases() -> None:
         helm_uninstall(release, namespace, context_name=None, quiet=False)
         for release in releases
     ]
-    await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    failed = [
+        release
+        for release, result in zip(releases, results)
+        if isinstance(result, BaseException)
+    ]
+    if failed:
+        _print_failures(failed)
+        raise PrerequisiteError(
+            f"Failed to uninstall {len(failed)} of {len(releases)} Inspect sandbox "
+            f"release(s). Some of their resources may still exist in the cluster."
+        )
     print("Complete.")
 
 
