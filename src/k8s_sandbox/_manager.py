@@ -87,11 +87,13 @@ class HelmReleaseManager:
         for release, result in zip(releases, results):
             if isinstance(result, BaseException):
                 logger.error(
-                    "Failed to uninstall Helm release '%s'. It is still installed in "
-                    "the cluster and will not be retried. Remove it with: "
-                    "inspect sandbox cleanup k8s %s",
+                    "Failed to uninstall Helm release '%s' in namespace '%s'. It is "
+                    "still installed in the cluster and will not be retried. Remove it "
+                    "with: inspect sandbox cleanup k8s %s%s",
                     release.release_name,
+                    release.namespace,
                     release.release_name,
+                    _cleanup_context_hint(release.context_name),
                     exc_info=result,
                 )
 
@@ -166,12 +168,22 @@ async def uninstall_all_unmanaged_releases() -> list[str]:
     if failed:
         print(
             f"\nFailed to uninstall {len(failed)} of {len(releases)} Inspect sandbox "
-            "release(s). Some of their resources may still exist in the cluster."
+            f"release(s) in namespace '{namespace}'. Some of their resources may still "
+            "exist in the cluster."
         )
         _print_release_cleanup_table("Releases which failed to uninstall:", failed)
         return failed
     print("Complete.")
     return []
+
+
+def _cleanup_context_hint(context_name: str | None) -> str:
+    """The cleanup command uses the current kubeconfig context, not the release's."""
+    if context_name is None:
+        return ""
+    return (
+        f", which must be run with '{context_name}' as your current kubeconfig context"
+    )
 
 
 def _print_release_cleanup_table(title: str, release_names: list[str]) -> None:

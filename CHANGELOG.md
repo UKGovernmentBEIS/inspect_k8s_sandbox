@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Helm releases which fail to uninstall are now reported by name, along with the `inspect sandbox cleanup k8s <release>` command to retry them. This covers both end-of-task cleanup and `inspect sandbox cleanup k8s` (with no release name), which now exits non-zero instead of reporting `Complete.`.
+- `inspect sandbox cleanup k8s` (with no release name) now **exits non-zero** if any release fails to uninstall, rather than reporting `Complete.` and exiting 0. Releases which fail to uninstall are named, at end-of-task cleanup too, along with their namespace and the `inspect sandbox cleanup k8s <release>` command to retry them.
 - **BREAKING CHANGE**: Sandbox pods created by the built-in Helm chart no longer mount
   Kubernetes service-account API tokens by default. Set
   `automountServiceAccountToken: true` only for sandboxes that require Kubernetes API

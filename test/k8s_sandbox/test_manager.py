@@ -16,8 +16,15 @@ from k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
 class _FakeRelease:
     """Stands in for a Release so uninstall_all can be driven without a cluster."""
 
-    def __init__(self, release_name: str, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        release_name: str,
+        error: Exception | None = None,
+        context_name: str | None = None,
+    ) -> None:
         self.release_name = release_name
+        self.namespace = "my-namespace"
+        self.context_name = context_name
         self._error = error
         self.uninstall_attempted = False
 
@@ -52,8 +59,24 @@ async def test_uninstall_all_reports_a_failed_uninstall(
     # The failure is named, along with how to remove the release that is still there.
     assert "bbbbbbbb" in caplog.text
     assert "inspect sandbox cleanup k8s bbbbbbbb" in caplog.text
+    assert "my-namespace" in caplog.text
     # The release which uninstalled cleanly is not reported as a failure.
     assert "aaaaaaaa" not in caplog.text
+
+
+async def test_uninstall_all_names_the_context_a_release_was_installed_with(
+    caplog: LogCaptureFixture,
+) -> None:
+    manager = HelmReleaseManager()
+    failing = _FakeRelease(
+        "bbbbbbbb", RuntimeError("Helm uninstall failed."), context_name="other-cluster"
+    )
+    await _install(manager, failing)
+
+    with caplog.at_level(logging.ERROR):
+        await manager.uninstall_all(print_only=False)
+
+    assert "other-cluster" in caplog.text
 
 
 async def test_uninstall_all_silent_when_every_uninstall_succeeds(
