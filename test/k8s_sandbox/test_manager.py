@@ -2,7 +2,6 @@ import logging
 from typing import cast
 
 import pytest
-from inspect_ai._util.error import PrerequisiteError
 from pytest import CaptureFixture, LogCaptureFixture
 
 import k8s_sandbox._manager as manager_module
@@ -11,6 +10,7 @@ from k8s_sandbox._manager import (
     HelmReleaseManager,
     uninstall_all_unmanaged_releases,
 )
+from k8s_sandbox._sandbox_environment import K8sSandboxEnvironment
 
 
 class _FakeRelease:
@@ -99,22 +99,43 @@ def _stub_unmanaged_releases(
     return attempted
 
 
-async def test_cleanup_all_reports_failures_and_raises(
+async def test_cleanup_all_reports_failures(
     monkeypatch: pytest.MonkeyPatch, capsys: CaptureFixture[str]
 ) -> None:
     attempted = _stub_unmanaged_releases(
         monkeypatch, ["aaaaaaaa", "bbbbbbbb"], failing={"bbbbbbbb"}
     )
 
-    with pytest.raises(PrerequisiteError) as exc_info:
-        await uninstall_all_unmanaged_releases()
+    failed = await uninstall_all_unmanaged_releases()
 
     assert attempted == ["aaaaaaaa", "bbbbbbbb"]
-    assert "Failed to uninstall 1 of 2" in str(exc_info.value.message)
+    assert failed == ["bbbbbbbb"]
     output = capsys.readouterr().out
+    assert "Failed to uninstall 1 of 2" in output
     assert "inspect sandbox cleanup k8s bbbbbbbb" in output
     assert "inspect sandbox cleanup k8s aaaaaaaa" not in output
     assert "Complete." not in output
+
+
+async def test_cli_cleanup_all_exits_non_zero_when_a_release_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    _stub_unmanaged_releases(monkeypatch, ["aaaaaaaa"], failing={"aaaaaaaa"})
+
+    with pytest.raises(SystemExit) as exc_info:
+        await K8sSandboxEnvironment.cli_cleanup(None)
+
+    assert exc_info.value.code == 1
+
+
+async def test_cli_cleanup_all_exits_zero_when_every_uninstall_succeeds(
+    monkeypatch: pytest.MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    _stub_unmanaged_releases(monkeypatch, ["aaaaaaaa"], failing=set())
+
+    await K8sSandboxEnvironment.cli_cleanup(None)
+
+    assert "Complete." in capsys.readouterr().out
 
 
 async def test_cleanup_all_completes_when_every_uninstall_succeeds(

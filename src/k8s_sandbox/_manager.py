@@ -4,7 +4,6 @@ import asyncio
 import logging
 from contextvars import ContextVar
 
-from inspect_ai._util.error import PrerequisiteError  # TODO: Using private package.
 from rich import box, print
 from rich.panel import Panel
 from rich.prompt import Confirm
@@ -122,7 +121,9 @@ async def uninstall_unmanaged_release(release_name: str) -> None:
     await helm_uninstall(release_name, namespace, context_name=None, quiet=False)
 
 
-async def uninstall_all_unmanaged_releases() -> None:
+async def uninstall_all_unmanaged_releases() -> list[str]:
+    """Uninstalls all Inspect releases, returning the names of any which failed."""
+
     def _print_table(releases: list[str]) -> None:
         print("Releases to be uninstalled:")
         table = Table(
@@ -143,7 +144,7 @@ async def uninstall_all_unmanaged_releases() -> None:
             f"No Inspect sandbox releases found in '{namespace}' namespace in your "
             f"current Kubernetes context '{get_current_context_name()}'."
         )
-        return
+        return []
     _print_table(releases)
     if not Confirm.ask(
         f"Are you sure you want to uninstall ALL {len(releases)} Inspect sandbox "
@@ -151,7 +152,7 @@ async def uninstall_all_unmanaged_releases() -> None:
         "this may affect other users.",
     ):
         print("Cancelled.")
-        return
+        return []
     tasks = [
         helm_uninstall(release, namespace, context_name=None, quiet=False)
         for release in releases
@@ -163,12 +164,14 @@ async def uninstall_all_unmanaged_releases() -> None:
         if isinstance(result, BaseException)
     ]
     if failed:
-        _print_release_cleanup_table("Releases which failed to uninstall:", failed)
-        raise PrerequisiteError(
-            f"Failed to uninstall {len(failed)} of {len(releases)} Inspect sandbox "
-            f"release(s). Some of their resources may still exist in the cluster."
+        print(
+            f"\nFailed to uninstall {len(failed)} of {len(releases)} Inspect sandbox "
+            "release(s). Some of their resources may still exist in the cluster."
         )
+        _print_release_cleanup_table("Releases which failed to uninstall:", failed)
+        return failed
     print("Complete.")
+    return []
 
 
 def _print_release_cleanup_table(title: str, release_names: list[str]) -> None:
