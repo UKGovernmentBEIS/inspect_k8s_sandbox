@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextvars import ContextVar
 
 from rich import box, print
@@ -11,6 +12,8 @@ from rich.table import Table
 from k8s_sandbox._helm import Release, get_all_release_names
 from k8s_sandbox._helm import uninstall as helm_uninstall
 from k8s_sandbox._kubernetes_api import get_current_context_name, get_default_namespace
+
+logger = logging.getLogger(__name__)
 
 
 class HelmReleaseManager:
@@ -72,29 +75,33 @@ class HelmReleaseManager:
             self._print_cleanup_instructions()
             return
         _print_do_not_interrupt()
-        tasks = [release.uninstall(quiet=False) for release in self._installed_releases]
+        releases = list(self._installed_releases)
+        tasks = [release.uninstall(quiet=False) for release in releases]
         # Clear the list before awaiting the tasks to prevent other calls to this method
         # from interfering.
         self._installed_releases.clear()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # An uninstall which raises here is not retried and the release has already
+        # been dropped from tracking, so it would otherwise be left installed with no
+        # record of it anywhere. Name it and say how to remove it.
+        for release, result in zip(releases, results):
+            if isinstance(result, BaseException):
+                logger.error(
+                    "Failed to uninstall Helm release '%s' in namespace '%s'. It is "
+                    "still installed in the cluster and will not be retried. Remove it "
+                    "with: inspect sandbox cleanup k8s %s%s",
+                    release.release_name,
+                    release.namespace,
+                    release.release_name,
+                    _cleanup_context_hint(release.context_name),
+                    exc_info=result,
+                )
 
     def _print_cleanup_instructions(self) -> None:
-        table = Table(
-            title="K8s Sandbox Releases (not yet cleaned up):",
-            box=box.SQUARE_DOUBLE_HEAD,
-            show_lines=True,
-            title_style="bold",
-            title_justify="left",
+        _print_release_cleanup_table(
+            "K8s Sandbox Releases (not yet cleaned up):",
+            [release.release_name for release in self._installed_releases],
         )
-        table.add_column("Release(s)", no_wrap=True)
-        table.add_column("Cleanup")
-        for release in self._installed_releases:
-            table.add_row(
-                release.release_name,
-                f"[blue]inspect sandbox cleanup k8s {release.release_name}[/blue]",
-            )
-        print("")
-        print(table)
         print(
             "\nCleanup all sandbox releases with: "
             "[blue]inspect sandbox cleanup k8s[/blue]\n"
@@ -116,7 +123,9 @@ async def uninstall_unmanaged_release(release_name: str) -> None:
     await helm_uninstall(release_name, namespace, context_name=None, quiet=False)
 
 
-async def uninstall_all_unmanaged_releases() -> None:
+async def uninstall_all_unmanaged_releases() -> list[str]:
+    """Uninstalls all Inspect releases, returning the names of any which failed."""
+
     def _print_table(releases: list[str]) -> None:
         print("Releases to be uninstalled:")
         table = Table(
@@ -137,7 +146,7 @@ async def uninstall_all_unmanaged_releases() -> None:
             f"No Inspect sandbox releases found in '{namespace}' namespace in your "
             f"current Kubernetes context '{get_current_context_name()}'."
         )
-        return
+        return []
     _print_table(releases)
     if not Confirm.ask(
         f"Are you sure you want to uninstall ALL {len(releases)} Inspect sandbox "
@@ -145,13 +154,55 @@ async def uninstall_all_unmanaged_releases() -> None:
         "this may affect other users.",
     ):
         print("Cancelled.")
-        return
+        return []
     tasks = [
         helm_uninstall(release, namespace, context_name=None, quiet=False)
         for release in releases
     ]
-    await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    failed = [
+        release
+        for release, result in zip(releases, results)
+        if isinstance(result, BaseException)
+    ]
+    if failed:
+        print(
+            f"\nFailed to uninstall {len(failed)} of {len(releases)} Inspect sandbox "
+            f"release(s) in namespace '{namespace}'. Some of their resources may still "
+            "exist in the cluster."
+        )
+        _print_release_cleanup_table("Releases which failed to uninstall:", failed)
+        return failed
     print("Complete.")
+    return []
+
+
+def _cleanup_context_hint(context_name: str | None) -> str:
+    """The cleanup command uses the current kubeconfig context, not the release's."""
+    if context_name is None:
+        return ""
+    return (
+        f", which must be run with '{context_name}' as your current kubeconfig context"
+    )
+
+
+def _print_release_cleanup_table(title: str, release_names: list[str]) -> None:
+    table = Table(
+        title=title,
+        box=box.SQUARE_DOUBLE_HEAD,
+        show_lines=True,
+        title_style="bold",
+        title_justify="left",
+    )
+    table.add_column("Release(s)", no_wrap=True)
+    table.add_column("Cleanup")
+    for release_name in release_names:
+        table.add_row(
+            release_name,
+            f"[blue]inspect sandbox cleanup k8s {release_name}[/blue]",
+        )
+    print("")
+    print(table)
 
 
 def _print_do_not_interrupt() -> None:
