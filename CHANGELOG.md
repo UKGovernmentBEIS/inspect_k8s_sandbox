@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **BREAKING CHANGE**: Sandbox pods created by the built-in Helm chart no longer mount
+  Kubernetes service-account API tokens by default. Set
+  `automountServiceAccountToken: true` only for sandboxes that require Kubernetes API
+  access. Docker Compose users can set
+  `x-k8s.automount_service_account_token: true`.
+- **BREAKING CHANGE**: `serviceAccountName` now selects an existing ServiceAccount by
+  default. Set `serviceAccountCreate: true` to retain automatic creation by the Helm
+  chart.
+- Add `service_account_name`, `service_account_create`, and
+  `automount_service_account_token` to the top-level Docker Compose `x-k8s` extension.
 - On Helm install failure, the raised error now includes pod diagnostics.
 - Compose to HELM: Support the `security_opt` seccomp option (mapped to a pod `seccompProfile`) and ignore the unsupported `memswap_limit`. See [Compose to Helm](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/) for details.
 - The package and bundled `agent-env` chart versions are now unified, both jumping to
