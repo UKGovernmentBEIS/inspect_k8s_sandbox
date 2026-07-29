@@ -12,13 +12,15 @@
 | allowDomainsPorts | list | Empty list (only 80/443 are reachable on allowedDomains) | Extra ports opened to the domains in `allowDomains`, as a list of {port, protocol, domain}. `protocol` defaults to ANY (TCP+UDP) and `domain` (optional) scopes the port to one allowDomains entry. If `domain` is not included, it will apply to all allowed domains. |
 | allowEntities | list | Empty list (no additional entities compared to default policies) | A list of Cilium entities (e.g. "world") that pods within the agent environment are allowed to access. |
 | annotations | object | `{}` | A dict of annotations to apply to resources within the agent environment. |
+| automountServiceAccountToken | bool | `false` | Whether to mount the selected ServiceAccount's Kubernetes API token in sandbox pods. Keep disabled for cloud workload identity such as IRSA, which injects a provider-specific token separately. |
 | corednsCommand | list | `["/coredns","-conf","/etc/coredns/Corefile"]` | The command to use for the coredns container. |
 | corednsImage | string | `"coredns/coredns:1.8.3"` | The image to use for the coredns container. |
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
 | imagePullSecrets | list | `[]` | References to pre-existing secrets that contain registry credentials. |
 | labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |
 | networks | object | `{}` | Defines network names that can be attached to services in order to specify subsets of services that can communicate with one another. |
-| serviceAccountName | string | `nil` | Service account name. When set, a ServiceAccount is created with this name and pods will use it. |
+| serviceAccountCreate | bool | `false` | Whether to create the selected ServiceAccount. Keep disabled to use an externally managed ServiceAccount across concurrent sandbox releases. |
+| serviceAccountName | string | `nil` | Service account name for sandbox pods. The account must already exist unless `serviceAccountCreate` is enabled. |
 | services | object | see [values.yaml](./values.yaml) | A collection of services to deploy within the agent environment. A service can connect to another service using DNS, e.g. `http://nginx:80`. |
 | services.default | object | see [values.yaml](./values.yaml) | The default service, this is required for the agent environment to function. |
 | services.default.additionalDnsRecords | list | `[]` | A list of additional domains which will resolve to this service from within the agent environment (e.g. example.com). If one or more records are provided, `dnsRecord` is automatically set to true. |

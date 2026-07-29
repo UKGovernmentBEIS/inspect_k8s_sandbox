@@ -197,6 +197,27 @@ def _convert_extensions(
                 f"Compose file: '{compose_file}'."
             )
         result["allowEntities"] = allow_entities
+    for source_key, target_key in (
+        ("automount_service_account_token", "automountServiceAccountToken"),
+        ("service_account_create", "serviceAccountCreate"),
+    ):
+        if source_key in extensions:
+            value = extensions.pop(source_key)
+            if not isinstance(value, bool):
+                raise ComposeConverterError(
+                    f"Invalid '{source_key}' type: {type(value)}. Expected bool. "
+                    f"Compose file: '{compose_file}'."
+                )
+            result[target_key] = value
+    if "service_account_name" in extensions:
+        service_account_name = extensions.pop("service_account_name")
+        if not isinstance(service_account_name, str):
+            raise ComposeConverterError(
+                f"Invalid 'service_account_name' type: "
+                f"{type(service_account_name)}. Expected str. "
+                f"Compose file: '{compose_file}'."
+            )
+        result["serviceAccountName"] = service_account_name
     if extensions:
         raise ComposeConverterError(
             f"Unsupported key(s) in 'x-inspect_k8s_sandbox': {set(extensions)}. "

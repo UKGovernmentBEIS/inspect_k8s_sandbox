@@ -184,8 +184,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
     async def cli_cleanup(cls, id: str | None) -> None:
         if id is not None:
             await uninstall_unmanaged_release(id)
-        else:
-            await uninstall_all_unmanaged_releases()
+        elif await uninstall_all_unmanaged_releases():
+            sys.exit(1)
 
     @classmethod
     async def sample_init(
