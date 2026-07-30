@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix the built-in chart's `-sandbox-default-deny-ingress` policy, which allowed all ingress instead of denying it. Ingress to sandbox pods not allowed by another policy is now denied.
 - `inspect sandbox cleanup k8s` (with no release name) now **exits non-zero** if any release fails to uninstall, rather than reporting `Complete.` and exiting 0. Releases which fail to uninstall are named, at end-of-task cleanup too, along with their namespace and the `inspect sandbox cleanup k8s <release>` command to retry them.
 - **BREAKING CHANGE**: Sandbox pods created by the built-in Helm chart no longer mount
   Kubernetes service-account API tokens by default. Set
