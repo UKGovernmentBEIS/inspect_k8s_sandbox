@@ -193,6 +193,14 @@ class Release:
         self.sample_uuid = sample_uuid
         self._extra_values = dict(extra_values) if extra_values else {}
 
+    @property
+    def namespace(self) -> str:
+        return self._namespace
+
+    @property
+    def context_name(self) -> str | None:
+        return self._context_name
+
     def _generate_release_name(self) -> str:
         return uuid().lower()[:8]
 

@@ -4,6 +4,17 @@
 
 - Fix `write_file()` silently writing a truncated or empty file while reporting success
   ([#225](https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225)).
+- `inspect sandbox cleanup k8s` (with no release name) now **exits non-zero** if any release fails to uninstall, rather than reporting `Complete.` and exiting 0. Releases which fail to uninstall are named, at end-of-task cleanup too, along with their namespace and the `inspect sandbox cleanup k8s <release>` command to retry them.
+- **BREAKING CHANGE**: Sandbox pods created by the built-in Helm chart no longer mount
+  Kubernetes service-account API tokens by default. Set
+  `automountServiceAccountToken: true` only for sandboxes that require Kubernetes API
+  access. Docker Compose users can set
+  `x-k8s.automount_service_account_token: true`.
+- **BREAKING CHANGE**: `serviceAccountName` now selects an existing ServiceAccount by
+  default. Set `serviceAccountCreate: true` to retain automatic creation by the Helm
+  chart.
+- Add `service_account_name`, `service_account_create`, and
+  `automount_service_account_token` to the top-level Docker Compose `x-k8s` extension.
 - On Helm install failure, the raised error now includes pod diagnostics.
 - Compose to HELM: Support the `security_opt` seccomp option (mapped to a pod `seccompProfile`) and ignore the unsupported `memswap_limit`. See [Compose to Helm](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/) for details.
 - The package and bundled `agent-env` chart versions are now unified, both jumping to
