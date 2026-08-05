@@ -2,8 +2,10 @@ import asyncio
 import logging
 import os
 import re
+import time
+from contextlib import contextmanager
 from textwrap import dedent
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Generator
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +15,8 @@ from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._kubernetes_api import get_current_context_name, k8s_client
+from k8s_sandbox._pod.op import PodOperation
+from k8s_sandbox._pod.write import WriteFileOperation
 from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
 from test.k8s_sandbox.utils import install_sandbox_environments
 
@@ -716,6 +720,77 @@ async def test_write_file_is_a_directory_error(
         await sandbox.write_file("/root/", "Hello, World!")
 
     assert not log_err.records
+
+
+@contextmanager
+def _delayed_stdin() -> Generator[None, None, None]:
+    """Stall each stdin frame, emulating a client outside the cluster."""
+    original_write_stdin = WSClient.write_stdin
+
+    def slow_write_stdin(self: WSClient, data, *args, **kwargs):  # type: ignore[no-untyped-def]
+        time.sleep(1.0)
+        return original_write_stdin(self, data, *args, **kwargs)
+
+    with patch.object(WSClient, "write_stdin", slow_write_stdin):
+        yield
+
+
+@contextmanager
+def _write_command_without_exec_stdout_guard() -> Generator[
+    list[list[str]], None, None
+]:
+    """Strip `exec 3>&1; ` from the real write command, reintroducing the bug."""
+    original = PodOperation.create_websocket_client_for_exec
+    modified: list[list[str]] = []
+
+    def without_guard(self: PodOperation, **kwargs: Any) -> Any:
+        before = list(kwargs["command"])
+        kwargs["command"] = [part.replace("exec 3>&1; ", "") for part in before]
+        if kwargs["command"] != before:
+            modified.append(kwargs["command"])
+        return original(self, **kwargs)
+
+    with patch.object(
+        WriteFileOperation, "create_websocket_client_for_exec", without_guard
+    ):
+        yield modified
+
+
+async def test_write_file_is_not_truncated_when_stdin_is_delayed(
+    sandbox_busybox: K8sSandboxEnvironment,
+) -> None:
+    # The write command redirects `head`'s stdout to the destination file, so once the
+    # shell execs into `head` nothing holds the exec stdout pipe open. The runtime sees
+    # EOF on stdout and closes stdin while `head` is still reading; `head -c N` treats
+    # the short stdin as a normal EOF and exits 0, leaving a truncated file. Delaying
+    # the stdin frame makes the close win.
+    # https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225
+    dst = "/tmp/test-write-file-delayed-stdin.bin"
+    contents = b"x" * 4096
+
+    with _delayed_stdin():
+        await sandbox_busybox.write_file(dst, contents)
+
+    result = await sandbox_busybox.exec(["wc", "-c", dst])
+    assert result.success, result.stderr
+    assert int(result.stdout.split()[0]) == len(contents)
+
+
+async def test_write_file_is_truncated_without_exec_stdout_guard(
+    sandbox_busybox: K8sSandboxEnvironment,
+) -> None:
+    """Negative control: Removing `exec 3>&1; ` has to bring the truncation back."""
+    dst = "/tmp/test-write-file-without-guard.bin"
+    contents = b"x" * 4096
+
+    with _write_command_without_exec_stdout_guard() as modified, _delayed_stdin():
+        await sandbox_busybox.write_file(dst, contents)
+
+    assert modified, "Expected to strip 'exec 3>&1; ' from the write command"
+    result = await sandbox_busybox.exec(["wc", "-c", dst])
+    assert result.success, result.stderr
+    # Silently short, and write_file() still reported success.
+    assert int(result.stdout.split()[0]) < len(contents)
 
 
 ### #read_file() ###

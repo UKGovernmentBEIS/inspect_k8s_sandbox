@@ -29,14 +29,16 @@ class WriteFileOperation(PodOperation):
         # close).
         head_command = f"head -c {file_size}"
         dst_quoted = shlex.quote(dst.as_posix())
-        # `head -c N` exits 0 even on a short read, silently leaving a truncated file.
-        # Verify the byte count so a short write fails -> PodError -> retry.
+        # The shell (e.g. ash) execs into the trailing `head`, whose stdout is the
+        # file, so nothing holds the exec stdout pipe open. Its EOF makes the runtime
+        # close stdin mid-write and `head -c N` then exits 0, silently truncating.
+        # fd 3 survives the exec and keeps that pipe open.
         # https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225
-        verify_command = f'[ "$(wc -c < {dst_quoted})" -eq {file_size} ]'
+        keep_stdout_open = "exec 3>&1"
         command = [
             "/bin/sh",
             "-c",
-            f"{mkdir_command} && {head_command} > {dst_quoted} && {verify_command}",
+            f"{keep_stdout_open}; {mkdir_command} && {head_command} > {dst_quoted}",
         ]
         yield from self.create_websocket_client_for_exec(
             command=command,

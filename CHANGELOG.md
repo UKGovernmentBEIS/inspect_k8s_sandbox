@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Fix `write_file` silently producing a truncated/0-byte file while reporting success ([#225](https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225)). It now verifies the written byte count matches the source, raising (and thus retrying) on a short write. Requires `wc` in the container. See [Prerequisites](https://k8s-sandbox.aisi.org.uk/getting-started/prerequisites/).
+- Fix `write_file()` silently writing a truncated or empty file while reporting success
+  ([#225](https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225)).
 - On Helm install failure, the raised error now includes pod diagnostics.
 - Compose to HELM: Support the `security_opt` seccomp option (mapped to a pod `seccompProfile`) and ignore the unsupported `memswap_limit`. See [Compose to Helm](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/) for details.
 - The package and bundled `agent-env` chart versions are now unified, both jumping to
