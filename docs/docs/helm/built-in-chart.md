@@ -257,6 +257,11 @@ the nameserver.
 Note that the CoreDNS sidecar only binds to `127.0.0.1` so won't be accessible from
 outside the Pod.
 
+The bundled sidecar image is pinned by digest. The chart also fixes its runtime
+security context independently of the image: UID/GID 65532, a read-only root
+filesystem, RuntimeDefault seccomp, no privilege escalation, and no Linux capability
+other than `NET_BIND_SERVICE`. A custom `corednsImage` must support that contract.
+
 CoreDNS is used over Dnsmasq for 2 reasons:
 
 * CoreDNS is the default DNS server in Kubernetes.

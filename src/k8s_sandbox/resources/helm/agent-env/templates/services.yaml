@@ -5,6 +5,7 @@ metadata:
   name: {{ template "agentEnv.fullname" $ -}}-{{ $name }}
   labels:
     {{- include "agentEnv.labels" $ | nindent 4 }}
+    inspect.aisi.org/k8s-sandbox-version: {{ $.Chart.Version | quote }}
     inspect/service: {{ $name }}
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
@@ -20,6 +21,7 @@ spec:
       labels:
         {{- include "agentEnv.labelsFromValues" $ | nindent 8 }}
         {{- include "agentEnv.selectorLabels" $ | nindent 8 }}
+        inspect.aisi.org/k8s-sandbox-version: {{ $.Chart.Version | quote }}
         {{- if $service.networks }}
         {{- range $service.networks }}
         aisi.gov.uk/network-{{ . }}: "true"
@@ -148,6 +150,19 @@ spec:
         image: {{ quote $.Values.corednsImage }}
         command:
           {{- toYaml $.Values.corednsCommand | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+            add:
+              - NET_BIND_SERVICE
+          readOnlyRootFilesystem: true
+          runAsGroup: 65532
+          runAsNonRoot: true
+          runAsUser: 65532
+          seccompProfile:
+            type: RuntimeDefault
         resources:
           requests:
             memory: "128Mi"
@@ -166,6 +181,7 @@ spec:
           - name: coredns-config
             mountPath: /etc/coredns/Corefile
             subPath: Corefile
+            readOnly: true
       {{- with $service.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}

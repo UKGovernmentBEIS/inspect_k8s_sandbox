@@ -3,6 +3,15 @@
 ## Unreleased
 
 - Fix `write_file()` silently writing a truncated or empty file while reporting success
+- **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
+  filesystem with only `NET_BIND_SERVICE`. A custom `corednsImage` must run under that
+  context; set the new `corednsSecurityContext` if it cannot. The default image moves
+  from CoreDNS 1.8.3 to a digest-pinned CoreDNS 1.14.6.
+- **BREAKING CHANGE**: Service names, network names and `additionalDnsRecords` are now
+  validated at install time and rejected with a schema error, rather than producing a
+  release that fails later or resolves unexpectedly.
+- The CoreDNS sidecar no longer serves its `ready` endpoint on port 8181, and refuses
+  queries beyond 1000 concurrent.
 - `inspect sandbox cleanup k8s` (with no release name) now **exits non-zero** if any release fails to uninstall, rather than reporting `Complete.` and exiting 0. Releases which fail to uninstall are named, at end-of-task cleanup too, along with their namespace and the `inspect sandbox cleanup k8s <release>` command to retry them.
 - **BREAKING CHANGE**: Sandbox pods created by the built-in Helm chart no longer mount
   Kubernetes service-account API tokens by default. Set
@@ -17,7 +26,7 @@
 - On Helm install failure, the raised error now includes pod diagnostics.
 - Compose to HELM: Support the `security_opt` seccomp option (mapped to a pod `seccompProfile`) and ignore the unsupported `memswap_limit`. See [Compose to Helm](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/) for details.
 - The package and bundled `agent-env` chart versions are now unified, both jumping to
-  `0.13.0` (intervening numbers are unused).
+  `0.14.0` (intervening numbers are unused).
 
 ## 2026-06-25 0.6.1
 

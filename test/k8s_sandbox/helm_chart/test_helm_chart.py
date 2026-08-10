@@ -28,6 +28,12 @@ def test_default_chart(chart_dir: Path) -> None:
         services[0]["spec"]["template"]["spec"]["containers"][0]["image"]
         == "python:3.12-bookworm"
     )
+    assert (
+        services[0]["spec"]["template"]["metadata"]["labels"][
+            "inspect.aisi.org/k8s-sandbox-version"
+        ]
+        == "0.14.0"
+    )
 
 
 def test_additional_resources(chart_dir: Path, test_resources_dir: Path) -> None:
@@ -446,7 +452,7 @@ def test_cluster_default_magic_string(
             {
                 "command": ["/special-dns-command"],
             },
-            "coredns/coredns:1.8.3",
+            "coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea",
             ["/special-dns-command"],
         ),
     ],
@@ -482,6 +488,34 @@ def test_coredns_container(
     assert corends_container is not None
     assert corends_container["image"] == expected_coredns_image
     assert corends_container["command"] == expected_coredns_command
+    assert corends_container["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"add": ["NET_BIND_SERVICE"], "drop": ["ALL"]},
+        "readOnlyRootFilesystem": True,
+        "runAsGroup": 65532,
+        "runAsNonRoot": True,
+        "runAsUser": 65532,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+    assert corends_container["volumeMounts"] == [
+        {
+            "mountPath": "/etc/coredns/Corefile",
+            "name": "coredns-config",
+            "readOnly": True,
+            "subPath": "Corefile",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "values_file",
+    ["invalid-service-name-values.yaml", "invalid-dns-record-values.yaml"],
+)
+def test_rejects_names_that_can_inject_rendered_configuration(
+    chart_dir: Path, test_resources_dir: Path, values_file: str
+) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(chart_dir, test_resources_dir / values_file)
 
 
 def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> None:

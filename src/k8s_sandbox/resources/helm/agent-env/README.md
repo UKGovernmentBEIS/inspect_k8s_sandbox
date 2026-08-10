@@ -1,6 +1,6 @@
 # agent-env
 
-![Version: 0.13.0](https://img.shields.io/badge/Version-0.13.0-informational?style=flat-square)
+![Version: 0.14.0](https://img.shields.io/badge/Version-0.14.0-informational?style=flat-square)
 
 ## Values
 
@@ -14,7 +14,7 @@
 | annotations | object | `{}` | A dict of annotations to apply to resources within the agent environment. |
 | automountServiceAccountToken | bool | `false` | Whether to mount the selected ServiceAccount's Kubernetes API token in sandbox pods. Keep disabled for cloud workload identity such as IRSA, which injects a provider-specific token separately. |
 | corednsCommand | list | `["/coredns","-conf","/etc/coredns/Corefile"]` | The command to use for the coredns container. |
-| corednsImage | string | `"coredns/coredns:1.8.3"` | The image to use for the coredns container. |
+| corednsImage | string | `"coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea"` | The image to use for the coredns container. Images must be executable as UID/GID 65532 with a read-only root filesystem. |
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
 | imagePullSecrets | list | `[]` | References to pre-existing secrets that contain registry credentials. |
 | labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |
@@ -43,4 +43,3 @@
 | services.default.volumes | list | `[]` | Volumes accessible to the container. Supports arbitrary yaml or colon-separated strings of the form `volume-name:/mount-path`. |
 | services.default.workingDir | string | `nil` | The container's working directory. |
 | volumes | object | `{}` | A dict of volumes to deploy within the agent environment as NFS-CSI PersistentVolumeClaims. These volumes can be mounted in services using the `volumes:` field. The actual volume name will include the release name. |
-
