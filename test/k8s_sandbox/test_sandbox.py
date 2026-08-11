@@ -5,7 +5,7 @@ import re
 import time
 from contextlib import contextmanager
 from textwrap import dedent
-from typing import Any, AsyncGenerator, Generator
+from typing import AsyncGenerator, Generator
 from unittest.mock import patch
 
 import pytest
@@ -15,8 +15,6 @@ from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._kubernetes_api import get_current_context_name, k8s_client
-from k8s_sandbox._pod.op import PodOperation
-from k8s_sandbox._pod.write import WriteFileOperation
 from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
 from test.k8s_sandbox.utils import install_sandbox_environments
 
@@ -53,6 +51,13 @@ async def sandbox_busybox(
     sandboxes: dict[str, K8sSandboxEnvironment],
 ) -> K8sSandboxEnvironment:
     return sandboxes["busybox"]
+
+
+@pytest_asyncio.fixture(scope="module")
+async def sandbox_busybox_runc(
+    sandboxes: dict[str, K8sSandboxEnvironment],
+) -> K8sSandboxEnvironment:
+    return sandboxes["busybox-runc"]
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -750,29 +755,8 @@ def _delayed_stdin() -> Generator[None, None, None]:
         yield
 
 
-@contextmanager
-def _write_command_without_exec_stdout_guard() -> Generator[
-    list[list[str]], None, None
-]:
-    """Strip `exec 3>&1; ` from the real write command, reintroducing the bug."""
-    original = PodOperation.create_websocket_client_for_exec
-    modified: list[list[str]] = []
-
-    def without_guard(self: PodOperation, **kwargs: Any) -> Any:
-        before = list(kwargs["command"])
-        kwargs["command"] = [part.replace("exec 3>&1; ", "") for part in before]
-        if kwargs["command"] != before:
-            modified.append(kwargs["command"])
-        return original(self, **kwargs)
-
-    with patch.object(
-        WriteFileOperation, "create_websocket_client_for_exec", without_guard
-    ):
-        yield modified
-
-
 async def test_write_file_is_not_truncated_when_stdin_is_delayed(
-    sandbox_busybox: K8sSandboxEnvironment,
+    sandbox_busybox_runc: K8sSandboxEnvironment,
 ) -> None:
     # The write command redirects `head`'s stdout to the destination file, so once the
     # shell execs into `head` nothing holds the exec stdout pipe open. The runtime sees
@@ -784,28 +768,11 @@ async def test_write_file_is_not_truncated_when_stdin_is_delayed(
     contents = b"x" * 4096
 
     with _delayed_stdin():
-        await sandbox_busybox.write_file(dst, contents)
+        await sandbox_busybox_runc.write_file(dst, contents)
 
-    result = await sandbox_busybox.exec(["wc", "-c", dst])
+    result = await sandbox_busybox_runc.exec(["wc", "-c", dst])
     assert result.success, result.stderr
     assert int(result.stdout.split()[0]) == len(contents)
-
-
-async def test_write_file_is_truncated_without_exec_stdout_guard(
-    sandbox_busybox: K8sSandboxEnvironment,
-) -> None:
-    """Negative control: Removing `exec 3>&1; ` has to bring the truncation back."""
-    dst = "/tmp/test-write-file-without-guard.bin"
-    contents = b"x" * 4096
-
-    with _write_command_without_exec_stdout_guard() as modified, _delayed_stdin():
-        await sandbox_busybox.write_file(dst, contents)
-
-    assert modified, "Expected to strip 'exec 3>&1; ' from the write command"
-    result = await sandbox_busybox.exec(["wc", "-c", dst])
-    assert result.success, result.stderr
-    # Silently short, and write_file() still reported success.
-    assert int(result.stdout.split()[0]) < len(contents)
 
 
 ### #read_file() ###

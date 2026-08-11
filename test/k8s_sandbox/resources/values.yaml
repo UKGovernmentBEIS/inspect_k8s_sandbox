@@ -33,3 +33,14 @@ services:
       requests:
         memory: "256Mi"
         cpu: "100m"
+  busybox-runc:
+    image: "busybox:1.37.0"
+    command: ["tail", "-f", "/dev/null"]
+    runtimeClassName: runc
+    resources:
+      limits:
+        memory: "256Mi"
+        cpu: "100m"
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
