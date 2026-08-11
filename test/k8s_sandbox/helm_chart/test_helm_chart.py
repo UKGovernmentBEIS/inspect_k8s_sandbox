@@ -28,12 +28,9 @@ def test_default_chart(chart_dir: Path) -> None:
         services[0]["spec"]["template"]["spec"]["containers"][0]["image"]
         == "python:3.12-bookworm"
     )
-    assert (
-        services[0]["spec"]["template"]["metadata"]["labels"][
-            "inspect.aisi.org/k8s-sandbox-version"
-        ]
-        == "0.14.0"
-    )
+    assert services[0]["spec"]["template"]["metadata"]["labels"][
+        "aisi.gov.uk/k8s-sandbox-version"
+    ] == _chart_version(chart_dir)
 
 
 def test_additional_resources(chart_dir: Path, test_resources_dir: Path) -> None:
@@ -507,15 +504,51 @@ def test_coredns_container(
     ]
 
 
+def test_coredns_security_context_can_be_overridden(chart_dir: Path) -> None:
+    # An image which cannot run under the hardened default needs an escape hatch other
+    # than forking the chart. Overriding one field merges rather than replaces, so the
+    # rest of the hardening survives.
+    documents = _run_helm_template(
+        chart_dir, set_str="corednsSecurityContext.runAsUser=1000"
+    )
+
+    stateful_sets = _get_documents(documents, "StatefulSet")
+    corends_container = next(
+        container
+        for container in stateful_sets[0]["spec"]["template"]["spec"]["containers"]
+        if container["name"] == "coredns"
+    )
+    assert corends_container["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"add": ["NET_BIND_SERVICE"], "drop": ["ALL"]},
+        "readOnlyRootFilesystem": True,
+        "runAsGroup": 65532,
+        "runAsNonRoot": True,
+        "runAsUser": 1000,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+
+
 @pytest.mark.parametrize(
     "values_file",
-    ["invalid-service-name-values.yaml", "invalid-dns-record-values.yaml"],
+    [
+        "invalid-service-name-values.yaml",
+        "invalid-dns-record-values.yaml",
+        "invalid-network-name-values.yaml",
+    ],
 )
 def test_rejects_names_that_can_inject_rendered_configuration(
     chart_dir: Path, test_resources_dir: Path, values_file: str
 ) -> None:
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
         _run_helm_template(chart_dir, test_resources_dir / values_file)
+
+    # Assert the *schema* did the rejecting. Without this, the test would also pass if
+    # helm merely hit a YAML parse error on the injected newline, i.e. it would pass
+    # with values.schema.json deleted. Don't assert on the offending field name: helm
+    # switched JSON Schema libraries mid-3.x and the newer one reports propertyNames
+    # violations against an empty path.
+    assert "values don't meet the specifications of the schema" in excinfo.value.stderr
 
 
 def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> None:
@@ -709,9 +742,16 @@ def _run_helm_template(
     if set_string:
         cmd += ["--set-string", set_string]
 
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
+    # stderr is captured so that tests asserting rejection can check why helm failed.
+    result = subprocess.run(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+    )
     return list(yaml.safe_load_all(result.stdout))
 
 
 def _get_documents(documents: list[Any], doc_type_filter: str) -> list[dict[str, Any]]:
     return [doc for doc in documents if doc["kind"] == doc_type_filter]
+
+
+def _chart_version(chart_dir: Path) -> str:
+    return str(yaml.safe_load((chart_dir / "Chart.yaml").read_text())["version"])

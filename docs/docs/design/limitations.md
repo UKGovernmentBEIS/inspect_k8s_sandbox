@@ -192,8 +192,14 @@ The `timeout` binary on busybox images behaves differently, causing a 128 + 15 (
 = 143 exit code rather than a 124 exit code. This will result in a suitable `ExecResult`
 being returned rather than raising a `TimeoutError`.
 
-## Service names must be lower case alphanumeric
+## Service and network names must be lower case alphanumeric
 
 In the built-in Helm chart, service names (i.e. the keys in the `services` dict) must
 match the case-sensitive regex `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` e.g. `my-name` or
-`123-abc`. The Helm chart will fail to install if this is not the case.
+`123-abc`. Network names may additionally contain `.`. The Helm chart will fail to
+install if this is not the case.
+
+Both are also length-limited: 63 characters for a service name and 55 for a network
+name. These are outer guards rather than usable budgets — each is combined with the
+release name to form Kubernetes object names and label keys which are themselves capped
+at 63 characters, so the practical limit is considerably shorter.

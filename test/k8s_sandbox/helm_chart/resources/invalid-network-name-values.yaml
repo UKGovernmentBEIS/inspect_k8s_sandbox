@@ -1,0 +1,9 @@
+services:
+  default:
+    image: nginx
+    # A newline here would inject into the Pod's label keys and into the name of the
+    # generated CiliumNetworkPolicy.
+    networks:
+      - "safe\nunsafe"
+networks:
+  safe:
