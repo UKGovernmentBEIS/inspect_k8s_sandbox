@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from textwrap import dedent
 from typing import AsyncGenerator
 from unittest.mock import patch
@@ -13,6 +14,7 @@ from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._kubernetes_api import get_current_context_name, k8s_client
+from k8s_sandbox._pod.op import PodOperation
 from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
 from test.k8s_sandbox.utils import install_sandbox_environments
 
@@ -615,6 +617,31 @@ async def test_write_file(sandbox: K8sSandboxEnvironment) -> None:
     cat_result = await sandbox.exec(["cat", dst])
     assert cat_result.stdout == "Hello, World!"
     # See round-trip test for binary data verification.
+
+
+async def test_write_file_when_stdin_bytes_are_delayed(
+    sandbox_busybox: K8sSandboxEnvironment,
+) -> None:
+    # Regression test for #225. The exec stdout stream must not reach EOF while the
+    # write command is still reading stdin: containerd closes stdin in response, and
+    # `head -c N` treats the short read as success, exiting 0 with a truncated file.
+    # Requires a shell which execs into the final command (busybox ash does; dash and
+    # bash do not), so it cannot be reproduced on the Debian-based default image. The
+    # window is ~10-30ms; 500ms loses it reliably. A regression surfaces either as a
+    # truncated file or as a closed-socket error (the command has already exited by the
+    # time the bytes are written), and either way fails this test.
+    dst = "/test-write-file-delayed-stdin.txt"
+    contents = "Hello, World!"
+    original_write_stdin = PodOperation._write_stdin_chunked
+
+    def delayed_write_stdin(self, ws_client, data):  # type: ignore[no-untyped-def]
+        time.sleep(0.5)
+        return original_write_stdin(self, ws_client, data)
+
+    with patch.object(PodOperation, "_write_stdin_chunked", delayed_write_stdin):
+        await sandbox_busybox.write_file(dst, contents)
+
+    assert (await sandbox_busybox.exec(["cat", dst])).stdout == contents
 
 
 async def test_write_file_requiring_quotes(sandbox: K8sSandboxEnvironment) -> None:
