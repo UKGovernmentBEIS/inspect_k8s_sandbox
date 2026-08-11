@@ -3,7 +3,6 @@
 ## Unreleased
 
 - Fix `write_file()` silently writing a truncated or empty file while reporting success
-  ([#225](https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225)).
 - `inspect sandbox cleanup k8s` (with no release name) now **exits non-zero** if any release fails to uninstall, rather than reporting `Complete.` and exiting 0. Releases which fail to uninstall are named, at end-of-task cleanup too, along with their namespace and the `inspect sandbox cleanup k8s <release>` command to retry them.
 - **BREAKING CHANGE**: Sandbox pods created by the built-in Helm chart no longer mount
   Kubernetes service-account API tokens by default. Set
