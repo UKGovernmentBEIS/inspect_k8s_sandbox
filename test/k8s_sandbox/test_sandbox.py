@@ -2,8 +2,10 @@ import asyncio
 import logging
 import os
 import re
+import time
+from contextlib import contextmanager
 from textwrap import dedent
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Generator
 from unittest.mock import patch
 
 import pytest
@@ -49,6 +51,13 @@ async def sandbox_busybox(
     sandboxes: dict[str, K8sSandboxEnvironment],
 ) -> K8sSandboxEnvironment:
     return sandboxes["busybox"]
+
+
+@pytest_asyncio.fixture(scope="module")
+async def sandbox_busybox_runc(
+    sandboxes: dict[str, K8sSandboxEnvironment],
+) -> K8sSandboxEnvironment:
+    return sandboxes["busybox-runc"]
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -731,6 +740,39 @@ async def test_write_file_is_a_directory_error(
         await sandbox.write_file("/root/", "Hello, World!")
 
     assert not log_err.records
+
+
+@contextmanager
+def _delayed_stdin() -> Generator[None, None, None]:
+    """Stall each stdin frame, emulating a client outside the cluster."""
+    original_write_stdin = WSClient.write_stdin
+
+    def slow_write_stdin(self: WSClient, data, *args, **kwargs):  # type: ignore[no-untyped-def]
+        time.sleep(1.0)
+        return original_write_stdin(self, data, *args, **kwargs)
+
+    with patch.object(WSClient, "write_stdin", slow_write_stdin):
+        yield
+
+
+async def test_write_file_is_not_truncated_when_stdin_is_delayed(
+    sandbox_busybox_runc: K8sSandboxEnvironment,
+) -> None:
+    # The write command redirects `head`'s stdout to the destination file, so once the
+    # shell execs into `head` nothing holds the exec stdout pipe open. The runtime sees
+    # EOF on stdout and closes stdin while `head` is still reading; `head -c N` treats
+    # the short stdin as a normal EOF and exits 0, leaving a truncated file. Delaying
+    # the stdin frame makes the close win.
+    # https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225
+    dst = "/tmp/test-write-file-delayed-stdin.bin"
+    contents = b"x" * 4096
+
+    with _delayed_stdin():
+        await sandbox_busybox_runc.write_file(dst, contents)
+
+    result = await sandbox_busybox_runc.exec(["wc", "-c", dst])
+    assert result.success, result.stderr
+    assert int(result.stdout.split()[0]) == len(contents)
 
 
 ### #read_file() ###
