@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2026-08-12 0.13.0
 
 - Fix `write_file()` silently writing a truncated or empty file while reporting success
 - **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
