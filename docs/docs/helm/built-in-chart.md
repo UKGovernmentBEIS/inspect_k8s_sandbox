@@ -232,6 +232,10 @@ services:
       - example.com
 ```
 
+Records are interpolated into the CoreDNS configuration, so they are restricted to
+letters, digits and `_ - .` (e.g. `_dmarc.example.com` is fine). Anything containing
+whitespace or other characters is rejected when the chart is installed.
+
 To achieve this, whilst maintaining support for deploying multiple instances of the same
 chart in a given namespace, a CoreDNS "sidecar" container is deployed in each service
 Pod.
@@ -256,6 +260,16 @@ the nameserver.
 
 Note that the CoreDNS sidecar only binds to `127.0.0.1` so won't be accessible from
 outside the Pod.
+
+The bundled sidecar image is pinned by digest and runs under a hardened security
+context: UID/GID 65532, a read-only root filesystem, RuntimeDefault seccomp, no
+privilege escalation, and no Linux capability other than `NET_BIND_SERVICE`. A custom
+`corednsImage` must be able to run under that contract, or must override
+`corednsSecurityContext` as well.
+
+`NET_BIND_SERVICE` is required rather than merely defensive: the CoreDNS binary carries
+a `cap_net_bind_service` file capability, so dropping it from the capability set stops
+the container from starting at all.
 
 CoreDNS is used over Dnsmasq for 2 reasons:
 

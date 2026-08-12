@@ -3,7 +3,19 @@
   "type": "object",
   "properties": {
     "global": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "nameOverride": {
+          "type": ["string", "null"],
+          "description": "Interpolated unquoted into the CoreDNS Corefile via agentEnv.fullname. The pattern is a security control: it must keep excluding whitespace and '#'. The empty string is the default and means 'unset'.",
+          "pattern": "^$|^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$"
+        },
+        "fullnameOverride": {
+          "type": ["string", "null"],
+          "description": "See nameOverride.",
+          "pattern": "^$|^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$"
+        }
+      }
     },
     "allowDomains": {
       "type": "array",
@@ -44,7 +56,12 @@
       }
     },
     "networks": {
-      "type": "object"
+      "type": "object",
+      "propertyNames": {
+        "maxLength": 55,
+        "description": "Interpolated into pod label keys and a CiliumNetworkPolicy name. 55 rather than 63 because the label key is prefixed with 'network-'.",
+        "pattern": "^[a-z0-9](?:[-a-z0-9.]{0,53}[a-z0-9])?$"
+      }
     },
     "corednsImage": {
       "type": "string"
@@ -54,6 +71,9 @@
       "items": {
         "type": "string"
       }
+    },
+    "corednsSecurityContext": {
+      "type": "object"
     },
     "imagePullSecrets": {
       "type": "array",
@@ -71,6 +91,11 @@
     },
     "services": {
       "type": "object",
+      "propertyNames": {
+        "maxLength": 63,
+        "description": "Interpolated into Kubernetes object names, pod label values and the CoreDNS Corefile. 63 is an outer guard only: names are prefixed with the release fullname, so the usable budget is considerably shorter.",
+        "pattern": "^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$"
+      },
       "patternProperties": {
         ".*": {
           "type": "object",
@@ -78,7 +103,10 @@
             "networks": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 55,
+                "description": "Interpolated into pod label keys and a CiliumNetworkPolicy name. 55 rather than 63 because the label key is prefixed with 'network-'.",
+                "pattern": "^[a-z0-9](?:[-a-z0-9.]{0,53}[a-z0-9])?$"
               }
             },
             "runtimeClassName": {
@@ -96,7 +124,10 @@
             "additionalDnsRecords": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 253,
+                "description": "Interpolated into the CoreDNS Corefile as 'rewrite name exact <record>'. The pattern is a security control: it must keep excluding whitespace, newlines and '#'. Validating hostname shape beyond that is CoreDNS's job, not the chart's.",
+                "pattern": "^[A-Za-z0-9_*][A-Za-z0-9_.*-]*$"
               }
             },
             "ports": {

@@ -1,6 +1,6 @@
 # agent-env
 
-![Version: 0.13.0](https://img.shields.io/badge/Version-0.13.0-informational?style=flat-square)
+![Version: 0.14.0](https://img.shields.io/badge/Version-0.14.0-informational?style=flat-square)
 
 ## Values
 
@@ -14,16 +14,17 @@
 | annotations | object | `{}` | A dict of annotations to apply to resources within the agent environment. |
 | automountServiceAccountToken | bool | `false` | Whether to mount the selected ServiceAccount's Kubernetes API token in sandbox pods. Keep disabled for cloud workload identity such as IRSA, which injects a provider-specific token separately. |
 | corednsCommand | list | `["/coredns","-conf","/etc/coredns/Corefile"]` | The command to use for the coredns container. |
-| corednsImage | string | `"coredns/coredns:1.8.3"` | The image to use for the coredns container. |
+| corednsImage | string | `"coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea"` | The image to use for the coredns container. Pinned by digest; the tag is recorded alongside it for readability and the two must be updated together. An override must run under `corednsSecurityContext` below, or that must be overridden too. |
+| corednsSecurityContext | object | Non-root 65532, read-only root filesystem, RuntimeDefault seccomp, no privilege escalation, and no capability other than `NET_BIND_SERVICE` | Security context for the coredns container. Override only if a custom `corednsImage` cannot run under the hardened default. |
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
 | imagePullSecrets | list | `[]` | References to pre-existing secrets that contain registry credentials. |
 | labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |
-| networks | object | `{}` | Defines network names that can be attached to services in order to specify subsets of services that can communicate with one another. |
+| networks | object | `{}` | Defines network names that can be attached to services in order to specify subsets of services that can communicate with one another. Names must be lower case alphanumeric with `-` or `.`, and at most 55 characters. |
 | serviceAccountCreate | bool | `false` | Whether to create the selected ServiceAccount. Keep disabled to use an externally managed ServiceAccount across concurrent sandbox releases. |
 | serviceAccountName | string | `nil` | Service account name for sandbox pods. The account must already exist unless `serviceAccountCreate` is enabled. |
 | services | object | see [values.yaml](./values.yaml) | A collection of services to deploy within the agent environment. A service can connect to another service using DNS, e.g. `http://nginx:80`. |
 | services.default | object | see [values.yaml](./values.yaml) | The default service, this is required for the agent environment to function. |
-| services.default.additionalDnsRecords | list | `[]` | A list of additional domains which will resolve to this service from within the agent environment (e.g. example.com). If one or more records are provided, `dnsRecord` is automatically set to true. |
+| services.default.additionalDnsRecords | list | `[]` | A list of additional domains which will resolve to this service from within the agent environment (e.g. example.com). If one or more records are provided, `dnsRecord` is automatically set to true. Records may contain letters, digits and `_ - .`; whitespace and other characters are rejected at install time because these are interpolated into the CoreDNS Corefile. |
 | services.default.args | list | `[]` | The container's entrypoint arguments. |
 | services.default.command | list | `["tail","-f","/dev/null"]` | The container's entrypoint command. |
 | services.default.dnsRecord | bool | false | Whether to create a DNS record which will resolve to this service from within the agent environment, using the service name as the domain (e.g. default). |

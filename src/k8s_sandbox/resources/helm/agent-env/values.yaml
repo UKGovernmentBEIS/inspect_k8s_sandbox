@@ -34,15 +34,37 @@ allowEntities: []
 imagePullSecrets: []
 # - name: "gcr-json-key"
 # -- Defines network names that can be attached to services in order to specify subsets
-# of services that can communicate with one another.
+# of services that can communicate with one another. Names must be lower case
+# alphanumeric with `-` or `.`, and at most 55 characters.
 networks: {}
-# -- The image to use for the coredns container.
-corednsImage: "coredns/coredns:1.8.3"
+# -- The image to use for the coredns container. Pinned by digest; the tag is recorded
+# alongside it for readability and the two must be updated together. An override must
+# run under `corednsSecurityContext` below, or that must be overridden too.
+corednsImage: "coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea"
 # -- The command to use for the coredns container.
 corednsCommand:
   - /coredns
   - -conf
   - /etc/coredns/Corefile
+# -- Security context for the coredns container. Override only if a custom
+# `corednsImage` cannot run under the hardened default.
+# @default -- Non-root 65532, read-only root filesystem, RuntimeDefault seccomp, no privilege escalation, and no capability other than `NET_BIND_SERVICE`
+corednsSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+    # Load-bearing, not belt-and-braces: the coredns binary carries a
+    # cap_net_bind_service file capability, so with an empty bounding set execve
+    # itself fails with "operation not permitted" — the container never starts.
+    add:
+      - NET_BIND_SERVICE
+  readOnlyRootFilesystem: true
+  runAsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
 # -- A collection of services to deploy within the agent environment. A service can
 # connect to another service using DNS, e.g. `http://nginx:80`.
 # @default -- see [values.yaml](./values.yaml)
@@ -67,7 +89,9 @@ services:
     dnsRecord: false
     # -- A list of additional domains which will resolve to this service from within the
     # agent environment (e.g. example.com). If one or more records are provided,
-    # `dnsRecord` is automatically set to true.
+    # `dnsRecord` is automatically set to true. Records may contain letters, digits and
+    # `_ - .`; whitespace and other characters are rejected at install time because
+    # these are interpolated into the CoreDNS Corefile.
     additionalDnsRecords: []
     # -- Deprecated. All ports of services with a DNS record are accessible (though not
     # necessarily open) to other services within the agent environment. If one or more

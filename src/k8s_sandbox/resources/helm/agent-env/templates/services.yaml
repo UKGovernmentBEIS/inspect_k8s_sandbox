@@ -20,6 +20,9 @@ spec:
       labels:
         {{- include "agentEnv.labelsFromValues" $ | nindent 8 }}
         {{- include "agentEnv.selectorLabels" $ | nindent 8 }}
+        {{- /* The StatefulSet gets this via helm.sh/chart; Pods don't, and knowing
+               which chart version created a leaked Pod is useful when triaging. */}}
+        aisi.gov.uk/k8s-sandbox-version: {{ $.Chart.Version | quote }}
         {{- if $service.networks }}
         {{- range $service.networks }}
         aisi.gov.uk/network-{{ . }}: "true"
@@ -148,6 +151,8 @@ spec:
         image: {{ quote $.Values.corednsImage }}
         command:
           {{- toYaml $.Values.corednsCommand | nindent 10 }}
+        securityContext:
+          {{- toYaml $.Values.corednsSecurityContext | nindent 10 }}
         resources:
           requests:
             memory: "128Mi"
@@ -166,6 +171,7 @@ spec:
           - name: coredns-config
             mountPath: /etc/coredns/Corefile
             subPath: Corefile
+            readOnly: true
       {{- with $service.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
