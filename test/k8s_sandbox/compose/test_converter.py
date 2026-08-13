@@ -572,6 +572,87 @@ services:
     assert "Unsupported key(s) in 'deploy'" in str(exc_info.value)
 
 
+def test_converts_gpu_device_reservation(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # k8s requires extended resources on limits too (requests must equal limits).
+    assert result["services"]["my-service"]["resources"] == {
+        "limits": {"nvidia.com/gpu": 1},
+        "requests": {"nvidia.com/gpu": 1},
+    }
+
+
+def test_converts_gpu_device_reservation_alongside_cpu_and_memory(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+          cpus: 0.25
+          devices:
+            # No driver: Docker's default GPU driver is nvidia.
+            - count: "2"
+              capabilities: [gpu]
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["resources"] == {
+        "limits": {"memory": "1Gi", "nvidia.com/gpu": 2},
+        "requests": {"memory": "512Mi", "cpu": 0.25, "nvidia.com/gpu": 2},
+    }
+
+
+@pytest.mark.parametrize(
+    "device,expected_error",
+    [
+        ("{driver: nvidia, count: all, capabilities: [gpu]}", "count: all"),
+        ("{driver: nvidia, count: 0, capabilities: [gpu]}", "count: 0"),
+        ("{driver: amd, count: 1, capabilities: [gpu]}", "Only NVIDIA"),
+        ("{driver: nvidia, count: 1, capabilities: [tpu]}", "Only NVIDIA"),
+        (
+            "{driver: nvidia, device_ids: ['0'], capabilities: [gpu]}",
+            "Only NVIDIA",
+        ),
+    ],
+)
+def test_rejects_unsupported_device_reservations(
+    device: str, expected_error: str, tmp_compose: TmpComposeFixture
+) -> None:
+    compose_path = tmp_compose(f"""
+services:
+  my-service:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - {device}
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert expected_error in str(exc_info.value)
+
+
 def test_rejects_unsupported_resources_key(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:

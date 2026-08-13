@@ -168,6 +168,51 @@ resources. It covers CPU and memory requests/limits (via `cpus`/`mem_limit` and
 `deploy.resources`), but has no concept of a disk (`ephemeral-storage`) request or
 limit, nor of resources such as `hugepages-*`.
 
+### GPUs
+
+The standard Compose NVIDIA GPU reservation is converted to the `nvidia.com/gpu`
+extended resource:
+
+```yaml
+services:
+  default:
+    image: nvidia/cuda:12.6.3-base-ubuntu24.04
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+```
+
+produces:
+
+```yaml
+services:
+  default:
+    runtimeClassName: nvidia
+    resources:
+      limits: {nvidia.com/gpu: 1}
+      requests: {nvidia.com/gpu: 1}
+```
+
+Notes:
+
+- You will typically also need `runtime: nvidia` (as above; also valid Docker
+  Compose): the chart's default `gvisor` runtime class does not support GPUs.
+- Kubernetes requires extended resources on `limits` (with `requests` equal), so a
+  Compose _reservation_ populates both — unlike `cpus`/`memory` reservations, which
+  map only to `requests`.
+- An explicit integer `count` is required; `count: all` (Docker's default when
+  `count` is omitted), `device_ids`, and non-NVIDIA drivers are rejected. `driver`
+  may be omitted (NVIDIA is Docker's default GPU driver).
+- Tolerations/node selectors for tainted GPU nodes are cluster convention and not
+  generated: add them via a hand-written Helm values file, or rely on cluster-side
+  admission defaults (e.g.
+  [ExtendedResourceToleration](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#extendedresourcetoleration)).
+
 ### Swap (`memswap_limit`)
 
 `memswap_limit` is ignored (with an info-level log) because Kubernetes has no
