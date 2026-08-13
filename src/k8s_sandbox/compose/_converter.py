@@ -504,7 +504,10 @@ class _ServiceConverter:
                 # if set, must equal limits), so populate both from the reservation.
                 requests["nvidia.com/gpu"] = gpu_count
                 result.setdefault("limits", {})["nvidia.com/gpu"] = gpu_count
-            result["requests"] = requests
+            if requests:
+                # Guard so that 'devices: []' doesn't emit 'requests: {}', which would
+                # also defeat _set_requests_to_limits_if_unset.
+                result["requests"] = requests
         if src:
             raise ComposeConverterError(
                 f"Unsupported key(s) in 'resources': {set(src)}. {self.context}"

@@ -208,6 +208,9 @@ Notes:
 - An explicit integer `count` is required; `count: all` (Docker's default when
   `count` is omitted), `device_ids`, and non-NVIDIA drivers are rejected. `driver`
   may be omitted (NVIDIA is Docker's default GPU driver).
+- `capabilities` must be exactly `[gpu]`. Other driver capabilities Docker accepts
+  (`utility`, `compute`, ...) have no Kubernetes equivalent and are rejected rather
+  than dropped.
 - Tolerations/node selectors for tainted GPU nodes are cluster convention and not
   generated: add them via a hand-written Helm values file, or rely on cluster-side
   admission defaults (e.g.

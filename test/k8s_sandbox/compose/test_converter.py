@@ -621,6 +621,29 @@ services:
     }
 
 
+def test_ignores_empty_gpu_device_reservations(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          devices: []
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    # No 'requests: {}'; requests still mirror limits as if reservations were absent.
+    assert result["services"]["my-service"]["resources"] == {
+        "limits": {"memory": "1Gi"},
+        "requests": {"memory": "1Gi"},
+    }
+
+
 @pytest.mark.parametrize(
     "device,expected_error",
     [
