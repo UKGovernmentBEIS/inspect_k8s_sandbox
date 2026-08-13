@@ -18,6 +18,10 @@ Rules:
   types callers catch).
 - **Don't churn existing entries.** When editing, make changes that are necessary
   (accuracy, completeness) and minimal. Don't swap synonyms or reorder for taste.
+- **When the feature has a docs page, just announce it.** One sentence for what the
+  change is. Usage details (required keys, caveats, companion settings) belong on
+  the docs page — anyone adopting the feature reads the docs, not the changelog.
+  Don't signpost the docs with "see ... for details" links either.
 
 Examples (all from real entries):
 

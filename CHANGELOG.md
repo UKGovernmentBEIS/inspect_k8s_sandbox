@@ -12,6 +12,8 @@
 - The CoreDNS sidecar no longer serves its `ready` endpoint on port 8181, and refuses
   queries beyond 1000 concurrent.
 - Raise an error when a conflicting `max_pod_ops` setting would otherwise be ignored.
+- Compose to Helm: Convert NVIDIA GPU device reservations
+  (`deploy.resources.reservations.devices`) to `nvidia.com/gpu` requests and limits.
 
 ## 2026-08-12 0.13.0
 

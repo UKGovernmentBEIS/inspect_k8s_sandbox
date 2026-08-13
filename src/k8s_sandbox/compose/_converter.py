@@ -496,12 +496,52 @@ class _ServiceConverter:
         if limits := src.pop("limits", None):
             result["limits"] = self._convert_resource(limits)
         if reservations := src.pop("reservations", None):
-            result["requests"] = self._convert_resource(reservations)
+            devices = reservations.pop("devices", None)
+            requests = self._convert_resource(reservations)
+            if devices:
+                gpu_count = self._convert_device_reservations(devices)
+                # k8s requires extended resources to be set on limits (and requests,
+                # if set, must equal limits), so populate both from the reservation.
+                requests["nvidia.com/gpu"] = gpu_count
+                result.setdefault("limits", {})["nvidia.com/gpu"] = gpu_count
+            if requests:
+                # Guard so that 'devices: []' doesn't emit 'requests: {}', which would
+                # also defeat _set_requests_to_limits_if_unset.
+                result["requests"] = requests
         if src:
             raise ComposeConverterError(
                 f"Unsupported key(s) in 'resources': {set(src)}. {self.context}"
             )
         return result
+
+    def _convert_device_reservations(self, devices: list[dict[str, Any]]) -> int:
+        """Convert compose GPU device reservations to an nvidia.com/gpu count.
+
+        Only NVIDIA GPU reservations with an explicit integer count are supported:
+        there is no k8s equivalent of 'count: all' or 'device_ids', and non-NVIDIA
+        drivers have no obvious extended resource name to map to.
+        """
+        total = 0
+        for device in devices:
+            capabilities = device.pop("capabilities", None)
+            driver = device.pop("driver", None)
+            count = device.pop("count", "all")  # Compose defaults count to 'all'.
+            if capabilities != ["gpu"] or driver not in (None, "nvidia") or device:
+                raise ComposeConverterError(
+                    f"Unsupported device reservation. Only NVIDIA GPU reservations "
+                    f"('driver: nvidia' or no driver, 'capabilities: [gpu]', and no "
+                    f"other keys) are supported. {self.context}"
+                )
+            if isinstance(count, str) and count.isdigit():
+                count = int(count)
+            if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+                raise ComposeConverterError(
+                    f"Unsupported device reservation 'count: {count}'. Only a "
+                    f"positive integer is supported (an explicit count is required: "
+                    f"Kubernetes has no equivalent of 'all'). {self.context}"
+                )
+            total += count
+        return total
 
     def _convert_resource(self, src: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = dict()
