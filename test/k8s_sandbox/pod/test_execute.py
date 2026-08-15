@@ -1,3 +1,4 @@
+import shlex
 from contextlib import contextmanager
 from typing import Generator
 from unittest.mock import MagicMock, patch
@@ -8,7 +9,7 @@ from kubernetes.stream.ws_client import WSClient  # type: ignore
 
 import k8s_sandbox._pod.op as op_module
 from k8s_sandbox._pod.error import PodError
-from k8s_sandbox._pod.execute import ExecuteOperation
+from k8s_sandbox._pod.execute import ExecuteOperation, _shell_command
 
 
 def _make_ws_client(
@@ -298,3 +299,60 @@ class TestExecChunksStdin:
         assert ws.write_stdin.call_count > 1
         assert all(len(c.args[0]) <= 16 for c in ws.write_stdin.call_args_list)
         assert result is sentinel
+
+
+class TestShellCommand:
+    """`runuser` is only reached for when the container is not already that user."""
+
+    def test_no_user_opens_a_plain_shell(self) -> None:
+        assert _shell_command(None) == ["/bin/sh"]
+
+    def test_user_falls_back_to_runuser(self) -> None:
+        command = _shell_command("agent")
+
+        assert command[:2] == ["/bin/sh", "-c"]
+        assert "exec runuser -u agent -- /bin/sh" in command[2]
+
+    def test_user_skips_runuser_when_already_that_user(self) -> None:
+        """A no-op switch still needs CAP_SETGID, so avoid runuser when we can."""
+        script = _shell_command("agent")[2]
+
+        assert '[ "$(id -un 2>/dev/null)" = agent ]' in script
+        assert '[ "$(id -u 2>/dev/null)" = agent ]' in script
+        assert "then exec /bin/sh; fi" in script
+
+    def test_a_numeric_user_is_matched_by_uid(self) -> None:
+        script = _shell_command("1000")[2]
+
+        assert '[ "$(id -u 2>/dev/null)" = 1000 ]' in script
+
+    @pytest.mark.parametrize("user", ["a b", "a;rm -rf /", "$(whoami)", "'"])
+    def test_user_is_quoted(self, user: str) -> None:
+        """The user reaches two more shell words than it used to; quote all three."""
+        script = _shell_command(user)[2]
+
+        assert script.count(shlex.quote(user)) == 3
+        assert user not in script.replace(shlex.quote(user), "")
+
+
+class TestRunuserErrorMessages:
+    @pytest.mark.parametrize(
+        ("stderr", "expected"),
+        [
+            ("runuser: user agent does not exist", "does not appear to exist"),
+            ("runuser: may not be used by non-root users", "must be running as root"),
+            ("runuser: cannot set groups: Operation not permitted", "CAP_SETGID"),
+            ("/bin/sh: 1: exec: runuser: not found", "must be installed"),
+            ("runuser: not found", "must be installed"),
+        ],
+    )
+    def test_runuser_errors_are_explained(self, stderr: str, expected: str) -> None:
+        executor = ExecuteOperation(MagicMock())
+
+        with pytest.raises(RuntimeError, match=expected):
+            executor._check_for_runuser_error(stderr, "agent")
+
+    def test_unrelated_stderr_is_not_claimed_as_a_runuser_error(self) -> None:
+        executor = ExecuteOperation(MagicMock())
+
+        executor._check_for_runuser_error("ls: /nope: No such file", "agent")

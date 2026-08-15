@@ -9,13 +9,41 @@ from inspect_ai.util import SandboxEnvironmentLimits as limits
 from kubernetes.stream.ws_client import WSClient  # type: ignore[import-untyped]
 
 from k8s_sandbox._pod.buffer import LimitedBuffer
-from k8s_sandbox._pod.error import ExecutableNotFoundError, PodError
+from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.get_returncode import get_returncode
 from k8s_sandbox._pod.op import PodOperation
 
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
 EXEC_USER_URL = "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
+
+
+def _shell_command(user: str | None) -> list[str]:
+    """The command to open the interactive shell an exec() runs inside.
+
+    When a user is requested, only reach for `runuser` if the container is not
+    already running as that user. `runuser` calls setgroups(2), which needs
+    CAP_SETGID even when switching root -> root, so an unconditional wrapper
+    makes every exec(user=...) fail in a container whose capabilities have been
+    dropped -- a common hardening posture, and one where the switch was a no-op
+    anyway.
+
+    The check runs in the container rather than here so that it costs no extra
+    round trip. `sh -c` takes its script from argv, so stdin reaches whichever
+    shell is exec'd unread, and the caller's protocol is unchanged.
+    """
+    if user is None:
+        return ["/bin/sh"]
+    quoted = shlex.quote(user)
+    # A missing or unusual `id` leaves the substitution empty, which simply
+    # falls through to `runuser` -- the behaviour before this check existed.
+    return [
+        "/bin/sh",
+        "-c",
+        f'if [ "$(id -un 2>/dev/null)" = {quoted} ] '
+        f'|| [ "$(id -u 2>/dev/null)" = {quoted} ]; then exec /bin/sh; fi; '
+        f"exec runuser -u {quoted} -- /bin/sh",
+    ]
 
 
 class ExecuteOperation(PodOperation):
@@ -38,28 +66,18 @@ class ExecuteOperation(PodOperation):
 
     @contextmanager
     def _interactive_shell(self, user: str | None) -> Generator[WSClient, None, None]:
-        command = ["/bin/sh"]
-        if user is not None:
-            command = ["runuser", "-u", user] + command
-        try:
-            yield from self.create_websocket_client_for_exec(
-                command=command,
-                stderr=True,
-                stdin=True,
-                stdout=True,
-                # Leave stdout and stderr as binary. Has no effect on stdin.
-                binary=True,
-            )
-        # Raised if /bin/sh or runuser cannot be found in the Pod (not if a
-        # user-supplied) command cannot be found.
-        except ExecutableNotFoundError as e:
-            if 'error finding executable "runuser"' in str(e):
-                raise RuntimeError(
-                    f"When a user parameter ('{user}') is provided to exec(), the "
-                    f"runuser binary must be installed in the container. Docs: "
-                    f"{EXEC_USER_URL}"
-                ) from e
-            raise
+        # ExecutableNotFoundError from here now only means /bin/sh is missing. A
+        # missing `runuser` is exec'd by the shell rather than by the API server,
+        # so it surfaces as a 127 on stderr and is handled by
+        # _check_for_runuser_error instead.
+        yield from self.create_websocket_client_for_exec(
+            command=_shell_command(user),
+            stderr=True,
+            stdin=True,
+            stdout=True,
+            # Leave stdout and stderr as binary. Has no effect on stdin.
+            binary=True,
+        )
 
     def _build_shell_script(
         self,
@@ -190,6 +208,19 @@ class ExecuteOperation(PodOperation):
             raise RuntimeError(
                 f"When a user parameter ('{user}') is provided to exec(), the "
                 f"container must be running as root. Docs: {EXEC_USER_URL}\n{stderr}"
+            )
+        if "cannot set groups" in stderr.casefold():
+            raise RuntimeError(
+                f"When a user parameter ('{user}') is provided to exec() and the "
+                f"container is not already running as that user, runuser needs "
+                f"CAP_SETGID to call setgroups(2). The container appears to have "
+                f"had its capabilities dropped. Docs: {EXEC_USER_URL}\n{stderr}"
+            )
+        if re.search(r"runuser: (not found|no such file)", stderr, re.IGNORECASE):
+            raise RuntimeError(
+                f"When a user parameter ('{user}') is provided to exec(), the "
+                f"runuser binary must be installed in the container. Docs: "
+                f"{EXEC_USER_URL}\n{stderr}"
             )
 
     def _filter_sentinel_and_returncode(self, frame: bytes) -> tuple[bytes, int | None]:
