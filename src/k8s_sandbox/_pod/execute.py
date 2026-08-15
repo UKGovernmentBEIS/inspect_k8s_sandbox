@@ -25,27 +25,36 @@ def _shell_command(user: str | None) -> list[str]:
     already running as that user. `runuser` calls setgroups(2), which needs
     CAP_SETGID even when switching root -> root, so an unconditional wrapper
     makes every exec(user=...) fail in a container whose capabilities have been
-    dropped -- a common hardening posture, and one where the switch was a no-op
-    anyway.
+    dropped. Skipping it is close to a no-op, but not exactly one: runuser also
+    normalizes HOME, SHELL, USER, LOGNAME and PATH, which the skip path
+    inherits from the container instead.
 
     The check runs in the container rather than here so that it costs no extra
     round trip. `sh -c` takes its script from argv, so stdin reaches whichever
     shell is exec'd unread, and the caller's protocol is unchanged.
 
-    `id -un` reports only the first passwd name for the uid, so a second name
-    for the same uid (root/toor) is not recognised and falls through to
-    `runuser` -- i.e. the previous behaviour, which is the safe direction.
+    `user` may be a name or a uid, and the two must be compared against
+    different things: testing a uid against `id -un` (or a name against `id -u`)
+    would match an account merely *named* "0" against uid 0 and run the command
+    as the wrong user. So only the applicable test is emitted.
+
+    `id -un` reports only the first passwd name for a uid, so a second name for
+    the same uid (root/toor) is not recognised and falls through to `runuser` --
+    i.e. the previous behaviour, which is the safe direction.
     """
     if user is None:
         return ["/bin/sh"]
+    if not user:
+        # Matches nothing; leave runuser to reject it as it did before.
+        return ["runuser", "-u", user, "--", "/bin/sh"]
     quoted = shlex.quote(user)
-    # A missing or unusual `id` leaves the substitution empty, which simply
-    # falls through to `runuser` -- the behaviour before this check existed.
+    # A missing or failing `id` leaves the substitution empty, which cannot
+    # equal a non-empty user, so that also falls through to `runuser`.
+    current = "id -u" if user.isdigit() else "id -un"
     return [
         "/bin/sh",
         "-c",
-        f'if [ "$(id -un 2>/dev/null)" = {quoted} ] '
-        f'|| [ "$(id -u 2>/dev/null)" = {quoted} ]; then exec /bin/sh; fi; '
+        f'if [ "$({current} 2>/dev/null)" = {quoted} ]; then exec /bin/sh; fi; '
         f"exec runuser -u {quoted} -- /bin/sh",
     ]
 

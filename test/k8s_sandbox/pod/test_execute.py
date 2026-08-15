@@ -318,20 +318,29 @@ class TestShellCommand:
         script = _shell_command("agent")[2]
 
         assert '[ "$(id -un 2>/dev/null)" = agent ]' in script
-        assert '[ "$(id -u 2>/dev/null)" = agent ]' in script
         assert "then exec /bin/sh; fi" in script
 
-    def test_a_numeric_user_is_matched_by_uid(self) -> None:
-        script = _shell_command("1000")[2]
+    def test_a_name_is_compared_against_the_name_and_a_uid_against_the_uid(
+        self,
+    ) -> None:
+        """Cross-comparing would match an account *named* "0" against uid 0."""
+        by_name = _shell_command("agent")[2]
+        by_uid = _shell_command("1000")[2]
 
-        assert '[ "$(id -u 2>/dev/null)" = 1000 ]' in script
+        assert "id -un" in by_name and "id -u " not in by_name
+        assert '[ "$(id -u 2>/dev/null)" = 1000 ]' in by_uid
+        assert "id -un" not in by_uid
+
+    def test_an_empty_user_is_left_to_runuser(self) -> None:
+        """It matches nothing, and an empty `id` output must not look equal."""
+        assert _shell_command("") == ["runuser", "-u", "", "--", "/bin/sh"]
 
     @pytest.mark.parametrize("user", ["a b", "a;rm -rf /", "$(whoami)", "'"])
     def test_user_is_quoted(self, user: str) -> None:
         """The user reaches two more shell words than it used to; quote all three."""
         script = _shell_command(user)[2]
 
-        assert script.count(shlex.quote(user)) == 3
+        assert script.count(shlex.quote(user)) == 2
         assert user not in script.replace(shlex.quote(user), "")
 
 
