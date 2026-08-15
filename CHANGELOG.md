@@ -17,8 +17,9 @@
 - `exec(user=...)` no longer wraps the shell in `runuser` when the container is already
   running as that user. `runuser` calls `setgroups(2)`, which needs `CAP_SETGID` even
   for a root -> root switch, so the unconditional wrapper made every `exec(user=...)`
-  fail in a container whose capabilities had been dropped. A missing `runuser`, a
-  missing `CAP_SETGID` and an unknown user are now each reported with an explanation
+  fail in a container whose capabilities had been dropped. On that path the process
+  environment is the container's rather than one `runuser` has reset (`HOME`, `USER`,
+  supplementary groups). A dropped `CAP_SETGID` is now reported with an explanation
   rather than a raw `runuser` error.
 
 ## 2026-08-12 0.13.0

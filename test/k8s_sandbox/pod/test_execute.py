@@ -343,7 +343,6 @@ class TestRunuserErrorMessages:
             ("runuser: may not be used by non-root users", "must be running as root"),
             ("runuser: cannot set groups: Operation not permitted", "CAP_SETGID"),
             ("/bin/sh: 1: exec: runuser: not found", "must be installed"),
-            ("runuser: not found", "must be installed"),
         ],
     )
     def test_runuser_errors_are_explained(self, stderr: str, expected: str) -> None:
@@ -352,7 +351,19 @@ class TestRunuserErrorMessages:
         with pytest.raises(RuntimeError, match=expected):
             executor._check_for_runuser_error(stderr, "agent")
 
-    def test_unrelated_stderr_is_not_claimed_as_a_runuser_error(self) -> None:
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "ls: /nope: No such file",
+            # Same message body as the runuser case; a user command's own
+            # failure must not be reported as a sandbox misconfiguration.
+            "newgrp: cannot set groups: Operation not permitted",
+            "su: cannot set groups: Operation not permitted",
+        ],
+    )
+    def test_unrelated_stderr_is_not_claimed_as_a_runuser_error(
+        self, stderr: str
+    ) -> None:
         executor = ExecuteOperation(MagicMock())
 
-        executor._check_for_runuser_error("ls: /nope: No such file", "agent")
+        executor._check_for_runuser_error(stderr, "agent")  # does not raise

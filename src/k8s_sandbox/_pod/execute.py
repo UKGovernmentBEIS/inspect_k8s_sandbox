@@ -31,6 +31,10 @@ def _shell_command(user: str | None) -> list[str]:
     The check runs in the container rather than here so that it costs no extra
     round trip. `sh -c` takes its script from argv, so stdin reaches whichever
     shell is exec'd unread, and the caller's protocol is unchanged.
+
+    `id -un` reports only the first passwd name for the uid, so a second name
+    for the same uid (root/toor) is not recognised and falls through to
+    `runuser` -- i.e. the previous behaviour, which is the safe direction.
     """
     if user is None:
         return ["/bin/sh"]
@@ -209,14 +213,18 @@ class ExecuteOperation(PodOperation):
                 f"When a user parameter ('{user}') is provided to exec(), the "
                 f"container must be running as root. Docs: {EXEC_USER_URL}\n{stderr}"
             )
-        if "cannot set groups" in stderr.casefold():
+        # Anchored on the `runuser: ` prefix like the arms above it: `newgrp`,
+        # `sg`, `su` and `login` print the same message body, so an unanchored
+        # match would blame the sandbox's capabilities for a user command's own
+        # failure.
+        if re.search(r"runuser: cannot set groups", stderr, re.IGNORECASE):
             raise RuntimeError(
                 f"When a user parameter ('{user}') is provided to exec() and the "
                 f"container is not already running as that user, runuser needs "
                 f"CAP_SETGID to call setgroups(2). The container appears to have "
                 f"had its capabilities dropped. Docs: {EXEC_USER_URL}\n{stderr}"
             )
-        if re.search(r"runuser: (not found|no such file)", stderr, re.IGNORECASE):
+        if re.search(r"runuser: not found", stderr, re.IGNORECASE):
             raise RuntimeError(
                 f"When a user parameter ('{user}') is provided to exec(), the "
                 f"runuser binary must be installed in the container. Docs: "
