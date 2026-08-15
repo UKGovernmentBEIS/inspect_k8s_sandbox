@@ -349,8 +349,6 @@ class TestRunuserErrorMessages:
         ("stderr", "expected"),
         [
             ("runuser: user agent does not exist", "does not appear to exist"),
-            ("runuser: may not be used by non-root users", "must be running as root"),
-            ("runuser: cannot set groups: Operation not permitted", "CAP_SETGID"),
             ("/bin/sh: 1: exec: runuser: not found", "must be installed"),
         ],
     )
@@ -363,9 +361,24 @@ class TestRunuserErrorMessages:
     @pytest.mark.parametrize(
         "stderr",
         [
+            "runuser: may not be used by non-root users",
+            "runuser: cannot set groups: Operation not permitted",
+        ],
+    )
+    def test_environment_failures_warn_rather_than_raise(self, stderr: str) -> None:
+        """inspect-ai probes with user="root" and falls back when it fails.
+
+        Raising made that fallback unreachable, so a rootless sandbox could not
+        run any task using the injected tools.
+        """
+        executor = ExecuteOperation(MagicMock())
+
+        executor._check_for_runuser_error(stderr, "agent")  # does not raise
+
+    @pytest.mark.parametrize(
+        "stderr",
+        [
             "ls: /nope: No such file",
-            # Same message body as the runuser case; a user command's own
-            # failure must not be reported as a sandbox misconfiguration.
             "newgrp: cannot set groups: Operation not permitted",
             "su: cannot set groups: Operation not permitted",
         ],

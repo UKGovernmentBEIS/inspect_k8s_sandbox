@@ -19,8 +19,10 @@
   for a root -> root switch, so the unconditional wrapper made every `exec(user=...)`
   fail in a container whose capabilities had been dropped. On that path the process
   environment is the container's rather than one `runuser` has reset (`HOME`, `USER`,
-  supplementary groups). A dropped `CAP_SETGID` is now reported with an explanation
-  rather than a raw `runuser` error.
+  supplementary groups). A dropped `CAP_SETGID` and a non-root container are now
+  logged as warnings and returned as a failed `ExecResult` rather than raised, so a
+  caller that probes with a user and falls back (as inspect-ai does when injecting
+  its sandbox tools) can do so. An unknown user and a missing `runuser` still raise.
 
 ## 2026-08-12 0.13.0
 

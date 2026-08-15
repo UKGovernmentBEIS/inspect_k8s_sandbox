@@ -1,4 +1,5 @@
 import base64
+import logging
 import re
 import shlex
 from contextlib import contextmanager
@@ -16,6 +17,8 @@ from k8s_sandbox._pod.op import PodOperation
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
 EXEC_USER_URL = "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
+
+logger = logging.getLogger(__name__)
 
 
 def _shell_command(user: str | None) -> list[str]:
@@ -217,22 +220,36 @@ class ExecuteOperation(PodOperation):
                 f"The user parameter '{user}' provided to exec() does "
                 f"not appear to exist in the container. Docs: {EXEC_USER_URL}\n{stderr}"
             )
+        # The two arms below describe an environment that cannot perform the
+        # switch, not a caller asking for something that does not exist. Callers
+        # are entitled to handle that: inspect-ai probes with `user="root"` and
+        # falls back to the default user when it fails, which is how a rootless
+        # sandbox is meant to work. Raising here made that fallback unreachable
+        # and turned a supported configuration into a fatal error, so warn and
+        # let the failed ExecResult through.
         if "runuser: may not be used by non-root users" in stderr.casefold():
-            raise RuntimeError(
-                f"When a user parameter ('{user}') is provided to exec(), the "
-                f"container must be running as root. Docs: {EXEC_USER_URL}\n{stderr}"
+            logger.warning(
+                "exec(user=%r) failed: the container is not running as root, so "
+                "runuser cannot switch users. Docs: %s\n%s",
+                user,
+                EXEC_USER_URL,
+                stderr,
             )
+            return
         # Anchored on the `runuser: ` prefix like the arms above it: `newgrp`,
         # `sg`, `su` and `login` print the same message body, so an unanchored
         # match would blame the sandbox's capabilities for a user command's own
         # failure.
         if re.search(r"runuser: cannot set groups", stderr, re.IGNORECASE):
-            raise RuntimeError(
-                f"When a user parameter ('{user}') is provided to exec() and the "
-                f"container is not already running as that user, runuser needs "
-                f"CAP_SETGID to call setgroups(2). The container appears to have "
-                f"had its capabilities dropped. Docs: {EXEC_USER_URL}\n{stderr}"
+            logger.warning(
+                "exec(user=%r) failed: runuser needs CAP_SETGID to call "
+                "setgroups(2), and the container's capabilities appear to have "
+                "been dropped. Docs: %s\n%s",
+                user,
+                EXEC_USER_URL,
+                stderr,
             )
+            return
         if re.search(r"runuser: not found", stderr, re.IGNORECASE):
             raise RuntimeError(
                 f"When a user parameter ('{user}') is provided to exec(), the "
