@@ -168,6 +168,35 @@ resources. It covers CPU and memory requests/limits (via `cpus`/`mem_limit` and
 `deploy.resources`), but has no concept of a disk (`ephemeral-storage`) request or
 limit, nor of resources such as `hugepages-*`.
 
+## Kubernetes Volume Types
+
+Use per-service `x-inspect_k8s_sandbox.volumes` and `volumeMounts` for Kubernetes
+volume types that Compose shorthand cannot express. Both values are lists passed to
+the Helm chart verbatim. They are appended after any volumes converted from the
+service's ordinary Compose `volumes` entries.
+
+For example, an OCI image volume can provide a packaged agent CLI:
+
+```yaml
+services:
+  default:
+    image: python:3.12
+    x-inspect_k8s_sandbox:
+      volumes:
+        - name: agent-cli-claude
+          image:
+            reference: example.com/agent-clis:claude-2.1.205
+            pullPolicy: IfNotPresent
+      volumeMounts:
+        - name: agent-cli-claude
+          mountPath: /opt/agent-cli/claude
+          subPath: payload
+          readOnly: true
+```
+
+The volume and mount objects must follow the Kubernetes API. Use this extension
+alongside ordinary Compose volume shorthand when both are needed.
+
 ### Swap (`memswap_limit`)
 
 `memswap_limit` is ignored (with an info-level log) because Kubernetes has no

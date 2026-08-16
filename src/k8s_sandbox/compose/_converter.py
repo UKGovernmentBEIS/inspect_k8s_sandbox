@@ -561,8 +561,8 @@ class _ServiceConverter:
 
         This is an escape hatch for expressing Kubernetes resources that the Docker
         Compose shortcuts (mem_limit/cpus/deploy.resources) cannot, most notably
-        request-only resources such as 'ephemeral-storage'. Currently only a
-        'resources' block is supported.
+        request-only resources such as 'ephemeral-storage', plus volume shapes that
+        the Compose string shorthand cannot express.
         """
         if not isinstance(extensions, dict):
             raise ComposeConverterError(
@@ -571,10 +571,22 @@ class _ServiceConverter:
             )
         if (resources := extensions.pop("resources", None)) is not None:
             self._merge_extension_resources(resources, result)
+        # Passed through verbatim: Kubernetes volume shapes that the Compose string
+        # shorthand cannot express (e.g. OCI image volumes, KEP-4639). Appended so
+        # compose-shorthand volumes are preserved.
+        for key in ("volumes", "volumeMounts"):
+            if (entries := extensions.pop(key, None)) is not None:
+                if not isinstance(entries, list):
+                    raise ComposeConverterError(
+                        f"Invalid 'x-inspect_k8s_sandbox.{key}' type: {type(entries)}. "
+                        f"Expected list. {self.context}"
+                    )
+                result[key] = [*result.get(key, []), *entries]
         if extensions:
             raise ComposeConverterError(
                 f"Unsupported key(s) in service 'x-inspect_k8s_sandbox': "
-                f"{set(extensions)}. Only 'resources' is supported. {self.context}"
+                f"{set(extensions)}. Only 'resources', 'volumes', and 'volumeMounts' "
+                f"are supported. {self.context}"
             )
 
     def _merge_extension_resources(self, src: Any, result: dict[str, Any]) -> None:

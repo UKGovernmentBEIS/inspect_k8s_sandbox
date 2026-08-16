@@ -433,6 +433,15 @@ volumes:
           storage: 1Gi
 ```
 
+### Kubernetes Volume Types
+
+Compose shorthand covers named volumes. For Kubernetes volume types it cannot express,
+such as OCI image volumes, use the per-service `x-inspect_k8s_sandbox.volumes` and
+`volumeMounts` extensions. Their list entries are passed to the chart verbatim and are
+appended after volumes derived from ordinary Compose shorthand. See [Compose to
+Helm](compose-to-helm.md#kubernetes-volume-types) for the full example and Kubernetes
+API requirements.
+
 ## Networks
 
 By default, all Pods in a Kubernetes cluster can communicate with each other. Network
