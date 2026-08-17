@@ -20,11 +20,13 @@ _ROOT_XFAILS = {
     "test_read_file_not_allowed": "root can read after chmod -r",
     "test_write_text_file_without_permissions": "root can write after chmod -w",
     "test_write_binary_file_without_permissions": "root can write after chmod -w",
+    "test_exec_input_large": "large stdin is silently dropped, see #244",
 }
 _NON_ROOT_XFAILS = {
     "test_exec_as_nonexistent_user": "k8s raises for a nonexistent user",
     # In k8s the container must run as root to exec as a different user.
     "test_exec_as_user": "container must run as root to exec as a different user",
+    "test_exec_input_large": "large stdin is silently dropped, see #244",
 }
 
 
