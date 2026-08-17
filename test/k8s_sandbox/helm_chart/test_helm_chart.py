@@ -567,16 +567,30 @@ def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> 
         isolate_policy["metadata"]["name"]
         == "agent-env-my-release-svc-isolated-service-isolate"
     )
-    # ingressDeny and egressDeny deny all traffic from/to all entities
-    assert isolate_policy["spec"]["ingressDeny"] == [{"fromEntities": ["all"]}]
+    # Ingress is denied subtractively: no allow selects the isolated service, so
+    # sandbox-default-deny-ingress denies it. No ingressDeny is emitted -- an
+    # unconditional ingressDeny would shadow any allow layered on top of this chart.
+    assert "ingressDeny" not in isolate_policy["spec"]
     assert isolate_policy["spec"]["egressDeny"] == [{"toEntities": ["all"]}]
 
-    # Verify normal-service doesn't have isolate policy
+    # No per-service ingress allow is rendered at all for the isolated service.
+    isolated_ingress_policies = [
+        cnp
+        for cnp in cnps
+        if cnp["metadata"]["name"].endswith("-svc-isolated-service-ingress")
+    ]
+    assert isolated_ingress_policies == []
+
+    # Verify normal-service doesn't have isolate policy, and still gets its ingress
+    # allow.
     normal_service_policies = [
         cnp for cnp in cnps if "normal-service" in cnp["metadata"]["name"]
     ]
     assert len(normal_service_policies) == 1
     assert "isolate" not in normal_service_policies[0]["metadata"]["name"]
+    assert normal_service_policies[0]["metadata"]["name"].endswith(
+        "-svc-normal-service-ingress"
+    )
 
     normal_spec = normal_service_policies[0]["spec"]
     assert normal_spec.get("ingress") != []

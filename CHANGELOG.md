@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `network_mode: none` isolation is now enforced by omitting any ingress allow for the
+  service rather than an unconditional ingress deny. Observable behaviour is unchanged
+  for a chart used on its own, but a network policy layered on top of this chart (e.g.
+  to allow a specific port) now takes effect instead of being silently shadowed.
 - **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
   filesystem with only `NET_BIND_SERVICE`. A custom `corednsImage` must run under that
   context; set the new `corednsSecurityContext` if it cannot. The default image moves
