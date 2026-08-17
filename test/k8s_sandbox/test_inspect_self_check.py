@@ -20,13 +20,16 @@ _ROOT_XFAILS = {
     "test_read_file_not_allowed": "root can read after chmod -r",
     "test_write_text_file_without_permissions": "root can write after chmod -w",
     "test_write_binary_file_without_permissions": "root can write after chmod -w",
-    "test_exec_input_large": "large stdin is silently dropped, see #244",
 }
 _NON_ROOT_XFAILS = {
     "test_exec_as_nonexistent_user": "k8s raises for a nonexistent user",
     # In k8s the container must run as root to exec as a different user.
     "test_exec_as_user": "container must run as root to exec as a different user",
-    "test_exec_input_large": "large stdin is silently dropped, see #244",
+}
+# Non-strict: the drop is environment-dependent (fails on one minikube at
+# ~40-44 MiB, passes on another at 50 MiB), so an XPASS is not a signal.
+_NONSTRICT_XFAILS = {
+    "test_exec_input_large": "large stdin can be silently dropped, see #244",
 }
 
 
@@ -47,4 +50,9 @@ async def sandbox_env(
     reason = xfails.get(request.node.originalname)
     if reason is not None:
         request.node.add_marker(pytest.mark.xfail(reason=reason, strict=True))
+    nonstrict_reason = _NONSTRICT_XFAILS.get(request.node.originalname)
+    if nonstrict_reason is not None:
+        request.node.add_marker(
+            pytest.mark.xfail(reason=nonstrict_reason, strict=False)
+        )
     return sandboxes[key]
