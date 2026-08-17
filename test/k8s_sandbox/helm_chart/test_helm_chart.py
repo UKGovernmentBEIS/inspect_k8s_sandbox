@@ -551,6 +551,26 @@ def test_rejects_names_that_can_inject_rendered_configuration(
     assert "values don't meet the specifications of the schema" in excinfo.value.stderr
 
 
+def test_default_deny_ingress_selects_every_pod(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir)
+
+    cnps = _get_documents(documents, "CiliumNetworkPolicy")
+    default_deny = next(
+        cnp
+        for cnp in cnps
+        if cnp["metadata"]["name"].endswith("-sandbox-default-deny-ingress")
+    )
+
+    # Release-wide selector, not per-service: no inspect/service label, so this
+    # selects every sandbox pod (isolated or not).
+    match_labels = default_deny["spec"]["endpointSelector"]["matchLabels"]
+    assert "inspect/service" not in match_labels
+
+    # An empty ingress rule enables default-deny while allowing nothing -- this is
+    # the shape the whole subtractive-isolation model rests on.
+    assert default_deny["spec"]["ingress"] == [{}]
+
+
 def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> None:
     documents = _run_helm_template(
         chart_dir, test_resources_dir / "network-isolated-values.yaml"
@@ -558,28 +578,7 @@ def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> 
 
     cnps = _get_documents(documents, "CiliumNetworkPolicy")
 
-    # Verify isolate-service has isolate policy
-    isolate_policy = next(
-        (cnp for cnp in cnps if cnp["metadata"]["name"].endswith("-isolate")), None
-    )
-    assert isolate_policy is not None
-    assert (
-        isolate_policy["metadata"]["name"]
-        == "agent-env-my-release-svc-isolated-service-isolate"
-    )
-    # Ingress is denied subtractively: no allow selects the isolated service, so
-    # sandbox-default-deny-ingress denies it. No ingressDeny is emitted -- an
-    # unconditional ingressDeny would shadow any allow layered on top of this chart.
-    assert "ingressDeny" not in isolate_policy["spec"]
-    assert isolate_policy["spec"]["egressDeny"] == [{"toEntities": ["all"]}]
-
-    # No per-service ingress allow is rendered at all for the isolated service.
-    isolated_ingress_policies = [
-        cnp
-        for cnp in cnps
-        if cnp["metadata"]["name"].endswith("-svc-isolated-service-ingress")
-    ]
-    assert isolated_ingress_policies == []
+    _assert_isolated(cnps, "isolated-service")
 
     # Verify normal-service doesn't have isolate policy, and still gets its ingress
     # allow.
@@ -592,9 +591,7 @@ def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> 
         "-svc-normal-service-ingress"
     )
 
-    normal_spec = normal_service_policies[0]["spec"]
-    assert normal_spec.get("ingress") != []
-    assert normal_spec.get("egress") != []
+    assert normal_service_policies[0]["spec"]["ingress"]
 
 
 def test_network_isolated_service_joining_a_global_network(
@@ -611,12 +608,7 @@ def test_network_isolated_service_joining_a_global_network(
 
     cnps = _get_documents(documents, "CiliumNetworkPolicy")
 
-    isolated_ingress_policies = [
-        cnp
-        for cnp in cnps
-        if cnp["metadata"]["name"].endswith("-svc-isolated-service-tasknet-ingress")
-    ]
-    assert isolated_ingress_policies == []
+    _assert_isolated(cnps, "isolated-service")
 
     normal_ingress_policies = [
         cnp
@@ -795,6 +787,49 @@ def _run_helm_template(
 
 def _get_documents(documents: list[Any], doc_type_filter: str) -> list[dict[str, Any]]:
     return [doc for doc in documents if doc["kind"] == doc_type_filter]
+
+
+def _selector_matches_service(match_labels: dict[str, Any], service_name: str) -> bool:
+    """Whether an endpointSelector's matchLabels selects `service_name`'s pod.
+
+    It selects the pod if it carries no inspect/service label (release-wide, e.g.
+    sandbox-default-deny-ingress) or if that label names this service.
+    """
+    service_label = match_labels.get("inspect/service")
+    return service_label is None or service_label == service_name
+
+
+def _assert_isolated(cnps: list[dict[str, Any]], service_name: str) -> None:
+    """Assert `service_name` is fully network-isolated.
+
+    Its isolate policy denies egress (without an ingressDeny, which would shadow a
+    layered-on allow), and -- walking every rendered policy by selector rather than
+    by name, so a stray allow under an unexpected name can't hide -- the only
+    ingress-bearing policy that selects it is the release-wide
+    sandbox-default-deny-ingress.
+    """
+    isolate_policy = next(
+        (
+            cnp
+            for cnp in cnps
+            if cnp["metadata"]["name"].endswith(f"-svc-{service_name}-isolate")
+        ),
+        None,
+    )
+    assert isolate_policy is not None
+    assert "ingressDeny" not in isolate_policy["spec"]
+    assert isolate_policy["spec"]["egressDeny"] == [{"toEntities": ["all"]}]
+
+    selecting_policies = [
+        cnp["metadata"]["name"]
+        for cnp in cnps
+        if "ingress" in cnp["spec"]
+        and _selector_matches_service(
+            cnp["spec"]["endpointSelector"]["matchLabels"], service_name
+        )
+    ]
+    assert len(selecting_policies) == 1
+    assert selecting_policies[0].endswith("-sandbox-default-deny-ingress")
 
 
 def _chart_version(chart_dir: Path) -> str:
