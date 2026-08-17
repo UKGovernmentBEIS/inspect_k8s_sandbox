@@ -597,6 +597,36 @@ def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> 
     assert normal_spec.get("egress") != []
 
 
+def test_network_isolated_service_joining_a_global_network(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    # A service can be networkIsolated and still list `networks` (nothing in the chart
+    # rejects the combination), which renders through the .Values.networks branch
+    # rather than the no-networks branch covered by test_network_isolated_service. That
+    # branch's per-network ingress allow must also be skipped for an isolated service.
+    documents = _run_helm_template(
+        chart_dir,
+        test_resources_dir / "network-isolated-with-global-network-values.yaml",
+    )
+
+    cnps = _get_documents(documents, "CiliumNetworkPolicy")
+
+    isolated_ingress_policies = [
+        cnp
+        for cnp in cnps
+        if cnp["metadata"]["name"].endswith("-svc-isolated-service-tasknet-ingress")
+    ]
+    assert isolated_ingress_policies == []
+
+    normal_ingress_policies = [
+        cnp
+        for cnp in cnps
+        if cnp["metadata"]["name"].endswith("-svc-normal-service-tasknet-ingress")
+    ]
+    assert len(normal_ingress_policies) == 1
+    assert normal_ingress_policies[0]["spec"]["ingress"] != []
+
+
 def test_allow_domains_egress_enforces_identity_on_pinned_ips(
     chart_dir: Path, test_resources_dir: Path
 ) -> None:

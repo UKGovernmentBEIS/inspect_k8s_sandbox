@@ -138,7 +138,7 @@ spec:
     - {}
 {{- if .Values.networks }}
   {{- range $svcName, $svc := .Values.services }}
-    {{- if $svc.networks }}
+    {{- if and $svc.networks (not $svc.networkIsolated) }}
       {{- range $net := $svc.networks }}
 ---
 apiVersion: cilium.io/v2
