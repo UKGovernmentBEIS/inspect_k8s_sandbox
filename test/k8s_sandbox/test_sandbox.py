@@ -295,17 +295,22 @@ async def test_exec_user_when_specified_user_does_not_exist(
 
 
 async def test_exec_user_when_not_running_as_root(
-    sandbox_non_root: K8sSandboxEnvironment,
+    sandbox_non_root: K8sSandboxEnvironment, log_warning: LogCaptureFixture
 ) -> None:
-    with pytest.raises(K8sError) as excinfo:
-        await sandbox_non_root.exec(["whoami"], user="nobody")
+    # A container that cannot perform the switch is a property of the environment
+    # rather than a bad argument, so this warns and returns a failed ExecResult. That
+    # lets a caller which probes with a user fall back to the container's own user, as
+    # inspect-ai does when injecting its sandbox tools.
+    result = await sandbox_non_root.exec(["whoami"], user="nobody")
 
-    error_msg = str(excinfo.value.__cause__)
-    assert (
-        "When a user parameter ('nobody') is provided to exec(), the container must be "
-        "running as root" in error_msg
+    assert not result.success
+    assert "may not be used by non-root users" in result.stderr
+    assert any(
+        "the container is not running as root" in record.message
+        and "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
+        in record.message
+        for record in log_warning.records
     )
-    assert "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user" in error_msg
 
 
 async def test_exec_user_when_runuser_not_installed(
