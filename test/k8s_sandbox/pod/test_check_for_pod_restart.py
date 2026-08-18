@@ -198,7 +198,7 @@ def test_env_var_skips_file_op_check_but_not_exec(monkeypatch):
                 assert mock_client.return_value.read_namespaced_pod.call_count == 0
 
                 # write_file: same.
-                asyncio.run(pod.write_file(io.BytesIO(b""), pathlib.Path("/x")))
+                asyncio.run(pod.write_file(b"", pathlib.Path("/x")))
                 assert mock_client.return_value.read_namespaced_pod.call_count == 0
 
                 # exec: must always check, env var notwithstanding.
