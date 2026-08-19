@@ -12,6 +12,8 @@
 - The CoreDNS sidecar no longer serves its `ready` endpoint on port 8181, and refuses
   queries beyond 1000 concurrent.
 - Raise an error when a conflicting `max_pod_ops` setting would otherwise be ignored.
+- Fix a service's `args` (compose `command:`) reaching the container as a single
+  space-joined string instead of a list.
 
 ## 2026-08-12 0.13.0
 
