@@ -1,5 +1,23 @@
 # Repo guidance for coding agents
 
+Read [CONTRIBUTING.md](CONTRIBUTING.md) too — dev setup, test invocation and the
+reasoning behind the rules below are there.
+
+## Before you open a PR
+
+1. Does your change assert something about runtime behaviour — what Kubernetes, Helm or
+   Cilium actually does? Run it against a real cluster (minikube is fine) and paste the
+   output. Reading upstream source is not evidence, and neither is a Helm render test,
+   however green.
+2. Show it failing without your change and passing with it. If you can't, say so
+   explicitly in the PR description.
+3. If you can't run against a cluster, don't open the PR. Open an issue with your
+   reasoning and stop.
+4. Report what you actually ran, verbatim, including which tests were skipped. Never
+   describe a run you didn't perform.
+5. Note the tooling you used. If you ran review passes over your own change, say which
+   model and what they found.
+
 ## Changelog (`CHANGELOG.md`)
 
 New work goes under the `## Unreleased` heading. Each entry is
