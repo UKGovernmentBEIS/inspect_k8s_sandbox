@@ -590,6 +590,105 @@ services:
 ### Service-level x-inspect_k8s_sandbox extension
 
 
+def test_service_extension_passes_through_volumes_and_volume_mounts(
+    tmp_path: Path,
+) -> None:
+    compose = tmp_path / "test-compose.yaml"
+    compose.write_text(
+        """
+services:
+  default:
+    image: python:3.12
+    x-inspect_k8s_sandbox:
+      volumes:
+        - name: agent-cli-claude
+          image:
+            reference: example.com/agent-clis:claude-2.1.205
+            pullPolicy: IfNotPresent
+      volumeMounts:
+        - name: agent-cli-claude
+          mountPath: /opt/agent-cli/claude
+          subPath: payload
+          readOnly: true
+""",
+        encoding="utf-8",
+    )
+    values = convert_compose_to_helm_values(compose)
+    service = values["services"]["default"]
+    assert service["volumes"] == [
+        {
+            "name": "agent-cli-claude",
+            "image": {
+                "reference": "example.com/agent-clis:claude-2.1.205",
+                "pullPolicy": "IfNotPresent",
+            },
+        }
+    ]
+    assert service["volumeMounts"] == [
+        {
+            "name": "agent-cli-claude",
+            "mountPath": "/opt/agent-cli/claude",
+            "subPath": "payload",
+            "readOnly": True,
+        }
+    ]
+
+
+def test_service_extension_appends_volumes_after_compose_shorthand(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: python:3.12
+    volumes:
+      - data:/data
+    x-inspect_k8s_sandbox:
+      volumes:
+        - name: agent-cli-claude
+          image:
+            reference: example.com/agent-clis:claude-2.1.205
+            pullPolicy: IfNotPresent
+volumes:
+  data:
+""")
+
+    values = convert_compose_to_helm_values(compose_path)
+
+    assert values["services"]["default"]["volumes"] == [
+        "data:/data",
+        {
+            "name": "agent-cli-claude",
+            "image": {
+                "reference": "example.com/agent-clis:claude-2.1.205",
+                "pullPolicy": "IfNotPresent",
+            },
+        },
+    ]
+
+
+@pytest.mark.parametrize("key", ["volumes", "volumeMounts"])
+@pytest.mark.parametrize("entries", ["{name: agent-cli-claude}", "not-a-list"])
+def test_rejects_non_list_service_extension_volume_entries(
+    tmp_compose: TmpComposeFixture,
+    key: str,
+    entries: str,
+) -> None:
+    compose_path = tmp_compose(f"""
+services:
+  default:
+    image: python:3.12
+    x-inspect_k8s_sandbox:
+      {key}: {entries}
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert f"Invalid 'x-inspect_k8s_sandbox.{key}' type" in str(exc_info.value)
+    assert "Expected list." in str(exc_info.value)
+
+
 def test_service_extension_request_only_ephemeral_storage(
     tmp_compose: TmpComposeFixture,
 ) -> None:
