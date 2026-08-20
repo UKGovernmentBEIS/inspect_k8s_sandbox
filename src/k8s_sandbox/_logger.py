@@ -4,6 +4,7 @@ import os
 from contextlib import contextmanager
 from typing import Any, Generator
 
+from inspect_ai._util.logger import TRACE
 from inspect_ai.util import trace_action, trace_message
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,8 @@ def log_trace(message: str, **kwargs: Any) -> None:
           they exceed DEFAULT_ARG_TRUNCATION_THRESHOLD (which can be overridden with env
           var INSPECT_K8S_LOG_TRUNCATION_THRESHOLD).
     """
+    if not logger.isEnabledFor(TRACE):
+        return
     formatted = format_log_message(message, **kwargs)
     trace_message(logger, category="K8s", message=formatted)
 
@@ -36,6 +39,8 @@ def log_debug(message: str, **kwargs: Any) -> None:
           they exceed DEFAULT_ARG_TRUNCATION_THRESHOLD (which can be overridden with env
           var INSPECT_K8S_LOG_TRUNCATION_THRESHOLD).
     """
+    if not logger.isEnabledFor(logging.DEBUG):
+        return
     formatted = format_log_message(message, **kwargs)
     logger.debug(f"K8s: {formatted}")
 
@@ -93,6 +98,10 @@ def inspect_trace_action(action: str, **kwargs: Any) -> Generator[None, None, No
           Values are truncated if they exceed DEFAULT_ARG_TRUNCATION_THRESHOLD (which
           can be overridden with env var INSPECT_K8S_LOG_TRUNCATION_THRESHOLD).
     """
+    if not logger.isEnabledFor(TRACE):
+        yield
+        return
+
     json_kwargs = _format_kwargs_as_json(**kwargs)
     with trace_action(logger, action, json_kwargs):
         yield
