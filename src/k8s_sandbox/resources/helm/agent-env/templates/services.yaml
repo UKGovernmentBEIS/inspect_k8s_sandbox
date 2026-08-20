@@ -92,7 +92,8 @@ spec:
           {{- toYaml $service.command | nindent 10 }}
         {{- end }}
         {{- if $service.args }}
-        args: {{ $service.args }}
+        args:
+          {{- toYaml $service.args | nindent 10 }}
         {{- end }}
         {{- if $service.workingDir }}
         workingDir: {{ $service.workingDir }}
