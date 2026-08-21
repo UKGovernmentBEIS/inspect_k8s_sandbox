@@ -14,6 +14,8 @@
 - Raise an error when a conflicting `max_pod_ops` setting would otherwise be ignored.
 - Fix a service's `args` (compose `command:`) reaching the container as a single
   space-joined string instead of a list.
+- Fix an install failing with `exists and cannot be imported into the current
+  release` after an earlier install attempt for the same sandbox failed.
 
 ## 2026-08-12 0.13.0
 
