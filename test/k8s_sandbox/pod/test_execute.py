@@ -349,10 +349,10 @@ class TestRunuserErrorMessages:
         ("stderr", "expected"),
         [
             ("runuser: user agent does not exist", "does not appear to exist"),
-            ("/bin/sh: 1: exec: runuser: not found", "must be installed"),
         ],
     )
-    def test_runuser_errors_are_explained(self, stderr: str, expected: str) -> None:
+    def test_an_unknown_user_still_raises(self, stderr: str, expected: str) -> None:
+        """The one case no fallback can rescue: the name simply isn't there."""
         executor = ExecuteOperation(MagicMock())
 
         with pytest.raises(RuntimeError, match=expected):
@@ -363,13 +363,16 @@ class TestRunuserErrorMessages:
         [
             "runuser: may not be used by non-root users",
             "runuser: cannot set groups: Operation not permitted",
+            "/bin/sh: 1: exec: runuser: not found",
         ],
     )
     def test_environment_failures_warn_rather_than_raise(self, stderr: str) -> None:
         """inspect-ai probes with user="root" and falls back when it fails.
 
-        Raising made that fallback unreachable, so a rootless sandbox could not
-        run any task using the injected tools.
+        All three describe an environment that cannot switch users, rather than a
+        caller naming something that does not exist. Raising made the fallback
+        unreachable, so a sandbox that is merely unable to switch could not run
+        any task using the injected tools.
         """
         executor = ExecuteOperation(MagicMock())
 

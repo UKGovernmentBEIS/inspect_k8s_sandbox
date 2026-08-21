@@ -187,11 +187,12 @@ Naming the user the container already runs as needs none of those: that case ski
 `runuser` entirely, so it works on a capability-dropped or non-root container, and on an
 image with no `runuser` installed.
 
-When the switch cannot be made, the two causes are reported differently. A container
-that is not root, or that has had `CAP_SETGID` dropped, is a property of the environment
-rather than a bad argument: those log a warning and return a failed `ExecResult`, so a
-caller which probes with a user can fall back to the container's own user. A user that
-does not exist, or a missing `runuser` binary, still raises.
+When the switch cannot be made, what happens depends on why. A container that is not
+root, one that has had `CAP_SETGID` dropped, and one without `runuser` installed are all
+properties of the environment rather than bad arguments: each logs a warning and returns
+a failed `ExecResult`, so a caller which probes with a user can fall back to the
+container's own user. Only naming a user that does not exist raises, since no fallback
+makes an absent account work.
 
 ## Images are not automatically built, tagged or pushed
 

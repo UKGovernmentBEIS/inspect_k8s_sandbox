@@ -220,13 +220,14 @@ class ExecuteOperation(PodOperation):
                 f"The user parameter '{user}' provided to exec() does "
                 f"not appear to exist in the container. Docs: {EXEC_USER_URL}\n{stderr}"
             )
-        # The two arms below describe an environment that cannot perform the
+        # The three arms below describe an environment that cannot perform the
         # switch, not a caller asking for something that does not exist. Callers
         # are entitled to handle that: inspect-ai probes with `user="root"` and
         # falls back to the default user when it fails, which is how a rootless
         # sandbox is meant to work. Raising here made that fallback unreachable
         # and turned a supported configuration into a fatal error, so warn and
-        # let the failed ExecResult through.
+        # let the failed ExecResult through. Only an unknown user still raises,
+        # because no fallback makes a name that isn't there work.
         if "runuser: may not be used by non-root users" in stderr.casefold():
             logger.warning(
                 "exec(user=%r) failed: the container is not running as root, so "
@@ -251,11 +252,14 @@ class ExecuteOperation(PodOperation):
             )
             return
         if re.search(r"runuser: not found", stderr, re.IGNORECASE):
-            raise RuntimeError(
-                f"When a user parameter ('{user}') is provided to exec(), the "
-                f"runuser binary must be installed in the container. Docs: "
-                f"{EXEC_USER_URL}\n{stderr}"
+            logger.warning(
+                "exec(user=%r) failed: switching users needs the runuser binary, "
+                "which is not installed in this container. Docs: %s\n%s",
+                user,
+                EXEC_USER_URL,
+                stderr,
             )
+            return
 
     def _filter_sentinel_and_returncode(self, frame: bytes) -> tuple[bytes, int | None]:
         # latin-1 maps each byte 1:1 to a codepoint, so it decodes arbitrary binary

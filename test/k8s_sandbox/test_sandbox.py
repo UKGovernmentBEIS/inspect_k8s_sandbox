@@ -314,17 +314,30 @@ async def test_exec_user_when_not_running_as_root(
 
 
 async def test_exec_user_when_runuser_not_installed(
-    sandbox_busybox: K8sSandboxEnvironment,
+    sandbox_busybox: K8sSandboxEnvironment, log_warning: LogCaptureFixture
 ) -> None:
-    with pytest.raises(K8sError) as excinfo:
-        await sandbox_busybox.exec(["whoami"], user="foo")
+    """A container without runuser cannot switch users, but can still be used.
 
-    error_msg = str(excinfo.value.__cause__)
-    assert (
-        "When a user parameter ('foo') is provided to exec(), the runuser binary "
-        "must be installed in the container"
-    ) in error_msg
-    assert "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user" in error_msg
+    Like the non-root case, this is the environment being unable to perform the
+    switch rather than the caller naming a user that does not exist, so it warns
+    and returns the failed result instead of raising. The caller can then retry
+    without a user -- which is what inspect-ai's tool injector does.
+    """
+    result = await sandbox_busybox.exec(["whoami"], user="foo")
+
+    assert not result.success
+    assert "runuser" in result.stderr
+    assert any(
+        "runuser binary" in record.message
+        and "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
+        in record.message
+        for record in log_warning.records
+    )
+
+    # The recovery the warning exists to permit.
+    fallback = await sandbox_busybox.exec(["whoami"])
+
+    assert fallback.success
 
 
 async def test_exec_does_not_raise_error_if_command_happens_to_use_runuser(
