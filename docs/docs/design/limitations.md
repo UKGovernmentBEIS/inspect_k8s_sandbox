@@ -178,8 +178,21 @@ started with is **not recommended**. Generally, specifying users in tool definit
 result in undesirable coupling between your tools and sandbox.
 
 That said, if you need to run commands as different users, the `user` parameter to
-`exec()` is supported. However, you must run the container as root and ensure that
-`runuser` is installed in the container.
+`exec()` is supported. To switch to a *different* user, you must run the container as
+root, ensure that `runuser` is installed in the container, and keep `CAP_SETGID` — the
+switch goes through `runuser`, which calls `setgroups(2)`. A container with
+`capabilities: {drop: [ALL]}` therefore cannot switch users.
+
+Naming the user the container already runs as needs none of those: that case skips
+`runuser` entirely, so it works on a capability-dropped or non-root container, and on an
+image with no `runuser` installed.
+
+When the switch cannot be made, what happens depends on why. A container that is not
+root, one that has had `CAP_SETGID` dropped, and one without `runuser` installed are all
+properties of the environment rather than bad arguments: each logs a warning and returns
+a failed `ExecResult`, so a caller which probes with a user can fall back to the
+container's own user. Only naming a user that does not exist raises, since no fallback
+makes an absent account work.
 
 ## Images are not automatically built, tagged or pushed
 

@@ -1,3 +1,4 @@
+import shlex
 from contextlib import contextmanager
 from typing import Generator
 from unittest.mock import MagicMock, patch
@@ -8,7 +9,7 @@ from kubernetes.stream.ws_client import WSClient  # type: ignore
 
 import k8s_sandbox._pod.op as op_module
 from k8s_sandbox._pod.error import PodError
-from k8s_sandbox._pod.execute import ExecuteOperation
+from k8s_sandbox._pod.execute import ExecuteOperation, _shell_command
 
 
 def _make_ws_client(
@@ -298,3 +299,96 @@ class TestExecChunksStdin:
         assert ws.write_stdin.call_count > 1
         assert all(len(c.args[0]) <= 16 for c in ws.write_stdin.call_args_list)
         assert result is sentinel
+
+
+class TestShellCommand:
+    """`runuser` is only reached for when the container is not already that user."""
+
+    def test_no_user_opens_a_plain_shell(self) -> None:
+        assert _shell_command(None) == ["/bin/sh"]
+
+    def test_user_falls_back_to_runuser(self) -> None:
+        command = _shell_command("agent")
+
+        assert command[:2] == ["/bin/sh", "-c"]
+        assert "exec runuser -u agent -- /bin/sh" in command[2]
+
+    def test_user_skips_runuser_when_already_that_user(self) -> None:
+        """A no-op switch still needs CAP_SETGID, so avoid runuser when we can."""
+        script = _shell_command("agent")[2]
+
+        assert '[ "$(id -un 2>/dev/null)" = agent ]' in script
+        assert "then exec /bin/sh; fi" in script
+
+    def test_a_name_is_compared_against_the_name_and_a_uid_against_the_uid(
+        self,
+    ) -> None:
+        """Cross-comparing would match an account *named* "0" against uid 0."""
+        by_name = _shell_command("agent")[2]
+        by_uid = _shell_command("1000")[2]
+
+        assert "id -un" in by_name and "id -u " not in by_name
+        assert '[ "$(id -u 2>/dev/null)" = 1000 ]' in by_uid
+        assert "id -un" not in by_uid
+
+    def test_an_empty_user_is_left_to_runuser(self) -> None:
+        """It matches nothing, and an empty `id` output must not look equal."""
+        assert _shell_command("") == ["runuser", "-u", "", "--", "/bin/sh"]
+
+    @pytest.mark.parametrize("user", ["a b", "a;rm -rf /", "$(whoami)", "'"])
+    def test_user_is_quoted(self, user: str) -> None:
+        """The user reaches two more shell words than it used to; quote all three."""
+        script = _shell_command(user)[2]
+
+        assert script.count(shlex.quote(user)) == 2
+        assert user not in script.replace(shlex.quote(user), "")
+
+
+class TestRunuserErrorMessages:
+    @pytest.mark.parametrize(
+        ("stderr", "expected"),
+        [
+            ("runuser: user agent does not exist", "does not appear to exist"),
+        ],
+    )
+    def test_an_unknown_user_still_raises(self, stderr: str, expected: str) -> None:
+        """The one case no fallback can rescue: the name simply isn't there."""
+        executor = ExecuteOperation(MagicMock())
+
+        with pytest.raises(RuntimeError, match=expected):
+            executor._check_for_runuser_error(stderr, "agent")
+
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "runuser: may not be used by non-root users",
+            "runuser: cannot set groups: Operation not permitted",
+            "/bin/sh: 1: exec: runuser: not found",
+        ],
+    )
+    def test_environment_failures_warn_rather_than_raise(self, stderr: str) -> None:
+        """inspect-ai probes with user="root" and falls back when it fails.
+
+        All three describe an environment that cannot switch users, rather than a
+        caller naming something that does not exist. Raising made the fallback
+        unreachable, so a sandbox that is merely unable to switch could not run
+        any task using the injected tools.
+        """
+        executor = ExecuteOperation(MagicMock())
+
+        executor._check_for_runuser_error(stderr, "agent")  # does not raise
+
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "ls: /nope: No such file",
+            "newgrp: cannot set groups: Operation not permitted",
+            "su: cannot set groups: Operation not permitted",
+        ],
+    )
+    def test_unrelated_stderr_is_not_claimed_as_a_runuser_error(
+        self, stderr: str
+    ) -> None:
+        executor = ExecuteOperation(MagicMock())
+
+        executor._check_for_runuser_error(stderr, "agent")  # does not raise
