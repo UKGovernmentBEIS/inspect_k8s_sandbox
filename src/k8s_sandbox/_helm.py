@@ -226,13 +226,12 @@ class Release:
                                     raise
                                 attempt += 1
                                 await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
-        except asyncio.CancelledError:
-            # When an eval is cancelled (either by user or by an error), the timing of
-            # uninstall operations can be interleaved with existing `helm install`
-            # processes. Uninstall the release now that we know the install process has
-            # terminated.
+        except (asyncio.CancelledError, RuntimeError, _ResourceQuotaModifiedError):
+            # Helm may have left a release owning the resources it created. Uninstall
+            # it now that we know the install process has terminated.
             log_trace(
-                "Helm install was cancelled; uninstalling.", release=self.release_name
+                "Helm install did not complete; uninstalling.",
+                release=self.release_name,
             )
             await self.uninstall(quiet=True)
             raise

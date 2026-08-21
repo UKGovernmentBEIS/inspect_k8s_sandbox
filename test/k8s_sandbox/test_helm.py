@@ -67,7 +67,7 @@ async def test_helm_install_error(
         with pytest.raises(RuntimeError) as excinfo:
             await uninstallable_release.install()
 
-    assert spy.call_count == 1
+    assert spy.call_count == 2
     assert "not found" in str(excinfo.value)
     assert "not found" in log_err.text
 
@@ -87,6 +87,15 @@ async def test_cancelling_install_uninstalls():
     assert release.release_name not in await get_all_release_names(
         get_default_namespace(context_name=None), None
     )
+
+
+@pytest.mark.req_k8s
+async def test_failed_install_uninstalls(uninstallable_release: Release) -> None:
+    with patch("k8s_sandbox._helm.uninstall", wraps=uninstall) as spy:
+        with pytest.raises(RuntimeError):
+            await uninstallable_release.install()
+
+    assert spy.call_count == 1
 
 
 @pytest.mark.req_k8s
@@ -124,12 +133,13 @@ async def test_helm_resourcequota_retries(uninstallable_release: Release) -> Non
 
     with patch("k8s_sandbox._helm.INSTALL_RETRY_DELAY_SECONDS", 0):
         with patch(
-            "k8s_sandbox._helm._run_subprocess", return_value=fail_result
+            "k8s_sandbox._helm._run_subprocess",
+            side_effect=[fail_result] * 3 + [ExecResult(True, 0, "", "")],
         ) as mock:
             with pytest.raises(Exception) as excinfo:
                 await uninstallable_release.install()
 
-    assert mock.call_count == 3
+    assert mock.call_count == 4
     assert "resourcequotas" in str(excinfo.value)
 
 
