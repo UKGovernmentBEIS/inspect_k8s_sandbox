@@ -2,8 +2,10 @@ import asyncio
 import logging
 import os
 import re
+import time
+from contextlib import contextmanager
 from textwrap import dedent
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Generator
 from unittest.mock import patch
 
 import pytest
@@ -49,6 +51,13 @@ async def sandbox_busybox(
     sandboxes: dict[str, K8sSandboxEnvironment],
 ) -> K8sSandboxEnvironment:
     return sandboxes["busybox"]
+
+
+@pytest_asyncio.fixture(scope="module")
+async def sandbox_busybox_runc(
+    sandboxes: dict[str, K8sSandboxEnvironment],
+) -> K8sSandboxEnvironment:
+    return sandboxes["busybox-runc"]
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -113,6 +122,21 @@ async def test_exec_with_error_via_bash(sandbox: K8sSandboxEnvironment) -> None:
     assert result.returncode == 127
     assert result.stdout == ""
     assert "command not found" in result.stderr.casefold()
+
+
+async def test_service_account_token_not_mounted(
+    sandbox: K8sSandboxEnvironment,
+) -> None:
+    result = await sandbox.exec(
+        [
+            "test",
+            "!",
+            "-e",
+            "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        ]
+    )
+
+    assert result.success
 
 
 async def test_exec_flushes_stderr(sandbox: K8sSandboxEnvironment) -> None:
@@ -356,9 +380,11 @@ async def test_exec_timeout_terminates_foreground_commands(
     assert file_exists_result.success
 
 
-async def test_exec_unicode_decode_error(sandbox: K8sSandboxEnvironment) -> None:
-    with pytest.raises(UnicodeDecodeError):
-        await sandbox.exec(["head", "-c", "1024", "/bin/ls"])
+async def test_exec_non_utf8_output_is_replaced(sandbox: K8sSandboxEnvironment) -> None:
+    result = await sandbox.exec(["bash", "-c", r"printf 'before \xbb after'"])
+
+    assert result.success
+    assert result.stdout == "before \ufffd after"
 
 
 async def test_exec_background_returns(sandbox: K8sSandboxEnvironment) -> None:
@@ -714,6 +740,39 @@ async def test_write_file_is_a_directory_error(
         await sandbox.write_file("/root/", "Hello, World!")
 
     assert not log_err.records
+
+
+@contextmanager
+def _delayed_stdin() -> Generator[None, None, None]:
+    """Stall each stdin frame, emulating a client outside the cluster."""
+    original_write_stdin = WSClient.write_stdin
+
+    def slow_write_stdin(self: WSClient, data, *args, **kwargs):  # type: ignore[no-untyped-def]
+        time.sleep(1.0)
+        return original_write_stdin(self, data, *args, **kwargs)
+
+    with patch.object(WSClient, "write_stdin", slow_write_stdin):
+        yield
+
+
+async def test_write_file_is_not_truncated_when_stdin_is_delayed(
+    sandbox_busybox_runc: K8sSandboxEnvironment,
+) -> None:
+    # The write command redirects `head`'s stdout to the destination file, so once the
+    # shell execs into `head` nothing holds the exec stdout pipe open. The runtime sees
+    # EOF on stdout and closes stdin while `head` is still reading; `head -c N` treats
+    # the short stdin as a normal EOF and exits 0, leaving a truncated file. Delaying
+    # the stdin frame makes the close win.
+    # https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225
+    dst = "/tmp/test-write-file-delayed-stdin.bin"
+    contents = b"x" * 4096
+
+    with _delayed_stdin():
+        await sandbox_busybox_runc.write_file(dst, contents)
+
+    result = await sandbox_busybox_runc.exec(["wc", "-c", dst])
+    assert result.success, result.stderr
+    assert int(result.stdout.split()[0]) == len(contents)
 
 
 ### #read_file() ###

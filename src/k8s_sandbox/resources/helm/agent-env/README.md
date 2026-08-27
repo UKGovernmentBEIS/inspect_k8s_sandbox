@@ -1,6 +1,6 @@
 # agent-env
 
-![Version: 0.12.0](https://img.shields.io/badge/Version-0.12.0-informational?style=flat-square)
+![Version: 0.14.0](https://img.shields.io/badge/Version-0.14.0-informational?style=flat-square)
 
 ## Values
 
@@ -8,19 +8,23 @@
 |-----|------|---------|-------------|
 | additionalResources | list | `[]` | A list of additional resources to deploy within the agent environment. They're passed through the Helm template engine. String values are passed through the template engine then converted to YAML. |
 | allowCIDR | list | Empty list (no additional CIDR ranges compared to default policies) | A list of CIDR ranges (e.g. 1.1.1.1/32) that pods within the agent environment are allowed to access. |
-| allowDomains | list | Empty list (no internet access) | A list of fully qualified domain names that pods within the agent environment are allowed to access. |
+| allowDomains | list | Empty list (no internet access) | Domains the agent environment may reach. Egress is restricted to ports 80/443 and the request identity must match an entry (TLS SNI on 443, HTTP Host on 80). Use allowDomainsPorts to open other ports. Wildcard entries require Cilium >= 1.18. |
+| allowDomainsPorts | list | Empty list (only 80/443 are reachable on allowedDomains) | Extra ports opened to the domains in `allowDomains`, as a list of {port, protocol, domain}. `protocol` defaults to ANY (TCP+UDP) and `domain` (optional) scopes the port to one allowDomains entry. If `domain` is not included, it will apply to all allowed domains. |
 | allowEntities | list | Empty list (no additional entities compared to default policies) | A list of Cilium entities (e.g. "world") that pods within the agent environment are allowed to access. |
 | annotations | object | `{}` | A dict of annotations to apply to resources within the agent environment. |
+| automountServiceAccountToken | bool | `false` | Whether to mount the selected ServiceAccount's Kubernetes API token in sandbox pods. Keep disabled for cloud workload identity such as IRSA, which injects a provider-specific token separately. |
 | corednsCommand | list | `["/coredns","-conf","/etc/coredns/Corefile"]` | The command to use for the coredns container. |
-| corednsImage | string | `"coredns/coredns:1.8.3"` | The image to use for the coredns container. |
+| corednsImage | string | `"coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea"` | The image to use for the coredns container. Pinned by digest; the tag is recorded alongside it for readability and the two must be updated together. An override must run under `corednsSecurityContext` below, or that must be overridden too. |
+| corednsSecurityContext | object | Non-root 65532, read-only root filesystem, RuntimeDefault seccomp, no privilege escalation, and no capability other than `NET_BIND_SERVICE` | Security context for the coredns container. Override only if a custom `corednsImage` cannot run under the hardened default. |
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
 | imagePullSecrets | list | `[]` | References to pre-existing secrets that contain registry credentials. |
 | labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |
-| networks | object | `{}` | Defines network names that can be attached to services in order to specify subsets of services that can communicate with one another. |
-| serviceAccountName | string | `nil` | Service account name. When set, a ServiceAccount is created with this name and pods will use it. |
+| networks | object | `{}` | Defines network names that can be attached to services in order to specify subsets of services that can communicate with one another. Names must be lower case alphanumeric with `-` or `.`, and at most 55 characters. |
+| serviceAccountCreate | bool | `false` | Whether to create the selected ServiceAccount. Keep disabled to use an externally managed ServiceAccount across concurrent sandbox releases. |
+| serviceAccountName | string | `nil` | Service account name for sandbox pods. The account must already exist unless `serviceAccountCreate` is enabled. |
 | services | object | see [values.yaml](./values.yaml) | A collection of services to deploy within the agent environment. A service can connect to another service using DNS, e.g. `http://nginx:80`. |
 | services.default | object | see [values.yaml](./values.yaml) | The default service, this is required for the agent environment to function. |
-| services.default.additionalDnsRecords | list | `[]` | A list of additional domains which will resolve to this service from within the agent environment (e.g. example.com). If one or more records are provided, `dnsRecord` is automatically set to true. |
+| services.default.additionalDnsRecords | list | `[]` | A list of additional domains which will resolve to this service from within the agent environment (e.g. example.com). If one or more records are provided, `dnsRecord` is automatically set to true. Records may contain letters, digits and `_ - .`; whitespace and other characters are rejected at install time because these are interpolated into the CoreDNS Corefile. |
 | services.default.args | list | `[]` | The container's entrypoint arguments. |
 | services.default.command | list | `["tail","-f","/dev/null"]` | The container's entrypoint command. |
 | services.default.dnsRecord | bool | false | Whether to create a DNS record which will resolve to this service from within the agent environment, using the service name as the domain (e.g. default). |

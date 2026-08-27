@@ -1,0 +1,7 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+# "*" means allow all domains; the chart must not emit serverNames (which has no
+# allow-all form and would be rejected by Cilium's CRD validation).
+allowDomains:
+  - "*"

@@ -28,6 +28,9 @@ def test_default_chart(chart_dir: Path) -> None:
         services[0]["spec"]["template"]["spec"]["containers"][0]["image"]
         == "python:3.12-bookworm"
     )
+    assert services[0]["spec"]["template"]["metadata"]["labels"][
+        "aisi.gov.uk/k8s-sandbox-version"
+    ] == _chart_version(chart_dir)
 
 
 def test_additional_resources(chart_dir: Path, test_resources_dir: Path) -> None:
@@ -206,11 +209,27 @@ def test_no_service_account_by_default(chart_dir: Path) -> None:
     assert _get_documents(documents, "ServiceAccount") == []
     for stateful_set in _get_documents(documents, "StatefulSet"):
         spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is False
         assert "serviceAccountName" not in spec
 
 
-def test_service_account_name(chart_dir: Path) -> None:
+def test_service_account_name_uses_existing_account_by_default(
+    chart_dir: Path,
+) -> None:
     documents = _run_helm_template(chart_dir, set_str="serviceAccountName=my-sa")
+
+    assert _get_documents(documents, "ServiceAccount") == []
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is False
+        assert spec["serviceAccountName"] == "my-sa"
+
+
+def test_service_account_creation_requires_opt_in(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, set_str="serviceAccountName=my-sa,serviceAccountCreate=true"
+    )
 
     service_accounts = _get_documents(documents, "ServiceAccount")
     assert len(service_accounts) == 1
@@ -220,6 +239,39 @@ def test_service_account_name(chart_dir: Path) -> None:
     for stateful_set in _get_documents(documents, "StatefulSet"):
         spec = stateful_set["spec"]["template"]["spec"]
         assert spec["serviceAccountName"] == "my-sa"
+
+
+@pytest.mark.parametrize("service_account_name", ["null", "true", "123"])
+def test_service_account_name_preserves_yaml_scalar_strings(
+    chart_dir: Path, service_account_name: str
+) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        set_str="serviceAccountCreate=true",
+        set_string=f"serviceAccountName={service_account_name}",
+    )
+
+    service_accounts = _get_documents(documents, "ServiceAccount")
+    assert service_accounts[0]["metadata"]["name"] == service_account_name
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["serviceAccountName"] == service_account_name
+
+
+def test_service_account_creation_requires_name(chart_dir: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(chart_dir, set_str="serviceAccountCreate=true")
+
+
+def test_service_account_token_automount_requires_opt_in(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, set_str="automountServiceAccountToken=true"
+    )
+
+    for stateful_set in _get_documents(documents, "StatefulSet"):
+        spec = stateful_set["spec"]["template"]["spec"]
+        assert spec["automountServiceAccountToken"] is True
 
 
 def test_init_containers(chart_dir: Path, test_resources_dir: Path) -> None:
@@ -397,7 +449,7 @@ def test_cluster_default_magic_string(
             {
                 "command": ["/special-dns-command"],
             },
-            "coredns/coredns:1.8.3",
+            "coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea",
             ["/special-dns-command"],
         ),
     ],
@@ -433,6 +485,70 @@ def test_coredns_container(
     assert corends_container is not None
     assert corends_container["image"] == expected_coredns_image
     assert corends_container["command"] == expected_coredns_command
+    assert corends_container["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"add": ["NET_BIND_SERVICE"], "drop": ["ALL"]},
+        "readOnlyRootFilesystem": True,
+        "runAsGroup": 65532,
+        "runAsNonRoot": True,
+        "runAsUser": 65532,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+    assert corends_container["volumeMounts"] == [
+        {
+            "mountPath": "/etc/coredns/Corefile",
+            "name": "coredns-config",
+            "readOnly": True,
+            "subPath": "Corefile",
+        }
+    ]
+
+
+def test_coredns_security_context_can_be_overridden(chart_dir: Path) -> None:
+    # An image which cannot run under the hardened default needs an escape hatch other
+    # than forking the chart. Overriding one field merges rather than replaces, so the
+    # rest of the hardening survives.
+    documents = _run_helm_template(
+        chart_dir, set_str="corednsSecurityContext.runAsUser=1000"
+    )
+
+    stateful_sets = _get_documents(documents, "StatefulSet")
+    corends_container = next(
+        container
+        for container in stateful_sets[0]["spec"]["template"]["spec"]["containers"]
+        if container["name"] == "coredns"
+    )
+    assert corends_container["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"add": ["NET_BIND_SERVICE"], "drop": ["ALL"]},
+        "readOnlyRootFilesystem": True,
+        "runAsGroup": 65532,
+        "runAsNonRoot": True,
+        "runAsUser": 1000,
+        "seccompProfile": {"type": "RuntimeDefault"},
+    }
+
+
+@pytest.mark.parametrize(
+    "values_file",
+    [
+        "invalid-service-name-values.yaml",
+        "invalid-dns-record-values.yaml",
+        "invalid-network-name-values.yaml",
+    ],
+)
+def test_rejects_names_that_can_inject_rendered_configuration(
+    chart_dir: Path, test_resources_dir: Path, values_file: str
+) -> None:
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
+        _run_helm_template(chart_dir, test_resources_dir / values_file)
+
+    # Assert the *schema* did the rejecting. Without this, the test would also pass if
+    # helm merely hit a YAML parse error on the injected newline, i.e. it would pass
+    # with values.schema.json deleted. Don't assert on the offending field name: helm
+    # switched JSON Schema libraries mid-3.x and the newer one reports propertyNames
+    # violations against an empty path.
+    assert "values don't meet the specifications of the schema" in excinfo.value.stderr
 
 
 def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> None:
@@ -467,8 +583,168 @@ def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> 
     assert normal_spec.get("egress") != []
 
 
+def test_allow_domains_egress_enforces_identity_on_pinned_ips(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-values.yaml"
+    )
+
+    cnps = _get_documents(documents, "CiliumNetworkPolicy")
+    egress_policy = next(
+        cnp for cnp in cnps if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )
+    fqdn_rules = [rule for rule in egress_policy["spec"]["egress"] if "toFQDNs" in rule]
+    assert len(fqdn_rules) == 1
+    fqdn_rule = fqdn_rules[0]
+
+    allow_domains = ["pypi.org", "*.debian.org"]
+    assert [entry["matchPattern"] for entry in fqdn_rule["toFQDNs"]] == allow_domains
+
+    # Egress to pinned IPs is constrained to 80/443, and the request identity must
+    # match an allowed domain, so a shared-CDN IP cannot be reused to reach off-list
+    # origins: the TLS SNI on 443, and the HTTP Host header on 80.
+    by_port = {tp["ports"][0]["port"]: tp for tp in fqdn_rule["toPorts"]}
+    assert set(by_port) == {"443", "80"}
+
+    assert by_port["443"]["ports"] == [{"port": "443", "protocol": "TCP"}]
+    assert by_port["443"]["serverNames"] == allow_domains
+
+    # The glob is translated to a case-insensitive, port-tolerant anchored regex
+    # for the Host header.
+    assert by_port["80"]["ports"] == [{"port": "80", "protocol": "TCP"}]
+    hosts = [rule["host"] for rule in by_port["80"]["rules"]["http"]]
+    assert hosts == [
+        "(?i)^pypi[.]org(:[0-9]+)?$",
+        "(?i)^[^.]+[.]debian[.]org(:[0-9]+)?$",
+    ]
+
+
+def test_allow_domains_ports_opens_extra_ports_ip_pinned(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-ports-values.yaml"
+    )
+
+    egress_policy = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )
+    fqdn_rule = next(r for r in egress_policy["spec"]["egress"] if "toFQDNs" in r)
+
+    # The extra ports are the toPorts entry with neither serverNames nor http
+    # rules (IP-pinned only). protocol defaults to ANY; 443 may be added as UDP.
+    extra = next(
+        tp
+        for tp in fqdn_rule["toPorts"]
+        if "serverNames" not in tp and "rules" not in tp
+    )
+    assert [(p["port"], p["protocol"]) for p in extra["ports"]] == [
+        ("22", "ANY"),
+        ("443", "UDP"),
+    ]
+
+
+def test_allow_domains_ports_rejects_identity_bypassing_ports(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    # Listing 80/443 with anything but UDP would disable the SNI/Host check, so
+    # the chart must refuse to render.
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(
+            chart_dir, test_resources_dir / "allow-domains-ports-invalid-values.yaml"
+        )
+
+
+def test_allow_domains_ports_scopes_to_a_single_domain(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-ports-scoped-values.yaml"
+    )
+
+    egress = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )["spec"]["egress"]
+    fqdn_rules = [r for r in egress if "toFQDNs" in r]
+
+    # The shared rule (the one carrying the SNI/Host identity checks) takes the
+    # unscoped port; the scoped port becomes its own single-domain rule.
+    shared = next(
+        r for r in fqdn_rules if any("serverNames" in tp for tp in r["toPorts"])
+    )
+    scoped = [r for r in fqdn_rules if r is not shared]
+
+    shared_extra = next(
+        tp for tp in shared["toPorts"] if "serverNames" not in tp and "rules" not in tp
+    )
+    assert [(p["port"], p["protocol"]) for p in shared_extra["ports"]] == [
+        ("8008", "ANY")
+    ]
+
+    assert len(scoped) == 1
+    assert [m["matchPattern"] for m in scoped[0]["toFQDNs"]] == ["github.com"]
+    assert scoped[0]["toPorts"] == [{"ports": [{"port": "22", "protocol": "ANY"}]}]
+
+
+def test_allow_domains_ports_rejects_unlisted_scope_domain(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    # A scoped domain that is not in allowDomains would never resolve, so the
+    # chart must refuse to render rather than emit an inert rule.
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(
+            chart_dir, test_resources_dir / "allow-domains-ports-bad-domain-values.yaml"
+        )
+
+
+def test_allow_domains_wildcard_all_skips_identity_enforcement(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "allow-domains-wildcard-all-values.yaml"
+    )
+
+    egress = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )["spec"]["egress"]
+    fqdn_rule = next(r for r in egress if "toFQDNs" in r)
+
+    # "*" (allow all) has no valid serverNames form, so no identity-enforcing
+    # toPorts is emitted -- egress to all resolved IPs is permitted on all ports.
+    assert [m["matchPattern"] for m in fqdn_rule["toFQDNs"]] == ["*"]
+    assert "toPorts" not in fqdn_rule
+
+
+def test_service_args_render_as_a_list(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "service-args-values.yaml"
+    )
+
+    pod_spec = _get_documents(documents, "StatefulSet")[0]["spec"]["template"]["spec"]
+    container = next(c for c in pod_spec["containers"] if c["name"] == "default")
+
+    # Rendering args without toYaml produces `args: [setarch -R /bin/echo hello]`,
+    # which YAML reads back as a one-element sequence because flow sequences are
+    # comma-delimited. The container then execs a single argv token instead of the
+    # four the caller asked for, so assert on the parsed list, not a substring.
+    assert container["args"] == ["setarch", "-R", "/bin/echo", "hello"]
+    assert container["command"] == ["/bin/sh", "-c"]
+
+
 def _run_helm_template(
-    chart_dir: Path, values_file: Path | None = None, set_str: str | None = None
+    chart_dir: Path,
+    values_file: Path | None = None,
+    set_str: str | None = None,
+    set_string: str | None = None,
 ) -> list[dict[str, Any]]:
     cmd = [
         "helm",
@@ -481,10 +757,19 @@ def _run_helm_template(
         cmd += ["-f", str(values_file)]
     if set_str:
         cmd += ["--set", set_str]
+    if set_string:
+        cmd += ["--set-string", set_string]
 
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, check=True)
+    # stderr is captured so that tests asserting rejection can check why helm failed.
+    result = subprocess.run(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True
+    )
     return list(yaml.safe_load_all(result.stdout))
 
 
 def _get_documents(documents: list[Any], doc_type_filter: str) -> list[dict[str, Any]]:
     return [doc for doc in documents if doc["kind"] == doc_type_filter]
+
+
+def _chart_version(chart_dir: Path) -> str:
+    return str(yaml.safe_load((chart_dir / "Chart.yaml").read_text())["version"])

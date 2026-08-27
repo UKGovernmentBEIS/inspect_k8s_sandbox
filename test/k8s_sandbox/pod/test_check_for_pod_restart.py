@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,16 +8,28 @@ from k8s_sandbox._pod.op import PodInfo, check_for_pod_restart
 from k8s_sandbox._pod.pod import Pod
 
 
+def _raw_pod_response(body: dict) -> MagicMock:
+    """Mimic the raw urllib3 response returned by ``_preload_content=False``."""
+    response = MagicMock()
+    response.data = json.dumps(body).encode()
+    return response
+
+
 def _k8s_pod(uid: str, container_name: str, restart_count: int) -> MagicMock:
-    pod = MagicMock()
-    pod.metadata.uid = uid
-    pod.metadata.name = "agent-env-abc-default-0"
-    status = MagicMock()
-    status.name = container_name
-    status.restart_count = restart_count
-    status.last_state.terminated.reason = "OOMKilled"
-    pod.status.container_statuses = [status]
-    return pod
+    return _raw_pod_response(
+        {
+            "metadata": {"uid": uid, "name": "agent-env-abc-default-0"},
+            "status": {
+                "containerStatuses": [
+                    {
+                        "name": container_name,
+                        "restartCount": restart_count,
+                        "lastState": {"terminated": {"reason": "OOMKilled"}},
+                    }
+                ]
+            },
+        }
+    )
 
 
 def _pod_info(uid: str = "uid-1", restart_count: int = 0) -> PodInfo:
@@ -42,11 +55,10 @@ def test_no_change_does_not_raise():
 
 def test_missing_container_statuses_skips_restart_check():
     # Briefly possible right after pod scheduling: same UID but kubelet
-    # hasn't published container_statuses yet. Must not assert.
-    pod = MagicMock()
-    pod.metadata.uid = "uid-1"
-    pod.metadata.name = "agent-env-abc-default-0"
-    pod.status.container_statuses = None
+    # hasn't published container_statuses yet. Must not raise.
+    pod = _raw_pod_response(
+        {"metadata": {"uid": "uid-1", "name": "agent-env-abc-default-0"}, "status": {}}
+    )
     with patch("k8s_sandbox._pod.op.k8s_client") as mock_client:
         mock_client.return_value.read_namespaced_pod.return_value = pod
         check_for_pod_restart(_pod_info(uid="uid-1"))

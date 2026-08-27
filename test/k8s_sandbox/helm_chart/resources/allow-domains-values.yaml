@@ -1,0 +1,6 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+allowDomains:
+  - "pypi.org"
+  - "*.debian.org"

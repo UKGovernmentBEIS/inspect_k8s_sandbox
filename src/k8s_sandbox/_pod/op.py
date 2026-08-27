@@ -10,6 +10,7 @@ from kubernetes.stream.ws_client import RESIZE_CHANNEL, WSClient  # type: ignore
 
 from k8s_sandbox._kubernetes_api import k8s_client
 from k8s_sandbox._pod.error import ContainerRestartedError, PodReplacedError
+from k8s_sandbox._pod.snapshot import read_pod
 
 # The duration to wait for an initial response from the k8s API server.
 # The initial response is received before the command is necessarily complete, so
@@ -150,62 +151,34 @@ def check_for_pod_restart(pod: PodInfo) -> None:
             (treated as a permanent misconfiguration).
     """
     api = k8s_client(pod.context_name)
-    k8s_pod = api.read_namespaced_pod(name=pod.name, namespace=pod.namespace)
-    assert k8s_pod.metadata is not None
-    assert k8s_pod.metadata.uid is not None
-    assert k8s_pod.status is not None
-    if k8s_pod.metadata.uid != pod.uid:
+    snapshot = read_pod(api, name=pod.name, namespace=pod.namespace)
+    if snapshot.uid != pod.uid:
         # Capture the new pod's restart count for the default container so the
         # caller can refresh its full cached identity atomically.
-        new_restart_count = _restart_count_for(
-            k8s_pod.status.container_statuses, pod.default_container_name
-        )
         raise PodReplacedError(
             pod_name=pod.name,
             old_uid=pod.uid,
-            new_uid=k8s_pod.metadata.uid,
-            new_restart_count=new_restart_count,
+            new_uid=snapshot.uid,
+            new_restart_count=snapshot.restart_count_for(pod.default_container_name),
         )
-    if k8s_pod.status.container_statuses is None:
+    if snapshot.container_statuses is None:
         # Kubelet hasn't published container statuses yet (briefly possible
         # right after pod scheduling). Nothing to compare against — skip the
-        # restart-count check rather than asserting.
+        # restart-count check.
         return
-    status = next(
-        (
-            container_status
-            for container_status in k8s_pod.status.container_statuses
-            if container_status.name == pod.default_container_name
-        ),
-        None,
-    )
+    status = snapshot.status_for(pod.default_container_name)
     if status is None:
         raise RuntimeError(
-            f"Pod '{k8s_pod.metadata.name}' does not have a container named "
+            f"Pod '{snapshot.name}' does not have a container named "
             f"'{pod.default_container_name}'"
         )
     if status.restart_count > pod.initial_restart_count:
-        last_state = status.last_state
-        terminated = last_state.terminated if last_state else None
-        last_reason = (
-            terminated.reason if terminated and terminated.reason else "unknown"
-        )
         raise ContainerRestartedError(
             pod_name=pod.name,
             container_name=status.name,
             restart_count=status.restart_count,
-            last_reason=last_reason,
+            last_reason=status.last_terminated_reason or "unknown",
         )
-
-
-def _restart_count_for(container_statuses, container_name: str) -> int:
-    if not container_statuses:
-        return 0
-    status = next(
-        (cs for cs in container_statuses if cs.name == container_name),
-        None,
-    )
-    return status.restart_count if status is not None else 0
 
 
 def _send_keepalive(ws_client: WSClient, stop: threading.Event) -> None:

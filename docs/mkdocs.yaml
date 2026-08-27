@@ -40,6 +40,7 @@ nav:
     - "Custom Helm Chart": helm/custom-chart.md
   - "Security":
     - "Container Runtime": security/container-runtime.md
+    - "Kubernetes Workloads": security/kubernetes-workloads.md
     - "Network Access": security/network-access.md
   - "Examples": examples.md
   - "Tips":

@@ -20,6 +20,9 @@ spec:
       labels:
         {{- include "agentEnv.labelsFromValues" $ | nindent 8 }}
         {{- include "agentEnv.selectorLabels" $ | nindent 8 }}
+        {{- /* The StatefulSet gets this via helm.sh/chart; Pods don't, and knowing
+               which chart version created a leaked Pod is useful when triaging. */}}
+        aisi.gov.uk/k8s-sandbox-version: {{ $.Chart.Version | quote }}
         {{- if $service.networks }}
         {{- range $service.networks }}
         aisi.gov.uk/network-{{ . }}: "true"
@@ -33,8 +36,9 @@ spec:
       {{- if ne $service.runtimeClassName "CLUSTER_DEFAULT" }}
       runtimeClassName: {{ $service.runtimeClassName | default "gvisor" }}
       {{- end }}
+      automountServiceAccountToken: {{ $.Values.automountServiceAccountToken }}
       {{- if $.Values.serviceAccountName }}
-      serviceAccountName: {{ $.Values.serviceAccountName }}
+      serviceAccountName: {{ $.Values.serviceAccountName | quote }}
       {{- end }}
       {{- /* Do not leak info on services via env vars */}}
       enableServiceLinks: false
@@ -88,7 +92,8 @@ spec:
           {{- toYaml $service.command | nindent 10 }}
         {{- end }}
         {{- if $service.args }}
-        args: {{ $service.args }}
+        args:
+          {{- toYaml $service.args | nindent 10 }}
         {{- end }}
         {{- if $service.workingDir }}
         workingDir: {{ $service.workingDir }}
@@ -147,6 +152,8 @@ spec:
         image: {{ quote $.Values.corednsImage }}
         command:
           {{- toYaml $.Values.corednsCommand | nindent 10 }}
+        securityContext:
+          {{- toYaml $.Values.corednsSecurityContext | nindent 10 }}
         resources:
           requests:
             memory: "128Mi"
@@ -165,6 +172,7 @@ spec:
           - name: coredns-config
             mountPath: /etc/coredns/Corefile
             subPath: Corefile
+            readOnly: true
       {{- with $service.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}

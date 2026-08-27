@@ -56,14 +56,20 @@ class PodOpExecutor:
         Args:
             max_pod_ops: Maximum number of concurrent pod operations. If provided
                 on the first call, overrides the INSPECT_MAX_POD_OPS env var and
-                the default (cpu_count * 4). Ignored on subsequent calls since the
-                singleton is already created.
+                the default (cpu_count * 4). A later call with a different value
+                raises ValueError rather than silently ignoring the configuration.
 
         This method is async-safe (because it doesn't await anything) but not
         thread-safe.
         """
         if cls._instance is None:
             cls._instance = cls(max_pod_ops=max_pod_ops)
+        elif max_pod_ops is not None and cls._instance._max_workers != max_pod_ops:
+            raise ValueError(
+                "PodOpExecutor is already initialized with "
+                f"max_pod_ops={cls._instance._max_workers}; cannot use "
+                f"max_pod_ops={max_pod_ops}."
+            )
         return cls._instance
 
     async def queue_operation(self, callable: Callable[[], T]) -> T:
