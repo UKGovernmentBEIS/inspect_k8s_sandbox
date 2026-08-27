@@ -1,7 +1,9 @@
 import logging
 from typing import cast
+from unittest.mock import patch
 
 import pytest
+from inspect_ai.util import ExecResult
 from pytest import CaptureFixture, LogCaptureFixture
 
 import k8s_sandbox._manager as manager_module
@@ -187,3 +189,85 @@ async def test_cleanup_all_uninstalls_nothing_when_not_confirmed(
 
     assert attempted == []
     assert "Cancelled." in capsys.readouterr().out
+
+
+def _helm_results(
+    monkeypatch: pytest.MonkeyPatch,
+    install_ok: bool,
+    uninstall_ok: bool = True,
+) -> list[str]:
+    """Stub out helm and the cluster, returning the list of subcommands run."""
+    import k8s_sandbox._helm as helm_module
+
+    subcommands: list[str] = []
+
+    async def fake_run_subprocess(
+        cmd: str, args: list[str], capture_output: bool
+    ) -> ExecResult[str]:
+        subcommands.append(args[0])
+        ok = install_ok if args[0] in ("install", "upgrade") else uninstall_ok
+        stderr = "" if ok else "Error: context deadline exceeded\n"
+        return ExecResult(ok, 0 if ok else 1, "", stderr)
+
+    monkeypatch.setattr(helm_module, "get_default_namespace", lambda _: "default")
+    monkeypatch.setattr(helm_module, "_run_subprocess", fake_run_subprocess)
+    monkeypatch.setattr(helm_module, "describe_release_pods", lambda *_: None)
+    return subcommands
+
+
+async def _sample_init(manager: HelmReleaseManager) -> None:
+    with patch.object(HelmReleaseManager, "get_instance", return_value=manager):
+        await K8sSandboxEnvironment.sample_init("my-task", None, {})
+
+
+async def test_failed_install_uninstalls_the_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Inspect does not call sample_cleanup() when sample_init() raises and will retry
+    # the sample, so a release left behind here accumulates a generation of pods per
+    # attempt until the whole eval ends.
+    subcommands = _helm_results(monkeypatch, install_ok=False)
+    manager = HelmReleaseManager()
+
+    with pytest.raises(RuntimeError, match="context deadline exceeded"):
+        await _sample_init(manager)
+
+    assert subcommands == ["install", "uninstall"]
+    assert manager._installed_releases == []
+
+
+async def test_failed_uninstall_does_not_mask_the_install_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subcommands = _helm_results(monkeypatch, install_ok=False, uninstall_ok=False)
+    manager = HelmReleaseManager()
+
+    # The install error carries the pod diagnostics, so it must be the one raised.
+    with pytest.raises(RuntimeError, match="Helm install timed out"):
+        await _sample_init(manager)
+
+    assert subcommands == ["install", "uninstall"]
+    # Still tracked, so that uninstall_all() retries it and reports it.
+    assert len(manager._installed_releases) == 1
+
+
+async def test_release_is_uninstalled_when_its_pods_cannot_be_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subcommands = _helm_results(monkeypatch, install_ok=True)
+    monkeypatch.setattr(
+        Release,
+        "get_sandbox_pods",
+        _raise_no_pods,
+    )
+    manager = HelmReleaseManager()
+
+    with pytest.raises(RuntimeError, match="No pods found"):
+        await _sample_init(manager)
+
+    assert subcommands == ["install", "uninstall"]
+    assert manager._installed_releases == []
+
+
+async def _raise_no_pods(self: Release) -> dict[str, object]:
+    raise RuntimeError("No pods found.")
