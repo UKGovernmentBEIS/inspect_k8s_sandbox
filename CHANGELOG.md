@@ -60,6 +60,11 @@
   sample. It is retried and reported at the end of the eval as before.
 - Remove the `No GPU node is currently available` warning, which also fired for
   releases that requested no GPU.
+- Fix sandbox pods being left in the cluster when a sample's sandbox fails to start
+  (e.g. `helm install` timing out): every retry of the sample added another set of
+  pods, none of which were removed until the eval ended. A chart with fixed-name
+  `additionalResources` no longer fails the retry with `exists and cannot be imported
+  into the current release`.
 
 ## 2026-08-12 0.13.0
 

@@ -4,7 +4,7 @@ import re
 import shlex
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Generator, Literal, cast, overload
 
@@ -225,8 +225,21 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             sample_uuid=sample_uuid,
             extra_values=extra_values,
         )
-        await HelmReleaseManager.get_instance().install(release)
-        return reorder_default_first(await get_sandboxes(release, resolved_config))
+        manager = HelmReleaseManager.get_instance()
+        try:
+            await manager.install(release)
+            return reorder_default_first(await get_sandboxes(release, resolved_config))
+        except Exception:
+            # Inspect does not call sample_cleanup() when sample_init() raises, and
+            # uninstall_all() does not run until the whole eval ends, so nothing else
+            # removes what Helm created. Without this, each retried sample leaves a
+            # full set of sandbox pods behind.
+            # A failed uninstall must not replace the original error (which carries the
+            # pod diagnostics), and leaves the release tracked so that uninstall_all()
+            # retries it and reports it.
+            with suppress(Exception):
+                await manager.uninstall(release, quiet=True)
+            raise
 
     @classmethod
     async def sample_cleanup(
