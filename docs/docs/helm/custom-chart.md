@@ -78,7 +78,16 @@ The values can be `None` to use the chart's default values.
 
 ## Chart readiness
 
-The `k8s_sandbox` package uses the `--wait` flag when installing the Helm chart so won't
-begin the eval until the chart is deemed ready by Helm. If this is not sufficient,
-consider using a [Helm post-install hook](https://helm.sh/docs/topics/charts_hooks/)
-which waits for a condition to be met.
+The `k8s_sandbox` package won't begin the eval until every Pod the chart renders is
+ready. It counts the Pods the chart is expected to produce (bare Pods, plus the
+`replicas` of any StatefulSet, Deployment, ReplicaSet or ReplicationController) and
+waits for all of them to report the `Ready` condition. A Pod which has run to
+completion counts as ready.
+
+A `DaemonSet`, `Job` or `CronJob` creates a number of Pods only the cluster knows, so
+a chart using one is waited on for at least one Pod rather than an exact count. Pods
+created indirectly — by an operator reconciling a custom resource, say — cannot be
+anticipated at all, and their presence can satisfy the count expected of another
+workload. If that is not sufficient, consider using a [Helm post-install
+hook](https://helm.sh/docs/topics/charts_hooks/) which waits for a condition to be
+met.

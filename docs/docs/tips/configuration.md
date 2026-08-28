@@ -2,12 +2,28 @@
 
 ## Helm install timeout { #helm-install-timeout }
 
-The built-in Helm install timeout is 10 minutes. If you're running large eval sets and
-expect to run into cluster capacity issues, you can increase the timeout by setting the
-`INSPECT_HELM_TIMEOUT` environment variable to a number of seconds.
+The built-in Helm install timeout is 10 minutes. It bounds how long a sandbox may take
+to be created *and* become ready. If you're running large eval sets and expect to run
+into cluster capacity issues, you can increase the timeout by setting the
+`INSPECT_HELM_TIMEOUT` environment variable to a number of seconds. A sandbox waiting
+for capacity does not hold an install slot, so a long timeout does not slow down
+sandboxes whose capacity is already available.
 
 ```sh
 export INSPECT_HELM_TIMEOUT=21600   # 6 hours
+```
+
+
+## Helm uninstall timeout { #helm-uninstall-timeout }
+
+Uninstalling has its own 10 minute timeout, which you can change by setting the
+`INSPECT_HELM_UNINSTALL_TIMEOUT` environment variable to a number of seconds. It is
+deliberately separate from `INSPECT_HELM_TIMEOUT`: waiting hours for a sandbox to
+become ready is reasonable, but waiting hours to tear one down holds up the sample that
+is trying to clean up after itself.
+
+```sh
+export INSPECT_HELM_UNINSTALL_TIMEOUT=1800   # 30 minutes
 ```
 
 

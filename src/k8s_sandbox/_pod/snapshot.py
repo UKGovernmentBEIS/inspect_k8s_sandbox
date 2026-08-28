@@ -53,6 +53,10 @@ class PodSnapshot:
     container_names: tuple[str, ...]
     """Container names from the pod spec, in declared order."""
     container_statuses: tuple[ContainerStatus, ...] | None
+    phase: str | None = None
+    """``status.phase``: Pending, Running, Succeeded, Failed or Unknown."""
+    ready: bool = False
+    """``status.conditions[type=Ready]`` is True, which is what Helm's wait checks."""
 
     def status_for(self, container_name: str) -> ContainerStatus | None:
         if self.container_statuses is None:
@@ -81,14 +85,30 @@ def read_pod(api: client.CoreV1Api, name: str, namespace: str) -> PodSnapshot:
 
 
 def list_pods(
-    api: client.CoreV1Api, namespace: str, *, label_selector: str
+    api: client.CoreV1Api,
+    namespace: str,
+    *,
+    label_selector: str,
+    resource_version: str | None = None,
+    request_timeout: tuple[int, int] | None = None,
 ) -> list[PodSnapshot]:
-    """List pods, bypassing the kubernetes client's model deserialization."""
+    """List pods, bypassing the kubernetes client's model deserialization.
+
+    `resource_version="0"` answers from the API server's watch cache: cheap for a
+    repeated poll, but it can lag reality in either direction -- a pod which has
+    stopped being Ready may still read as Ready -- so confirm against a consistent
+    read before acting on it. `request_timeout` is (connect, read) seconds; without
+    one a stalled socket outlives any caller's deadline.
+    """
     # See read_pod for why _preload_content needs a call-arg ignore.
     response = cast(
         HTTPResponse,
         api.list_namespaced_pod(  # type: ignore[call-arg]
-            namespace, label_selector=label_selector, _preload_content=False
+            namespace,
+            label_selector=label_selector,
+            resource_version=resource_version,
+            _request_timeout=request_timeout,
+            _preload_content=False,
         ),
     )
     body = json.loads(response.data)
@@ -109,12 +129,17 @@ def _parse_pod(pod: dict[str, Any]) -> PodSnapshot:
         if raw_statuses is not None
         else None
     )
+    conditions = status.get("conditions") or []
     return PodSnapshot(
         name=name,
         uid=uid,
         labels=metadata.get("labels") or {},
         container_names=tuple(c["name"] for c in spec.get("containers") or []),
         container_statuses=container_statuses,
+        phase=status.get("phase"),
+        ready=any(
+            c.get("type") == "Ready" and c.get("status") == "True" for c in conditions
+        ),
     )
 
 
