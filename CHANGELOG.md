@@ -32,9 +32,11 @@
   within Ns` together with the state of its containers, rather than Helm's
   `context deadline exceeded`.
 - Charts which render Pods directly, rather than via a StatefulSet or Deployment, are
-  now waited for. Charts using a `DaemonSet`, `Job` or `CronJob` are waited on for at
-  least one Pod rather than an exact count; `helm install --wait` waited for all of
-  them.
+  now waited for. The eval no longer starts before every Pod labelled `inspect/service`
+  is Ready, even when the chart also creates Pods which are not sandboxes — a
+  `DaemonSet`, a hook, or anything added through `additionalResources`.
+- A chart which declares no Pod labelled `inspect/service` now fails the install,
+  rather than starting an eval with no sandbox.
 - Add `INSPECT_HELM_UNINSTALL_TIMEOUT` (default 600s). Uninstalls previously used
   `INSPECT_HELM_TIMEOUT`, which is now safe to set to hours.
 - A Helm release which fails to uninstall during sample cleanup no longer fails the

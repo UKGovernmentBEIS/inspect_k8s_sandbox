@@ -10,7 +10,16 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, AsyncContextManager, Generator, Literal, NoReturn, Protocol
+from typing import (
+    Any,
+    AsyncContextManager,
+    Generator,
+    Iterable,
+    Iterator,
+    Literal,
+    NoReturn,
+    Protocol,
+)
 
 import yaml
 from inspect_ai.util import ExecResult, concurrency
@@ -46,12 +55,10 @@ HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
     "https://k8s-sandbox.aisi.org.uk/tips/troubleshooting/"
     "#helm-context-deadline-exceeded"
 )
-# Kinds which declare how many pods they create.
-_COUNTED_POD_KINDS = frozenset(
-    {"StatefulSet", "Deployment", "ReplicaSet", "ReplicationController"}
-)
-# Kinds which create pods in a number the manifest does not determine.
-_UNCOUNTED_POD_KINDS = frozenset({"DaemonSet", "Job", "CronJob"})
+# The label with which a chart declares a Pod to be a sandbox. Readiness and handover
+# read it by the same rule, so a release cannot pass readiness while a sandbox the
+# caller is about to ask for is missing.
+_SERVICE_LABEL = "inspect/service"
 
 logger = logging.getLogger(__name__)
 
@@ -207,8 +214,11 @@ class Release:
         self.restarted_container_behavior = restarted_container_behavior
         self.sample_uuid = sample_uuid
         self._extra_values = dict(extra_values) if extra_values else {}
-        # How many pods the rendered chart implies; set by _install().
-        self._expected_pods = 1
+        # The sandboxes the rendered chart declares; set by _install().
+        self._expected_services: frozenset[str] = frozenset()
+        # The pods readiness confirmed; set by install() and consumed by
+        # get_sandbox_pods(), so nothing changes between the verdict and handover.
+        self._ready_pods: list[PodSnapshot] | None = None
 
     @property
     def namespace(self) -> str:
@@ -253,7 +263,7 @@ class Release:
                                     raise
                                 attempt += 1
                                 await asyncio.sleep(INSTALL_RETRY_DELAY_SECONDS)
-                await self._wait_until_ready(deadline)
+                self._ready_pods = await self._wait_until_ready(deadline)
         except asyncio.CancelledError:
             # When an eval is cancelled (either by user or by an error), the timing of
             # uninstall operations can be interleaved with existing `helm install`
@@ -269,31 +279,29 @@ class Release:
         await uninstall(self.release_name, self._namespace, self._context_name, quiet)
 
     async def get_sandbox_pods(self) -> dict[str, Pod]:
-        loop = asyncio.get_running_loop()
-        try:
-            pods = await loop.run_in_executor(None, self._list_release_pods)
-        except ApiException as e:
-            _raise_runtime_error(
-                "Failed to list pods.", release=self.release_name, from_exception=e
-            )
+        """The release's sandboxes, as confirmed ready by install()."""
+        pods = self._ready_pods
+        if pods is None:
+            try:
+                pods = await asyncio.to_thread(self._list_release_pods)
+            except ApiException as e:
+                _raise_runtime_error(
+                    "Failed to list pods.", release=self.release_name, from_exception=e
+                )
         if not pods:
             _raise_runtime_error("No pods found.", release=self.release_name)
         sandboxes = dict()
-        for pod in pods:
-            service_name = pod.labels.get("inspect/service")
-            # Depending on the Helm chart, some Pods may not have a service label.
-            # These should not be considered to be a sandbox pod (as per our docs).
-            if service_name is not None:
-                default_container_name = pod.container_names[0]
-                sandboxes[service_name] = Pod(
-                    pod.name,
-                    self._namespace,
-                    self._context_name,
-                    default_container_name,
-                    pod.uid,
-                    pod.restart_count_for(default_container_name),
-                    self.restarted_container_behavior,
-                )
+        for pod in _sandbox_pods(pods):
+            default_container_name = pod.container_names[0]
+            sandboxes[pod.labels[_SERVICE_LABEL]] = Pod(
+                pod.name,
+                self._namespace,
+                self._context_name,
+                default_container_name,
+                pod.uid,
+                pod.restart_count_for(default_container_name),
+                self.restarted_container_behavior,
+            )
         return sandboxes
 
     async def _install(
@@ -343,7 +351,9 @@ class Release:
         )
         if not result.success:
             await self._raise_install_error(result)
-        self._expected_pods = _get_expected_pod_count(result.stdout, self.release_name)
+        self._expected_services = _get_expected_services(
+            result.stdout, self.release_name
+        )
 
     async def _raise_install_error(self, result: ExecResult[str]) -> NoReturn:
         # When concurrent helm operations are modifying the same resource quota, the
@@ -401,14 +411,20 @@ class Release:
             request_timeout=_LIST_PODS_READ_TIMEOUT,
         )
 
+    def _missing_services(self, pods: list[PodSnapshot]) -> frozenset[str]:
+        """The declared sandboxes which no pod is yet serving."""
+        return self._expected_services - {
+            pod.labels[_SERVICE_LABEL] for pod in _sandbox_pods(pods) if pod.ready
+        }
+
     def _is_ready(self, pods: list[PodSnapshot]) -> bool:
         """Whether `pods` means the release is ready to be handed to a caller."""
-        # A terminally failed pod is replaced by its controller, and a bare one that
-        # cannot be replaced just leaves the count short until the deadline.
+        # A terminally failed pod is replaced by its controller; a bare one that
+        # cannot be replaced just leaves its sandbox missing until the deadline.
         live = [pod for pod in pods if pod.phase != "Failed"]
-        return len(live) >= self._expected_pods and all(map(_pod_ready, live))
+        return not self._missing_services(pods) and all(map(_pod_ready, live))
 
-    async def _wait_until_ready(self, deadline: float) -> None:
+    async def _wait_until_ready(self, deadline: float) -> list[PodSnapshot]:
         """Wait for the release's pods to report Ready.
 
         Pods are the signal Helm reduces every kind to (`pkg/kube/ready.go`), and one
@@ -420,12 +436,14 @@ class Release:
             try:
                 pods = await asyncio.to_thread(self._list_release_pods, True)
                 saw_a_pod = saw_a_pod or bool(pods)
-                # The cache can lag reality in either direction, so confirm a ready
-                # verdict against a consistent read. Costs one read per install.
-                if self._is_ready(pods) and self._is_ready(
-                    await asyncio.to_thread(self._list_release_pods)
-                ):
-                    return
+                # The cache can lag reality in either direction, so confirm against a
+                # consistent read and hand those same pods on: nothing may change
+                # between the verdict and the sandbox the caller gets. One read per
+                # install, not per poll.
+                if self._is_ready(pods):
+                    confirmed = await asyncio.to_thread(self._list_release_pods)
+                    if self._is_ready(confirmed):
+                        return confirmed
             except Exception as e:
                 # A blip must not fail an install. Keep the error: a persistent one
                 # (a missing RBAC rule, say) is not a capacity problem and must not
@@ -442,12 +460,12 @@ class Release:
         self, saw_a_pod: bool, poll_error: Exception | None
     ) -> NoReturn:
         extra = await self._pod_diagnostics()
-        elapsed = f"{_get_timeout()}s"
-        if poll_error is not None:
+        budget = f"{_get_timeout()}s"
+        if poll_error is not None and not saw_a_pod:
             # Nothing is known about what the release created, so blaming the chart
             # or the cluster would be a guess.
             _raise_runtime_error(
-                f"Could not read the Helm release's pods within {elapsed}, so it is "
+                f"Could not read the Helm release's pods within {budget}, so it is "
                 f"not known whether the sandbox started. See "
                 f"{HELM_RELEASE_NOT_READY_URL}.",
                 release=self.release_name,
@@ -457,19 +475,19 @@ class Release:
         if not saw_a_pod:
             _raise_runtime_error(
                 f"The Helm release created no pods labelled "
-                f"app.kubernetes.io/instance={self.release_name} within {elapsed}. "
+                f"app.kubernetes.io/instance={self.release_name} within {budget}. "
                 f"Every chart must render at least one Pod, or a controller which "
                 f"creates one, carrying that label. See {HELM_RELEASE_NOT_READY_URL}.",
                 release=self.release_name,
                 **extra,
             )
         _raise_runtime_error(
-            f"Helm release did not become ready within {elapsed}. Please see the docs "
+            f"Helm release did not become ready within {budget}. Please see the docs "
             f"for why this might occur: {HELM_RELEASE_NOT_READY_URL}. Also consider "
             f"increasing the timeout by setting the {INSPECT_HELM_TIMEOUT} "
             f"environment variable.",
             release=self.release_name,
-            expected_pods=self._expected_pods,
+            declared_sandboxes=", ".join(sorted(self._expected_services)),
             **extra,
         )
 
@@ -696,56 +714,72 @@ def _pod_ready(pod: PodSnapshot) -> bool:
     return pod.phase == "Succeeded" or pod.ready
 
 
-def _get_expected_pod_count(install_stdout: str, release_name: str) -> int:
-    """How many pods the manifest Helm rendered implies.
+def _sandbox_pods(pods: Iterable[PodSnapshot]) -> Iterator[PodSnapshot]:
+    """The pods a chart has declared to be sandboxes. Others are not handed over."""
+    return (pod for pod in pods if _SERVICE_LABEL in pod.labels)
 
-    A kind whose count only the cluster knows puts a floor of one under the total; a
-    pod created indirectly, by an operator say, cannot be anticipated at all.
 
-    Raises RuntimeError if Helm's output cannot be read: guessing would silently
-    weaken the wait into the partial-provisioning bug the count exists to prevent.
+def _get_expected_services(install_stdout: str, release_name: str) -> frozenset[str]:
+    """The sandboxes the manifest Helm rendered declares.
+
+    Named rather than counted, so that readiness is stated in the vocabulary
+    `get_sandbox_pods()` hands over and no other pod of the release can satisfy it.
+
+    Raises RuntimeError if Helm's output cannot be read, or if the chart declares no
+    sandbox: treating either as "nothing to wait for" is how a release comes to be
+    handed over before its pods exist.
     """
     try:
         manifest = json.loads(install_stdout)["manifest"]
-        # safe_load_all is lazy, so force the parse inside the try. Only a mapping
-        # can declare a kind.
-        docs = [doc for doc in yaml.safe_load_all(manifest) if isinstance(doc, dict)]
+        # safe_load_all is lazy, so force the parse inside the try.
+        docs = list(yaml.safe_load_all(manifest))
     except Exception as e:
         _raise_runtime_error(
-            "Could not read the rendered manifest from Helm, so the number of pods to "
-            "wait for is unknown.",
+            "Could not read the rendered manifest from Helm, so the sandboxes to wait "
+            "for are unknown.",
             release=release_name,
             from_exception=e,
         )
-    expected, uncounted = _count_pods(docs)
-    return max(expected, 1) if uncounted else expected
+    services = frozenset(_declared_services(docs))
+    if not services:
+        _raise_runtime_error(
+            f"The rendered chart declares no Pod labelled '{_SERVICE_LABEL}', so it "
+            f"provides no sandbox. See {HELM_RELEASE_NOT_READY_URL}.",
+            release=release_name,
+        )
+    return services
 
 
-def _count_pods(docs: list[dict[str, Any]]) -> tuple[int, bool]:
-    """The pods `docs` declare, and whether any kind creates an unknowable number."""
-    expected = 0
-    uncounted = False
+def _declared_services(docs: Iterable[Any]) -> Iterator[str]:
+    """The sandbox names on the pod-producing parts of a rendered manifest."""
+    # Only a bare Pod and a pod template make pods. The same label also appears on a
+    # controller's own metadata, and on Services and network policies which select
+    # pods -- reading those would invent sandboxes that never arrive.
     for doc in docs:
-        kind = doc.get("kind")
+        kind = _dig(doc, "kind")
         if kind == "Pod":
-            expected += 1
-        elif kind in _COUNTED_POD_KINDS:
-            expected += _replicas(doc.get("spec"))
-        elif kind in _UNCOUNTED_POD_KINDS:
-            uncounted = True
+            yield from _service_name(_dig(doc, "metadata"))
         elif kind == "List":
-            # A List wraps other objects, which may include pods.
-            items = doc.get("items")
-            nested = [i for i in items if isinstance(i, dict)] if items else []
-            nested_expected, nested_uncounted = _count_pods(nested)
-            expected += nested_expected
-            uncounted = uncounted or nested_uncounted
-    return expected, uncounted
+            yield from _declared_services(_dig(doc, "items") or [])
+        elif kind == "CronJob":
+            yield from _service_name(
+                _dig(doc, "spec", "jobTemplate", "spec", "template", "metadata")
+            )
+        else:
+            yield from _service_name(_dig(doc, "spec", "template", "metadata"))
 
 
-def _replicas(spec: object) -> int:
-    """`spec.replicas`, which Kubernetes defaults to 1 when it is unset or null."""
-    # Nothing guarantees the YAML matches the shape the kind implies. The install has
-    # already succeeded, so a weaker wait beats failing over the shape of a field.
-    replicas = spec.get("replicas") if isinstance(spec, dict) else None
-    return replicas if isinstance(replicas, int) else 1
+def _service_name(metadata: Any) -> Iterator[str]:
+    name = _dig(metadata, "labels", _SERVICE_LABEL)
+    if name is not None:
+        # Kubernetes label values are strings, whatever the rendered YAML types them as.
+        yield str(name)
+
+
+def _dig(value: Any, *keys: str) -> Any:
+    """`value[k1][k2]...`, or None as soon as the shape stops being a mapping."""
+    for key in keys:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value

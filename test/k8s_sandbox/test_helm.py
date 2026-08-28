@@ -16,6 +16,7 @@ from inspect_ai.util import ExecResult
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._helm import (
+    _SERVICE_LABEL,
     DEFAULT_TIMEOUT,
     INSPECT_HELM_LABELS,
     INSPECT_HELM_TIMEOUT,
@@ -24,7 +25,7 @@ from k8s_sandbox._helm import (
     Release,
     StaticValuesSource,
     ValuesSource,
-    _get_expected_pod_count,
+    _get_expected_services,
     _get_helm_major_version,
     _get_timeout,
     _get_uninstall_timeout,
@@ -55,35 +56,32 @@ def _mock_default_namespace(request: pytest.FixtureRequest) -> object:
         yield m
 
 
-READY_POD = PodSnapshot(
-    name="agent-env-abcdefgh-default-0",
-    uid="uid",
-    labels={"inspect/service": "default"},
-    container_names=("default",),
-    container_statuses=(),
-    phase="Running",
-    ready=True,
-)
-
-
 def _manifest(*docs: str) -> str:
     return json.dumps({"manifest": "\n---\n".join(docs)})
 
 
-_STATEFUL_SET = """
-kind: StatefulSet
-metadata: {name: a}
-spec: {replicas: 1}
-"""
-_BARE_POD = """
+def _stateful_set(service: str = "default", replicas: int = 1) -> str:
+    return (
+        f"kind: StatefulSet\nmetadata: {{name: {service}}}\n"
+        f"spec:\n  replicas: {replicas}\n  template:\n    metadata:\n"
+        f"      labels: {{{_SERVICE_LABEL}: {service}}}\n"
+    )
+
+
+_STATEFUL_SET = _stateful_set()
+
+
+def _list_item(service: str) -> str:
+    return f"{{kind: Pod, metadata: {{labels: {{{_SERVICE_LABEL}: {service}}}}}}}"
+
+
+_BARE_POD = f"""
 kind: Pod
-metadata: {name: p}
+metadata:
+  name: p
+  labels: {{{_SERVICE_LABEL}: default}}
 """
-_STATEFUL_SET_2 = """
-kind: StatefulSet
-metadata: {name: a}
-spec: {replicas: 2}
-"""
+_TWO_SERVICES = _stateful_set("default") + "---\n" + _stateful_set("victim")
 
 
 def _helm_installed(mock_run: MagicMock, *docs: str) -> None:
@@ -104,7 +102,7 @@ def _mock_release_pods(request: pytest.FixtureRequest) -> object:
     if "req_k8s" in {m.name for m in request.node.iter_markers()}:
         yield
         return
-    with patch.object(Release, "_list_release_pods", return_value=[READY_POD]) as m:
+    with patch.object(Release, "_list_release_pods", return_value=[_pod()]) as m:
         yield m
 
 
@@ -774,11 +772,17 @@ async def test_install_error_omits_diagnostics_when_unavailable() -> None:
     assert "Helm install failed." in str(excinfo.value)
 
 
-def _pod(*, ready: bool = True, phase: str = "Running", name: str = "p") -> PodSnapshot:
+def _pod(
+    *,
+    ready: bool = True,
+    phase: str = "Running",
+    name: str = "p",
+    service: str | None = "default",
+) -> PodSnapshot:
     return PodSnapshot(
         name=name,
         uid=name,
-        labels={},
+        labels={_SERVICE_LABEL: service} if service is not None else {},
         container_names=("default",),
         container_statuses=(),
         phase=phase,
@@ -806,46 +810,75 @@ def test_pod_ready(pod: PodSnapshot, expected: bool) -> None:
 @pytest.mark.parametrize(
     ("stdout", "expected"),
     [
-        pytest.param(_manifest(_STATEFUL_SET), 1, id="one-statefulset"),
-        pytest.param(_manifest(_STATEFUL_SET, _STATEFUL_SET), 2, id="two-statefulsets"),
+        pytest.param(_manifest(_STATEFUL_SET), {"default"}, id="one-service"),
+        pytest.param(
+            _manifest(_TWO_SERVICES), {"default", "victim"}, id="two-services"
+        ),
         # The documented custom-chart shape.
-        pytest.param(_manifest(_BARE_POD), 1, id="bare-pod"),
+        pytest.param(_manifest(_BARE_POD), {"default"}, id="bare-pod"),
+        # Replicas do not add sandboxes: get_sandbox_pods() keys one entry per label.
         pytest.param(
-            _manifest("kind: StatefulSet\nmetadata: {name: a}\nspec: {replicas: 3}\n"),
-            3,
-            id="replicas-honoured",
+            _manifest(_stateful_set("default", replicas=3)), {"default"}, id="replicas"
         ),
-        # `replicas:` with no value is valid, and means the Kubernetes default of 1.
+        # A pod the chart does not declare to be a sandbox cannot serve as one.
         pytest.param(
-            _manifest("kind: StatefulSet\nmetadata: {name: a}\nspec: {replicas: null}"),
-            1,
-            id="null-replicas-defaults-to-one",
+            _manifest(_STATEFUL_SET, "kind: DaemonSet\nspec:\n  template:\n    {}\n"),
+            {"default"},
+            id="daemonset-declares-nothing",
         ),
-        # Cluster-dependent, so it floors the total at one rather than at zero,
-        # which would mean no wait at all.
-        pytest.param(_manifest("kind: DaemonSet\nspec: {}\n"), 1, id="daemonset"),
+        # A controller's own labels are not its pod template's: reading them invents
+        # a sandbox no pod will ever serve.
         pytest.param(
-            _manifest("kind: List\nitems: [{kind: Pod}, {kind: Pod}]\n"),
-            2,
+            _manifest(
+                "kind: StatefulSet\n"
+                f"metadata:\n  labels: {{{_SERVICE_LABEL}: phantom}}\n"
+                f"spec:\n  template:\n    metadata:\n"
+                f"      labels: {{{_SERVICE_LABEL}: default}}\n"
+            ),
+            {"default"},
+            id="controller-metadata-is-not-a-pod-template",
+        ),
+        # The same label appears on objects which select pods rather than make them.
+        pytest.param(
+            _manifest(
+                _STATEFUL_SET,
+                f"kind: Service\nspec:\n  selector: {{{_SERVICE_LABEL}: phantom}}\n",
+                "kind: CiliumNetworkPolicy\nspec:\n  endpointSelector:\n"
+                f"    matchLabels: {{{_SERVICE_LABEL}: phantom}}\n",
+            ),
+            {"default"},
+            id="selectors-are-not-sandboxes",
+        ),
+        pytest.param(
+            _manifest(
+                "kind: List\nitems: [" + _list_item("a") + ", " + _list_item("b") + "]"
+            ),
+            {"a", "b"},
             id="list-wrapping-pods",
-        ),
-        pytest.param(
-            _manifest("kind: ConfigMap\nmetadata: {name: c}\n"),
-            0,
-            id="nothing-to-wait-for",
         ),
     ],
 )
-def test_expected_pod_count(stdout: str, expected: int) -> None:
-    assert _get_expected_pod_count(stdout, "abcdefgh") == expected
+def test_expected_services(stdout: str, expected: set[str]) -> None:
+    assert _get_expected_services(stdout, "abcdefgh") == expected
 
 
-@pytest.mark.parametrize("stdout", ["not json", "{}", '{"manifest": null}'])
-def test_expected_pod_count_fails_closed(stdout: str) -> None:
-    # Guessing a count would silently weaken the wait into the partial-provisioning
-    # bug the count exists to prevent.
-    with pytest.raises(RuntimeError, match="Could not read the rendered manifest"):
-        _get_expected_pod_count(stdout, "abcdefgh")
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        pytest.param("not json", id="unparseable"),
+        pytest.param("{}", id="no-manifest-key"),
+        pytest.param('{"manifest": null}', id="null-manifest"),
+        # Treating "no sandbox declared" as "nothing to wait for" is how a release
+        # gets handed over before its pods exist.
+        pytest.param(
+            _manifest("kind: ConfigMap\nmetadata: {name: c}\n"),
+            id="declares-no-sandbox",
+        ),
+    ],
+)
+def test_expected_services_fails_closed(stdout: str) -> None:
+    with pytest.raises(RuntimeError, match="manifest|declares no Pod"):
+        _get_expected_services(stdout, "abcdefgh")
 
 
 async def _wait(
@@ -873,7 +906,7 @@ async def test_wait_until_ready_returns_once_every_pod_is_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     release = Release(__file__, None, ValuesSource.none(), None)
-    release._expected_pods = 2
+    release._expected_services = frozenset({"default"})
 
     await _wait(
         release,
@@ -891,15 +924,16 @@ async def test_wait_until_ready_returns_once_every_pod_is_ready(
 async def test_wait_until_ready_keeps_waiting_for_a_pod_that_does_not_exist_yet(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The whole point of the expected count: one Ready pod out of two is not ready,
-    # even though every pod currently visible is Ready.
+    # The point of naming the sandboxes: one of two being Ready is not ready, even
+    # though every pod currently visible is.
     release = Release(__file__, None, ValuesSource.none(), None)
-    release._expected_pods = 2
+    release._expected_services = frozenset({"default", "victim"})
+    both = [_pod(name="a", service="default"), _pod(name="b", service="victim")]
     polls = [
-        [_pod(name="a")],
-        [_pod(name="a")],
-        [_pod(name="a"), _pod(name="b")],
-        [_pod(name="a"), _pod(name="b")],  # the confirming consistent read
+        [_pod(name="a", service="default")],
+        [_pod(name="a", service="default")],
+        both,
+        both,  # the confirming consistent read
     ]
 
     await _wait(release, polls, monkeypatch)
@@ -909,24 +943,37 @@ async def test_wait_until_ready_keeps_waiting_while_no_pods_exist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default"})
 
     await _wait(release, [[], [], [_pod()], [_pod()]], monkeypatch)
 
 
-async def test_wait_until_ready_returns_when_nothing_needs_waiting_for(
+async def test_wait_until_ready_ignores_pods_which_are_not_sandboxes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # A chart of ConfigMaps only. Provable from the manifest, unlike an empty query.
+    # A DaemonSet's pods and a completed hook pod carry the release label but declare
+    # no sandbox, so they cannot stand in for one.
     release = Release(__file__, None, ValuesSource.none(), None)
-    release._expected_pods = 0
+    release._expected_services = frozenset({"default"})
+    strangers = [
+        _pod(name="ds-1", service=None),
+        _pod(name="ds-2", service=None),
+        # A completed hook pod, even one claiming the sandbox's name: nothing can be
+        # exec'd into it, so it must not stand in for the sandbox.
+        _pod(name="hook", service="default", ready=False, phase="Succeeded"),
+    ]
+    sandbox = _pod(name="default-0", service="default")
 
-    await _wait(release, [[], []], monkeypatch)
+    await _wait(
+        release, [strangers, [*strangers, sandbox], [*strangers, sandbox]], monkeypatch
+    )
 
 
 async def test_wait_until_ready_retries_a_transient_api_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default"})
 
     await _wait(release, [ConnectionError("boom"), [_pod()], [_pod()]], monkeypatch)
 
@@ -952,6 +999,7 @@ async def test_wait_until_ready_says_so_when_the_chart_made_no_pods(
     monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
     monkeypatch.setattr("k8s_sandbox._helm.describe_release_pods", lambda *_: None)
     release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default"})
 
     with pytest.raises(RuntimeError, match="created no pods labelled"):
         await _wait(release, itertools.repeat([]), monkeypatch)
@@ -961,18 +1009,24 @@ async def test_install_takes_the_pod_count_from_helm_and_waits_off_the_subproces
     _mock_release_pods: MagicMock,
 ) -> None:
     release = Release(__file__, None, ValuesSource.none(), None)
-    _mock_release_pods.return_value = [_pod(name="a"), _pod(name="b")]
+    _mock_release_pods.return_value = [
+        _pod(name="a", service="default"),
+        _pod(name="b", service="victim"),
+    ]
 
     with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
-        _helm_installed(mock_run, _STATEFUL_SET_2)
+        _helm_installed(mock_run, _TWO_SERVICES)
         await release.install()
 
     args = mock_run.call_args[0][1]
     assert "--output=json" in args
     # The readiness wait happens off the install permit, not inside the subprocess.
     assert not [a for a in args if a.startswith("--wait")]
-    # Two replicas, so this cannot pass on Release's default of one.
-    assert release._expected_pods == 2
+    # Both services, so this cannot pass on Release's empty default.
+    assert release._expected_services == {"default", "victim"}
+    # Handover uses the pods readiness confirmed, so nothing can change in between.
+    _mock_release_pods.return_value = []
+    assert set(await release.get_sandbox_pods()) == {"default", "victim"}
     # Guards against the wait being dropped: deleting the call from install() would
     # otherwise only make other tests hang rather than fail.
     _mock_release_pods.assert_called()
