@@ -15,7 +15,11 @@ from kubernetes.client import (  # type: ignore
     V1PodStatus,
 )
 
-from k8s_sandbox._diagnostics import describe_release_pods
+from k8s_sandbox._diagnostics import (
+    _MAX_EVENTS,
+    _READ_TIMEOUT,
+    describe_release_pods,
+)
 
 
 def _pod(
@@ -158,9 +162,12 @@ def test_surfaces_failed_scheduling_event_when_pod_has_no_container_statuses() -
     assert summary is not None
     assert "FailedScheduling" in summary
     assert "Insufficient cpu" in summary
-    # Warning events are filtered server-side rather than in Python.
+    # Warning events are filtered server-side rather than in Python, and bounded.
     mock_client_factory.return_value.list_namespaced_event.assert_called_once_with(
-        "default", field_selector="type=Warning"
+        "default",
+        field_selector="type=Warning",
+        limit=_MAX_EVENTS,
+        _request_timeout=_READ_TIMEOUT,
     )
 
 

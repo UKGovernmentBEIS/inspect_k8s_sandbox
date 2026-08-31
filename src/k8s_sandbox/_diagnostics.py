@@ -8,6 +8,13 @@ from k8s_sandbox._kubernetes_api import k8s_client
 
 logger = logging.getLogger(__name__)
 
+# These run on an error path, often one reached *because* the API is not answering,
+# so they must not outlive the error they are decorating.
+_READ_TIMEOUT = (5, 30)  # (connect, read) seconds
+# The event list is namespace-wide and every sample asks for it at once when an eval
+# times out together. Enough to name the cause, not enough to be a second incident.
+_MAX_EVENTS = 100
+
 
 def describe_release_pods(
     context_name: str | None, namespace: str, release_name: str
@@ -43,8 +50,12 @@ def _collect_diagnostics(
     context_name: str | None, namespace: str, release_name: str
 ) -> str | None:
     client = k8s_client(context_name)
-    pods = client.list_namespaced_pod(
-        namespace, label_selector=f"app.kubernetes.io/instance={release_name}"
+    # _request_timeout reaches the client's **kwargs at runtime but is absent from
+    # the typed stubs, hence the call-arg ignores here and below.
+    pods = client.list_namespaced_pod(  # type: ignore[call-arg]
+        namespace,
+        label_selector=f"app.kubernetes.io/instance={release_name}",
+        _request_timeout=_READ_TIMEOUT,
     )
     lines: list[str] = []
     pod_names: set[str] = set()
@@ -77,7 +88,12 @@ def _describe_warning_events(
     client: CoreV1Api, namespace: str, pod_names: set[str]
 ) -> list[str]:
     """Return formatted Warning events that involve any of the given pods."""
-    events = client.list_namespaced_event(namespace, field_selector="type=Warning")
+    events = client.list_namespaced_event(  # type: ignore[call-arg]
+        namespace,
+        field_selector="type=Warning",
+        limit=_MAX_EVENTS,
+        _request_timeout=_READ_TIMEOUT,
+    )
     lines: list[str] = []
     for event in events.items:
         involved = event.involved_object

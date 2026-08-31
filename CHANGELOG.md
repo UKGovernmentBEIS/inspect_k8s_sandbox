@@ -25,12 +25,13 @@
   falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
   user that does not exist still raises.
 - A sandbox waiting for cluster capacity no longer blocks other sandboxes from being
-  created. `INSPECT_HELM_TIMEOUT` still bounds the whole operation. Inspect's console
-  count of in-progress installs now reflects submissions in flight rather than
-  sandboxes still starting up.
+  created. Inspect's console count of in-progress installs now reflects submissions in
+  flight rather than sandboxes still starting up.
 - A release which does not become ready now reports `Helm release did not become ready
   within Ns` together with the state of its containers, rather than Helm's
   `context deadline exceeded`.
+- A timeout now always reports, rather than hanging, when the Kubernetes API is slow to
+  answer the reads which gather the error's diagnostics.
 - Charts which render Pods directly, rather than via a StatefulSet or Deployment, are
   now waited for. The eval no longer starts before every Pod labelled `inspect/service`
   is Ready, even when the chart also creates Pods which are not sandboxes — a
