@@ -5,8 +5,8 @@ import json
 import logging
 import tempfile
 import time
-from asyncio import sleep
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, AsyncGenerator, Callable, Iterable
 from unittest.mock import MagicMock, patch
 
@@ -16,6 +16,7 @@ from inspect_ai.util import ExecResult
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._helm import (
+    _LIST_PODS_READ_TIMEOUT,
     _SERVICE_LABEL,
     DEFAULT_TIMEOUT,
     INSPECT_HELM_LABELS,
@@ -102,8 +103,11 @@ def _mock_release_pods(request: pytest.FixtureRequest) -> object:
     if "req_k8s" in {m.name for m in request.node.iter_markers()}:
         yield
         return
-    with patch.object(Release, "_list_release_pods", return_value=[_pod()]) as m:
-        yield m
+    # Stub the cluster read, not _list_release_pods itself: the arguments it builds
+    # are what decide whether the poll is bounded and reads the right pods.
+    with patch("k8s_sandbox._helm.k8s_client"):
+        with patch("k8s_sandbox._helm.list_pods", return_value=[_pod()]) as m:
+            yield m
 
 
 @pytest.fixture
@@ -1005,6 +1009,58 @@ async def test_wait_until_ready_says_so_when_the_chart_made_no_pods(
         await _wait(release, itertools.repeat([]), monkeypatch)
 
 
+@pytest.mark.parametrize(
+    ("allow_stale", "resource_version"),
+    [pytest.param(True, "0", id="polling"), pytest.param(False, None, id="confirming")],
+)
+def test_list_release_pods_reads_the_cache_only_when_polling(
+    allow_stale: bool, resource_version: str | None, _mock_release_pods: MagicMock
+) -> None:
+    # A repeated poll may read a stale answer; the read confirming a ready verdict
+    # may not. Unbounded, neither leaves the deadline enforceable.
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    release._list_release_pods(allow_stale)
+
+    kwargs = _mock_release_pods.call_args.kwargs
+    assert kwargs["resource_version"] == resource_version
+    assert kwargs["request_timeout"] == _LIST_PODS_READ_TIMEOUT
+    assert kwargs["label_selector"] == (
+        f"app.kubernetes.io/instance={release.release_name}"
+    )
+
+
+async def test_the_timeout_covers_submission_as_well_as_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # INSPECT_HELM_TIMEOUT is one budget: a slow submission eats into the readiness
+    # wait rather than being free.
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "100")
+    # Submission takes 30 of the 100 seconds. Replace the module's `time` binding, not
+    # time.monotonic itself, which is shared with the whole process.
+    clock = itertools.chain([1_000.0, 1_030.0], itertools.repeat(1_030.0))
+    monkeypatch.setattr(
+        "k8s_sandbox._helm.time", SimpleNamespace(monotonic=lambda: next(clock))
+    )
+    deadlines: list[float] = []
+
+    async def capture(self: Release, deadline: float) -> list[PodSnapshot]:
+        deadlines.append(deadline)
+        return [_pod()]
+
+    monkeypatch.setattr(Release, "_wait_until_ready", capture)
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
+        await release.install()
+
+    assert deadlines == [1_100.0]
+    # Helm gets what is left of the budget, not a fresh copy of it.
+    timeouts = [a for a in mock_run.call_args[0][1] if a.startswith("--timeout=")]
+    assert timeouts == ["--timeout=70s"]
+
+
 async def test_install_takes_the_pod_count_from_helm_and_waits_off_the_subprocess(
     _mock_release_pods: MagicMock,
 ) -> None:
@@ -1067,7 +1123,9 @@ async def test_install_permit_is_released_before_the_readiness_wait(
     await asyncio.wait_for(waiting.wait(), timeout=5)
 
     # The first release is mid-wait; the second must still be able to submit.
-    monkeypatch.setattr(Release, "_wait_until_ready", lambda self, deadline: sleep(0))
+    monkeypatch.setattr(
+        Release, "_wait_until_ready", lambda self, deadline: asyncio.sleep(0)
+    )
     await asyncio.wait_for(
         Release(__file__, None, ValuesSource.none(), None).install(), timeout=5
     )
