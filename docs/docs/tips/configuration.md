@@ -3,11 +3,14 @@
 ## Helm install timeout { #helm-install-timeout }
 
 The built-in Helm install timeout is 10 minutes. It bounds how long a sandbox may take
-to be created *and* become ready. If you're running large eval sets and expect to run
-into cluster capacity issues, you can increase the timeout by setting the
+to become ready once Helm has created it. If you're running large eval sets and expect
+to run into cluster capacity issues, you can increase the timeout by setting the
 `INSPECT_HELM_TIMEOUT` environment variable to a number of seconds. A sandbox waiting
 for capacity does not hold an install slot, so a long timeout does not slow down
 sandboxes whose capacity is already available.
+
+Creating the release is bounded by the Kubernetes client's own connection timeouts
+rather than by this setting.
 
 ```sh
 export INSPECT_HELM_TIMEOUT=21600   # 6 hours
