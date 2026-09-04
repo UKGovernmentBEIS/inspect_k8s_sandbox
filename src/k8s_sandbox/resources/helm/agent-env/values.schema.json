@@ -152,7 +152,10 @@
               "type": "boolean"
             },
             "command": {
-              "type": "array"
+              "type": [
+                "array",
+                "null"
+              ]
             },
             "args": {
               "type": "array"

@@ -14,6 +14,8 @@
 - Raise an error when a conflicting `max_pod_ops` setting would otherwise be ignored.
 - Fix a service's `args` (compose `command:`) reaching the container as a single
   space-joined string instead of a list.
+- Honour compose `command:` on the `default` service. Previously the chart default
+  entrypoint (`tail -f /dev/null`) was deep-merged in, so the user's command never ran.
 
 ## 2026-08-12 0.13.0
 

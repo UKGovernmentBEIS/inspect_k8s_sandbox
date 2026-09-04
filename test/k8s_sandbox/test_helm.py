@@ -379,6 +379,37 @@ def test_validate_no_null_values_with_valid_data() -> None:
     validate_no_null_values(valid_data, "test-source")
 
 
+def test_validate_no_null_values_allows_service_command_null() -> None:
+    # Compose command: without entrypoint: emits command: null so Helm deletes
+    # the chart-default entrypoint. That null must not be rejected.
+    values = {
+        "services": {
+            "default": {
+                "image": "busybox:1.37",
+                "command": None,
+                "args": ["sh", "-c", "touch /tmp/i-ran"],
+            }
+        },
+    }
+
+    validate_no_null_values(values, "test-source")
+
+
+def test_validate_no_null_values_rejects_other_nulls_with_command_null() -> None:
+    values = {
+        "services": {"default": {"image": None, "command": None}},
+        "volumes": {"shared": None},
+    }
+
+    with pytest.raises(ValueError) as excinfo:
+        validate_no_null_values(values, "test-source")
+
+    error_msg = str(excinfo.value)
+    assert "services.default.image" in error_msg
+    assert "volumes.shared" in error_msg
+    assert "services.default.command" not in error_msg
+
+
 def test_validate_no_null_values_with_top_level_null() -> None:
     """Test that validation catches null values at top level."""
     invalid_data = {"services": {"default": {"image": "python:3.12"}}, "volumes": None}
