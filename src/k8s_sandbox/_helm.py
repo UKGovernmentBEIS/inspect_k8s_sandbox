@@ -216,6 +216,10 @@ class Release:
         self._extra_values = dict(extra_values) if extra_values else {}
         # The sandboxes the rendered chart declares; set by _install().
         self._expected_services: frozenset[str] = frozenset()
+        # The names of everything the chart rendered; set by _install(). A sandbox
+        # whose controller cannot create a pod is only explained by an event on that
+        # controller, which carries no pod name to be found by.
+        self._object_names: frozenset[str] = frozenset()
         # The pods readiness confirmed; set by install() and consumed by
         # get_sandbox_pods(), so nothing changes between the verdict and handover.
         self._ready_pods: list[PodSnapshot] | None = None
@@ -351,9 +355,9 @@ class Release:
         )
         if not result.success:
             await self._raise_install_error(result)
-        self._expected_services = _get_expected_services(
-            result.stdout, self.release_name
-        )
+        docs = _rendered_docs(result.stdout, self.release_name)
+        self._expected_services = _get_expected_services(docs, self.release_name)
+        self._object_names = frozenset(_declared_object_names(docs))
 
     async def _raise_install_error(self, result: ExecResult[str]) -> NoReturn:
         # When concurrent helm operations are modifying the same resource quota, the
@@ -398,6 +402,7 @@ class Release:
             self._context_name,
             self._namespace,
             self.release_name,
+            self._object_names,
         )
         return {"pod_diagnostics": diagnostics} if diagnostics else {}
 
@@ -432,10 +437,12 @@ class Release:
         """
         saw_a_pod = False
         poll_error: Exception | None = None
+        missing: frozenset[str] = self._expected_services
         while True:
             try:
                 pods = await asyncio.to_thread(self._list_release_pods, True)
                 saw_a_pod = saw_a_pod or bool(pods)
+                missing = self._missing_services(pods)
                 # The cache can lag reality in either direction, so confirm against a
                 # consistent read and hand those same pods on: nothing may change
                 # between the verdict and the sandbox the caller gets. One read per
@@ -453,11 +460,11 @@ class Release:
             else:
                 poll_error = None
             if time.monotonic() >= deadline:
-                await self._raise_not_ready_error(saw_a_pod, poll_error)
+                await self._raise_not_ready_error(saw_a_pod, poll_error, missing)
             await asyncio.sleep(_READINESS_POLL_INTERVAL)
 
     async def _raise_not_ready_error(
-        self, saw_a_pod: bool, poll_error: Exception | None
+        self, saw_a_pod: bool, poll_error: Exception | None, missing: frozenset[str]
     ) -> NoReturn:
         extra = await self._pod_diagnostics()
         budget = f"{_get_timeout()}s"
@@ -481,13 +488,17 @@ class Release:
                 release=self.release_name,
                 **extra,
             )
+        # Which sandbox is absent is the first thing to establish; the full declared
+        # list leaves that to be worked out from the diagnostics.
+        extra["missing_sandboxes" if missing else "declared_sandboxes"] = ", ".join(
+            sorted(missing or self._expected_services)
+        )
         _raise_runtime_error(
             f"Helm release did not become ready within {budget}. Please see the docs "
             f"for why this might occur: {HELM_RELEASE_NOT_READY_URL}. Also consider "
             f"increasing the timeout by setting the {INSPECT_HELM_TIMEOUT} "
             f"environment variable.",
             release=self.release_name,
-            declared_sandboxes=", ".join(sorted(self._expected_services)),
             **extra,
         )
 
@@ -719,20 +730,16 @@ def _sandbox_pods(pods: Iterable[PodSnapshot]) -> Iterator[PodSnapshot]:
     return (pod for pod in pods if _SERVICE_LABEL in pod.labels)
 
 
-def _get_expected_services(install_stdout: str, release_name: str) -> frozenset[str]:
-    """The sandboxes the manifest Helm rendered declares.
+def _rendered_docs(install_stdout: str, release_name: str) -> list[Any]:
+    """The manifest Helm rendered, as parsed documents.
 
-    Named rather than counted, so that readiness is stated in the vocabulary
-    `get_sandbox_pods()` hands over and no other pod of the release can satisfy it.
-
-    Raises RuntimeError if Helm's output cannot be read, or if the chart declares no
-    sandbox: treating either as "nothing to wait for" is how a release comes to be
-    handed over before its pods exist.
+    Raises RuntimeError if Helm's output cannot be read: treating that as "nothing to
+    wait for" is how a release comes to be handed over before its pods exist.
     """
     try:
         manifest = json.loads(install_stdout)["manifest"]
         # safe_load_all is lazy, so force the parse inside the try.
-        docs = list(yaml.safe_load_all(manifest))
+        return list(yaml.safe_load_all(manifest))
     except Exception as e:
         _raise_runtime_error(
             "Could not read the rendered manifest from Helm, so the sandboxes to wait "
@@ -740,6 +747,16 @@ def _get_expected_services(install_stdout: str, release_name: str) -> frozenset[
             release=release_name,
             from_exception=e,
         )
+
+
+def _get_expected_services(docs: list[Any], release_name: str) -> frozenset[str]:
+    """The sandboxes the manifest Helm rendered declares.
+
+    Named rather than counted, so that readiness is stated in the vocabulary
+    `get_sandbox_pods()` hands over and no other pod of the release can satisfy it.
+
+    Raises RuntimeError if the chart declares no sandbox.
+    """
     services = frozenset(_declared_services(docs))
     if not services:
         _raise_runtime_error(
@@ -767,6 +784,17 @@ def _declared_services(docs: Iterable[Any]) -> Iterator[str]:
             )
         else:
             yield from _service_name(_dig(doc, "spec", "template", "metadata"))
+
+
+def _declared_object_names(docs: Iterable[Any]) -> Iterator[str]:
+    """Every name a rendered manifest gives an object, whatever its kind."""
+    for doc in docs:
+        if _dig(doc, "kind") == "List":
+            yield from _declared_object_names(_dig(doc, "items") or [])
+            continue
+        name = _dig(doc, "metadata", "name")
+        if name is not None:
+            yield str(name)
 
 
 def _service_name(metadata: Any) -> Iterator[str]:

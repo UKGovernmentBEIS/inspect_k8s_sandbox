@@ -29,7 +29,10 @@
   flight rather than sandboxes still starting up.
 - A release which does not become ready now reports `Helm release did not become ready
   within Ns` together with the state of its containers, rather than Helm's
-  `context deadline exceeded`.
+  `context deadline exceeded`. It names the sandboxes still missing, and reports
+  Warning events against the rest of the release rather than only its pods, so a
+  controller which cannot create its pod at all (a missing `RuntimeClass`, say) is
+  explained rather than merely counted as absent.
 - A timeout now always reports, rather than hanging, when the Kubernetes API is slow to
   answer the reads which gather the error's diagnostics.
 - Charts which render Pods directly, rather than via a StatefulSet or Deployment, are

@@ -26,6 +26,7 @@ from k8s_sandbox._helm import (
     Release,
     StaticValuesSource,
     ValuesSource,
+    _declared_object_names,
     _get_expected_services,
     _get_helm_major_version,
     _get_timeout,
@@ -33,6 +34,7 @@ from k8s_sandbox._helm import (
     _get_wait_flag,
     _helm_escape,
     _pod_ready,
+    _rendered_docs,
     _run_subprocess,
     get_all_release_names,
     uninstall,
@@ -811,6 +813,24 @@ def test_pod_ready(pod: PodSnapshot, expected: bool) -> None:
     assert _pod_ready(pod) is expected
 
 
+def test_declared_object_names_covers_every_kind_including_nested_lists() -> None:
+    # These are what a Warning event on a non-pod object is matched against, so a kind
+    # missed here is a failure the diagnostics cannot explain.
+    stdout = _manifest(
+        "kind: ConfigMap\nmetadata: {name: cm}\n",
+        _stateful_set("default"),
+        "kind: List\nitems: [{kind: Service, metadata: {name: svc}}]\n",
+    )
+
+    names = frozenset(_declared_object_names(_rendered_docs(stdout, "abcdefgh")))
+
+    assert names == {"cm", "default", "svc"}
+
+
+def _services(stdout: str) -> frozenset[str]:
+    return _get_expected_services(_rendered_docs(stdout, "abcdefgh"), "abcdefgh")
+
+
 @pytest.mark.parametrize(
     ("stdout", "expected"),
     [
@@ -863,7 +883,7 @@ def test_pod_ready(pod: PodSnapshot, expected: bool) -> None:
     ],
 )
 def test_expected_services(stdout: str, expected: set[str]) -> None:
-    assert _get_expected_services(stdout, "abcdefgh") == expected
+    assert _services(stdout) == expected
 
 
 @pytest.mark.parametrize(
@@ -882,7 +902,7 @@ def test_expected_services(stdout: str, expected: set[str]) -> None:
 )
 def test_expected_services_fails_closed(stdout: str) -> None:
     with pytest.raises(RuntimeError, match="manifest|declares no Pod"):
-        _get_expected_services(stdout, "abcdefgh")
+        _services(stdout)
 
 
 async def _wait(
@@ -995,6 +1015,26 @@ async def test_wait_until_ready_times_out_with_diagnostics(
         await _wait(release, itertools.repeat([_pod(ready=False)]), monkeypatch)
 
     assert "ImagePullBackOff" in log_err.text
+
+
+async def test_wait_until_ready_names_the_sandbox_which_never_arrived(
+    monkeypatch: pytest.MonkeyPatch, log_err: LogCaptureFixture
+) -> None:
+    # A controller which cannot create its pod at all leaves the release short of a
+    # sandbox while every pod that does exist looks healthy. Naming the whole declared
+    # set leaves the reader to work out which one is absent.
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
+    monkeypatch.setattr("k8s_sandbox._helm.describe_release_pods", lambda *_: None)
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default", "busybox-runc"})
+
+    with pytest.raises(RuntimeError, match="did not become ready within 1s") as excinfo:
+        await _wait(release, itertools.repeat([_pod(service="default")]), monkeypatch)
+
+    assert "busybox-runc" in str(excinfo.value)
+    assert "missing_sandboxes" in str(excinfo.value)
+    # The sandbox which did arrive is not a thing to go looking at.
+    assert "default" not in str(excinfo.value).split("missing_sandboxes")[1]
 
 
 async def test_wait_until_ready_says_so_when_the_chart_made_no_pods(

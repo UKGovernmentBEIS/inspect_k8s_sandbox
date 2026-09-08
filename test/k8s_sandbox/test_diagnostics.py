@@ -171,6 +171,51 @@ def test_surfaces_failed_scheduling_event_when_pod_has_no_container_statuses() -
     )
 
 
+def test_surfaces_a_controller_event_when_it_cannot_create_its_pod() -> None:
+    # A missing RuntimeClass (or an admission webhook) stops the StatefulSet creating
+    # a pod at all, so there is no pod to hang the explanation on: the only record is
+    # a FailedCreate event on the controller itself.
+    pods = [_pod("rel-default", "Running", container_statuses=None)]
+    events = [
+        CoreV1Event(
+            metadata=V1ObjectMeta(name="evt-1"),
+            involved_object=V1ObjectReference(name="rel-busybox-runc"),
+            reason="FailedCreate",
+            message='pod rejected: RuntimeClass "runc" not found',
+            type="Warning",
+        )
+    ]
+
+    with _patch_client(pods, events):
+        summary = describe_release_pods(
+            None, "default", "rel", frozenset({"rel-busybox-runc"})
+        )
+
+    assert summary is not None
+    assert "FailedCreate" in summary
+    assert 'RuntimeClass "runc" not found' in summary
+
+
+def test_ignores_events_for_objects_outside_the_release() -> None:
+    pods = [_pod("rel-default", "Running", container_statuses=None)]
+    events = [
+        CoreV1Event(
+            metadata=V1ObjectMeta(name="evt-1"),
+            involved_object=V1ObjectReference(name="someone-elses-statefulset"),
+            reason="FailedCreate",
+            message="not this release's problem",
+            type="Warning",
+        )
+    ]
+
+    with _patch_client(pods, events):
+        summary = describe_release_pods(
+            None, "default", "rel", frozenset({"rel-busybox-runc"})
+        )
+
+    assert summary is None
+
+
 def test_returns_none_and_does_not_raise_when_api_call_fails() -> None:
     # describe_release_pods runs from error-handling paths; it must never raise and mask
     # the original failure.
