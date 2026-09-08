@@ -740,6 +740,20 @@ def test_service_args_render_as_a_list(
     assert container["command"] == ["/bin/sh", "-c"]
 
 
+def test_pods_have_no_subdomain(chart_dir: Path, test_resources_dir: Path) -> None:
+    # A subdomain is what makes the kubelet write the pod's
+    # <pod>.<subdomain>.<namespace>.svc.cluster.local FQDN into /etc/hosts, handing an
+    # agent under evaluation whatever the namespace name gives away.
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "multiple-services-values.yaml"
+    )
+
+    services = _get_documents(documents, "StatefulSet")
+    assert len(services) == 2
+    for service in services:
+        assert not service["spec"]["serviceName"]
+
+
 def _run_helm_template(
     chart_dir: Path,
     values_file: Path | None = None,
