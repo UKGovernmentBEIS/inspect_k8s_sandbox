@@ -1128,6 +1128,31 @@ async def test_install_takes_the_pod_count_from_helm_and_waits_off_the_subproces
     _mock_release_pods.assert_called()
 
 
+@pytest.mark.parametrize(
+    "phase",
+    [pytest.param("Succeeded", id="completed"), pytest.param("Failed", id="evicted")],
+)
+@pytest.mark.parametrize(
+    "terminal_first",
+    [pytest.param(False, id="terminal-last"), pytest.param(True, id="terminal-first")],
+)
+async def test_get_sandbox_pods_never_hands_over_a_terminated_pod(
+    phase: str, terminal_first: bool
+) -> None:
+    # A controller replaces a pod that has stopped for good, and the API can list both
+    # under the same sandbox label. Keying the map by label makes the last one win, so
+    # without a lifecycle filter the sandbox that gets handed over is whichever the
+    # cluster happened to return second, and an exec against the dead one fails.
+    live = _pod(name="live", service="default")
+    terminal = _pod(name="terminal", service="default", ready=False, phase=phase)
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._ready_pods = [terminal, live] if terminal_first else [live, terminal]
+
+    sandboxes = await release.get_sandbox_pods()
+
+    assert sandboxes["default"].info.name == "live"
+
+
 async def test_install_permit_is_released_before_the_readiness_wait(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

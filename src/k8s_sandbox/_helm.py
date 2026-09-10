@@ -59,6 +59,9 @@ HELM_CONTEXT_DEADLINE_EXCEEDED_URL = (
 # read it by the same rule, so a release cannot pass readiness while a sandbox the
 # caller is about to ask for is missing.
 _SERVICE_LABEL = "inspect/service"
+# A pod in one of these has stopped for good. Its controller may already have made a
+# replacement, so both can carry the same sandbox label at once.
+_TERMINAL_PHASES = frozenset({"Succeeded", "Failed"})
 
 logger = logging.getLogger(__name__)
 
@@ -726,8 +729,16 @@ def _pod_ready(pod: PodSnapshot) -> bool:
 
 
 def _sandbox_pods(pods: Iterable[PodSnapshot]) -> Iterator[PodSnapshot]:
-    """The pods a chart has declared to be sandboxes. Others are not handed over."""
-    return (pod for pod in pods if _SERVICE_LABEL in pod.labels)
+    """The pods currently serving as the release's sandboxes.
+
+    A terminated pod is excluded: it cannot run an exec, and the API may still list it
+    beside the replacement wearing the same label, in which order is not defined.
+    """
+    return (
+        pod
+        for pod in pods
+        if _SERVICE_LABEL in pod.labels and pod.phase not in _TERMINAL_PHASES
+    )
 
 
 def _rendered_docs(install_stdout: str, release_name: str) -> list[Any]:

@@ -41,6 +41,8 @@
   `DaemonSet`, a hook, or anything added through `additionalResources`.
 - A chart which declares no Pod labelled `inspect/service` now fails the install,
   rather than starting an eval with no sandbox.
+- Fix a sandbox being backed by a pod which had already terminated, when the cluster
+  still listed it beside its replacement. `exec()` failed intermittently.
 - Add `INSPECT_HELM_UNINSTALL_TIMEOUT` (default 600s). Uninstalls previously used
   `INSPECT_HELM_TIMEOUT`, which is now safe to set to hours.
 - A Helm release which fails to uninstall during sample cleanup no longer fails the
