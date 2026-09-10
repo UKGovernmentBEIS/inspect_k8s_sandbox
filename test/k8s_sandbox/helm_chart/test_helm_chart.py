@@ -758,6 +758,24 @@ def test_allow_domains_wildcard_all_skips_identity_enforcement(
     assert "toPorts" not in fqdn_rule
 
 
+def test_service_args_render_as_a_list(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "service-args-values.yaml"
+    )
+
+    pod_spec = _get_documents(documents, "StatefulSet")[0]["spec"]["template"]["spec"]
+    container = next(c for c in pod_spec["containers"] if c["name"] == "default")
+
+    # Rendering args without toYaml produces `args: [setarch -R /bin/echo hello]`,
+    # which YAML reads back as a one-element sequence because flow sequences are
+    # comma-delimited. The container then execs a single argv token instead of the
+    # four the caller asked for, so assert on the parsed list, not a substring.
+    assert container["args"] == ["setarch", "-R", "/bin/echo", "hello"]
+    assert container["command"] == ["/bin/sh", "-c"]
+
+
 def _run_helm_template(
     chart_dir: Path,
     values_file: Path | None = None,
