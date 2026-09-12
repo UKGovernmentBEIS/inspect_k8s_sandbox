@@ -16,6 +16,16 @@
   space-joined string instead of a list.
 - Honour compose `command:` on the `default` service. Previously the chart default
   entrypoint (`tail -f /dev/null`) was deep-merged in, so the user's command never ran.
+- `exec(user=...)` no longer wraps the shell in `runuser` when the container is already
+  running as that user. `runuser` calls `setgroups(2)`, which needs `CAP_SETGID` even
+  for a root -> root switch, so the unconditional wrapper made every `exec(user=...)`
+  fail in a container whose capabilities had been dropped. On that path the process
+  environment is the container's rather than one `runuser` has reset (`HOME`, `USER`,
+  supplementary groups). A container that cannot switch users at all -- non-root, no
+  `CAP_SETGID`, or no `runuser` installed -- is now logged as a warning and returned as
+  a failed `ExecResult` rather than raised, so a caller that probes with a user and
+  falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
+  user that does not exist still raises.
 
 ## 2026-08-12 0.13.0
 
