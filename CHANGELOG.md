@@ -14,6 +14,8 @@
 - Raise an error when a conflicting `max_pod_ops` setting would otherwise be ignored.
 - Fix a service's `args` (compose `command:`) reaching the container as a single
   space-joined string instead of a list.
+- Honour compose `command:` on the `default` service. Previously the chart default
+  entrypoint (`tail -f /dev/null`) was deep-merged in, so the user's command never ran.
 - `exec(user=...)` no longer wraps the shell in `runuser` when the container is already
   running as that user. `runuser` calls `setgroups(2)`, which needs `CAP_SETGID` even
   for a root -> root switch, so the unconditional wrapper made every `exec(user=...)`
