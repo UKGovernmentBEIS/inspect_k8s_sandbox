@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add per-service `x-inspect_k8s_sandbox.volumes` and `volumeMounts` compose
+  extensions for Kubernetes volume types, including OCI image volumes, that Compose
+  shorthand cannot express.
 - **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
   filesystem with only `NET_BIND_SERVICE`. A custom `corednsImage` must run under that
   context; set the new `corednsSecurityContext` if it cannot. The default image moves

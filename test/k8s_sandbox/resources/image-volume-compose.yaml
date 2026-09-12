@@ -1,0 +1,19 @@
+services:
+  default:
+    image: ubuntu:24.04
+    command: ["tail", "-f", "/dev/null"]
+    deploy:
+      resources:
+        limits:
+          memory: 128mb
+          cpus: 0.1
+    x-inspect_k8s_sandbox:
+      volumes:
+        - name: alpine-release
+          image:
+            reference: docker.io/library/alpine:3.19
+            pullPolicy: IfNotPresent
+      volumeMounts:
+        - name: alpine-release
+          mountPath: /mnt/alpine
+          readOnly: true
