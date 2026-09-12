@@ -9,6 +9,7 @@ import yaml
 from inspect_ai.util import ExecResult
 from pytest import LogCaptureFixture
 
+from k8s_sandbox._cilium import CiliumWaitOutcome
 from k8s_sandbox._helm import (
     INSPECT_HELM_LABELS,
     INSPECT_HELM_TIMEOUT,
@@ -40,6 +41,26 @@ def _mock_default_namespace(request: pytest.FixtureRequest) -> object:
         return
     with patch("k8s_sandbox._helm.get_default_namespace", return_value="default") as m:
         yield m
+
+
+@pytest.fixture(autouse=True)
+def _mock_cilium_calls(request: pytest.FixtureRequest) -> object:
+    """Stub the Cilium reads for tests that don't need a real cluster.
+
+    Tests marked req_k8s use the real cluster; everything else would otherwise
+    reach the Kubernetes API after a faked `helm install` or `helm uninstall`.
+    """
+    if "req_k8s" in {m.name for m in request.node.iter_markers()}:
+        yield
+        return
+    with (
+        patch(
+            "k8s_sandbox._helm.wait_for_policy_realized",
+            return_value=CiliumWaitOutcome.REALIZED,
+        ) as wait,
+        patch("k8s_sandbox._helm.delete_release_network_policies"),
+    ):
+        yield wait
 
 
 @pytest.fixture
@@ -809,3 +830,62 @@ async def test_install_error_omits_diagnostics_when_unavailable() -> None:
             await release._raise_install_error(result)
 
     assert "Helm install failed." in str(excinfo.value)
+
+
+async def test_install_waits_for_cilium_before_the_release_is_usable(
+    _mock_cilium_calls: MagicMock,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with patch(
+        "k8s_sandbox._helm._run_subprocess",
+        return_value=ExecResult(True, 0, "", ""),
+    ):
+        await release.install()
+
+    _mock_cilium_calls.assert_awaited_once_with(None, "default", release.release_name)
+
+
+async def test_install_does_not_wait_for_cilium_when_helm_fails(
+    _mock_cilium_calls: MagicMock,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with (
+        patch(
+            "k8s_sandbox._helm._run_subprocess",
+            return_value=ExecResult(False, 1, "", "Helm install failed"),
+        ),
+        patch("k8s_sandbox._helm.describe_release_pods", return_value=None),
+    ):
+        with pytest.raises(RuntimeError):
+            await release.install()
+
+    _mock_cilium_calls.assert_not_awaited()
+
+
+async def test_uninstall_deletes_the_releases_network_policies() -> None:
+    with (
+        patch(
+            "k8s_sandbox._helm._run_subprocess",
+            return_value=ExecResult(True, 0, "", ""),
+        ),
+        patch("k8s_sandbox._helm.delete_release_network_policies") as delete,
+    ):
+        await uninstall("abcd1234", "namespace", None, quiet=True)
+
+    delete.assert_awaited_once_with(None, "namespace", "abcd1234")
+
+
+async def test_uninstall_does_not_delete_network_policies_when_helm_fails() -> None:
+    with (
+        patch(
+            "k8s_sandbox._helm._run_subprocess",
+            return_value=ExecResult(False, 1, "", "Helm uninstall failed"),
+        ),
+        patch("k8s_sandbox._helm.delete_release_network_policies") as delete,
+    ):
+        with pytest.raises(RuntimeError):
+            await uninstall("abcd1234", "namespace", None, quiet=True)
+
+    delete.assert_not_awaited()

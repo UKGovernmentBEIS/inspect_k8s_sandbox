@@ -88,3 +88,19 @@ true
 {{- end }}
 {{ toYaml $out -}}
 {{- end -}}
+
+{{/*
+Annotations which install the network policies before the pods they protect.
+
+Helm orders an install by kind, and sorts kinds it does not know -- every custom
+resource, CiliumNetworkPolicy among them -- after the workloads. Without these
+the pod is created, scheduled and given a Cilium endpoint before its policy
+object exists; the agent then imports the policy and regenerates that endpoint,
+and a command running in the gap sees a partially programmed egress policy: an
+allowed domain that does not resolve, or no egress at all.
+*/}}
+{{- define "agentEnv.networkPolicyHookAnnotations" -}}
+helm.sh/hook: pre-install,pre-upgrade
+helm.sh/hook-weight: "-5"
+helm.sh/hook-delete-policy: before-hook-creation
+{{- end -}}

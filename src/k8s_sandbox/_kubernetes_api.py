@@ -58,6 +58,17 @@ def k8s_client(context_name: str | None) -> client.CoreV1Api:
     return _thread_local.client_factory.get_client(context_name)
 
 
+def k8s_custom_objects_client(context_name: str | None) -> client.CustomObjectsApi:
+    """Get a thread-local Kubernetes client for custom resources.
+
+    Shares the underlying API client (and so the connection pool and
+    credentials) with `k8s_client`, and carries the same threading contract.
+    """
+    core = k8s_client(context_name)
+    # api_client is present at runtime but absent from the typed stubs.
+    return client.CustomObjectsApi(api_client=core.api_client)  # type: ignore[attr-defined]
+
+
 def get_default_namespace(context_name: str | None) -> str:
     """
     Get the default namespace for the specified kubeconfig context name.

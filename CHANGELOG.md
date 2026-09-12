@@ -26,6 +26,19 @@
   a failed `ExecResult` rather than raised, so a caller that probes with a user and
   falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
   user that does not exist still raises.
+- Fix a sandbox's first commands racing its own egress rules on Cilium clusters: an
+  allow-listed domain that sometimes did not resolve, or a pod with unrestricted egress
+  that sometimes had no network. The built-in chart's network policies are now created
+  before the pods they protect, and installation waits for Cilium to build each pod's
+  endpoint before handing the sandbox back. The wait needs `get` and `list` on
+  `ciliumendpoints.cilium.io` in the sandbox namespace; without them it is skipped with
+  a warning, and it raises the new `CiliumPolicyNotRealizedError` if an endpoint has
+  not become ready after 60s.
+- The built-in chart's `CiliumNetworkPolicy` objects are Helm hooks, which `helm
+  uninstall` does not remove. Uninstalling through this package deletes them, which
+  needs `list` (new) and `delete` on `ciliumnetworkpolicies.cilium.io` in the namespace;
+  a release uninstalled by hand needs `kubectl delete cnp -l
+  app.kubernetes.io/instance=<release>`.
 
 ## 2026-08-12 0.13.0
 

@@ -1,5 +1,6 @@
 """Package for a Kubernetes sandbox environment provider for Inspect AI."""
 
+from k8s_sandbox._cilium import CiliumPolicyNotRealizedError
 from k8s_sandbox._error import K8sError
 from k8s_sandbox._pod import GetReturncodeError, PodError
 from k8s_sandbox._pod.error import ContainerRestartedError, PodReplacedError
@@ -9,6 +10,7 @@ from k8s_sandbox._sandbox_environment import (
 )
 
 __all__ = [
+    "CiliumPolicyNotRealizedError",
     "ContainerRestartedError",
     "GetReturncodeError",
     "K8sError",

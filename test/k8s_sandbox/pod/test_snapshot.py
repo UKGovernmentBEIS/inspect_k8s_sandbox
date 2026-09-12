@@ -83,6 +83,14 @@ def test_parse_pod_defaults_missing_optional_fields():
     assert snapshot.container_names == ()
 
 
+def test_parse_pod_reads_host_network():
+    body = _pod_body()
+    body["spec"]["hostNetwork"] = True
+
+    assert _parse_pod(body).host_network is True
+    assert _parse_pod(_pod_body()).host_network is False
+
+
 def test_parse_pod_raises_when_identity_missing():
     with pytest.raises(ValueError, match="metadata.name or metadata.uid"):
         _parse_pod({"metadata": {"name": "no-uid"}})

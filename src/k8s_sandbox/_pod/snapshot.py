@@ -53,6 +53,8 @@ class PodSnapshot:
     container_names: tuple[str, ...]
     """Container names from the pod spec, in declared order."""
     container_statuses: tuple[ContainerStatus, ...] | None
+    host_network: bool = False
+    """Whether the pod shares the node's network namespace."""
 
     def status_for(self, container_name: str) -> ContainerStatus | None:
         if self.container_statuses is None:
@@ -115,6 +117,7 @@ def _parse_pod(pod: dict[str, Any]) -> PodSnapshot:
         labels=metadata.get("labels") or {},
         container_names=tuple(c["name"] for c in spec.get("containers") or []),
         container_statuses=container_statuses,
+        host_network=bool(spec.get("hostNetwork")),
     )
 
 

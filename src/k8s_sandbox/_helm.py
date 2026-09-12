@@ -14,6 +14,10 @@ from inspect_ai.util import ExecResult, concurrency
 from kubernetes.client.exceptions import ApiException  # type: ignore
 from shortuuid import uuid
 
+from k8s_sandbox._cilium import (
+    delete_release_network_policies,
+    wait_for_policy_realized,
+)
 from k8s_sandbox._diagnostics import describe_release_pods
 from k8s_sandbox._kubernetes_api import get_default_namespace, k8s_client
 from k8s_sandbox._logger import (
@@ -346,6 +350,12 @@ class Release:
                 await watcher
         if not result.success:
             await self._raise_install_error(result)
+        # Kubelet reporting the pods Ready says nothing about Cilium having
+        # built their endpoints, so wait for that too before the release is
+        # usable and a sandbox's first command can race its own egress rules.
+        await wait_for_policy_realized(
+            self._context_name, self._namespace, self.release_name
+        )
 
     async def _watch_for_scheduling_events(self) -> None:
         """Poll for FailedScheduling events and log once if GPU provisioning is needed.
@@ -492,6 +502,10 @@ async def uninstall(
                     stdout=result.stdout,
                     stderr=result.stderr,
                 )
+            # The chart's network policies are Helm hooks so that they exist
+            # before the pods they protect, and Helm does not remove hook
+            # resources with the release.
+            await delete_release_network_policies(context_name, namespace, release_name)
 
 
 async def get_all_release_names(namespace: str, context_name: str | None) -> list[str]:
