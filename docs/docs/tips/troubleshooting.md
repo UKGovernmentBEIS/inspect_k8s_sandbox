@@ -9,10 +9,11 @@ A good starting point to many issues is to view the `TRACE`-level logs written b
 Inspect. See the [`TRACE` log level
 section](debugging-k8s-sandboxes.md#trace-log-level).
 
-## I'm seeing "Helm install: context deadline exceeded" errors {#helm-context-deadline-exceeded}
+## I'm seeing "Helm release did not become ready" errors { #helm-release-not-ready }
 
-This means that the Helm chart installation timed out. When installing the Helm chart,
-the `k8s_sandbox` package uses the `--wait` flag to wait for all Pods to be ready.
+This means the release was installed but its Pods did not all become ready in time.
+After installing the chart, the `k8s_sandbox` package waits for every Pod the chart
+renders to report the `Ready` condition.
 
 Therefore, this error can be an indication of:
 
@@ -21,6 +22,9 @@ Therefore, this error can be an indication of:
 * If you are using large images, they may take a long time to pull onto the nodes.
 * A Pod failing to enter the ready state (could be a failing readiness probe, failing to
   pull the image, crash loop backoff, etc.)
+
+The error includes the state of the release's containers (for example
+`ImagePullBackOff` or `FailedScheduling`), which usually names the cause directly.
 
 Consider [increasing the timeout](configuration.md#helm-install-timeout).
 
@@ -32,6 +36,12 @@ manually](../helm/built-in-chart.md#manual-chart-install)) and check the Pod sta
 and events using a tool like kubectl or K9s to get a definitive answer as to the
 underlying problem. Use the Helm release name (will be in error message) to filter the
 Pods.
+
+## I'm seeing "Helm install: context deadline exceeded" errors { #helm-context-deadline-exceeded }
+
+Helm itself timed out while *creating* the release's objects, rather than while waiting
+for them to become ready. That points at the Kubernetes API server rather than at
+cluster capacity.
 
 ## I'm seeing "Helm uninstall failed" errors
 
@@ -46,6 +56,8 @@ Check to see if any Helm releases were left behind:
 ```sh
 helm list
 ```
+
+Uninstalling has its own [timeout](configuration.md#helm-uninstall-timeout).
 
 And if you wish to uninstall them:
 

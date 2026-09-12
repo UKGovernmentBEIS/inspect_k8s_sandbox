@@ -1,7 +1,13 @@
 import asyncio
+import contextlib
+import itertools
+import json
 import logging
 import tempfile
+import time
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, AsyncGenerator, Callable, Iterable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,21 +16,32 @@ from inspect_ai.util import ExecResult
 from pytest import LogCaptureFixture
 
 from k8s_sandbox._helm import (
+    _LIST_PODS_READ_TIMEOUT,
+    _SERVICE_LABEL,
+    DEFAULT_TIMEOUT,
     INSPECT_HELM_LABELS,
     INSPECT_HELM_TIMEOUT,
+    INSPECT_HELM_UNINSTALL_TIMEOUT,
     INSPECT_SANDBOX_COREDNS_IMAGE,
     Release,
     StaticValuesSource,
     ValuesSource,
+    _declared_object_names,
+    _get_expected_services,
     _get_helm_major_version,
+    _get_timeout,
+    _get_uninstall_timeout,
     _get_wait_flag,
     _helm_escape,
+    _pod_ready,
+    _rendered_docs,
     _run_subprocess,
     get_all_release_names,
     uninstall,
     validate_no_null_values,
 )
 from k8s_sandbox._kubernetes_api import get_default_namespace, k8s_client
+from k8s_sandbox._pod.snapshot import PodSnapshot
 from k8s_sandbox._sandbox_environment import _key_to_pascal, _metadata_to_extra_values
 
 
@@ -40,6 +57,59 @@ def _mock_default_namespace(request: pytest.FixtureRequest) -> object:
         return
     with patch("k8s_sandbox._helm.get_default_namespace", return_value="default") as m:
         yield m
+
+
+def _manifest(*docs: str) -> str:
+    return json.dumps({"manifest": "\n---\n".join(docs)})
+
+
+def _stateful_set(service: str = "default", replicas: int = 1) -> str:
+    return (
+        f"kind: StatefulSet\nmetadata: {{name: {service}}}\n"
+        f"spec:\n  replicas: {replicas}\n  template:\n    metadata:\n"
+        f"      labels: {{{_SERVICE_LABEL}: {service}}}\n"
+    )
+
+
+_STATEFUL_SET = _stateful_set()
+
+
+def _list_item(service: str) -> str:
+    return f"{{kind: Pod, metadata: {{labels: {{{_SERVICE_LABEL}: {service}}}}}}}"
+
+
+_BARE_POD = f"""
+kind: Pod
+metadata:
+  name: p
+  labels: {{{_SERVICE_LABEL}: default}}
+"""
+_TWO_SERVICES = _stateful_set("default") + "---\n" + _stateful_set("victim")
+
+
+def _helm_installed(mock_run: MagicMock, *docs: str) -> None:
+    """Make a mocked `helm install` return a manifest the readiness wait can read."""
+    mock_run.return_value = ExecResult(
+        True, 0, _manifest(*(docs or (_STATEFUL_SET,))), ""
+    )
+
+
+@pytest.fixture(autouse=True)
+def _mock_release_pods(request: pytest.FixtureRequest) -> object:
+    """Stop tests which don't need a cluster from polling one for readiness.
+
+    install() waits for the release's pods after the helm subprocess returns, so
+    tests which mock _run_subprocess would otherwise reach the Kubernetes API. The
+    real wait loop still runs; only the read of the cluster is stubbed.
+    """
+    if "req_k8s" in {m.name for m in request.node.iter_markers()}:
+        yield
+        return
+    # Stub the cluster read, not _list_release_pods itself: the arguments it builds
+    # are what decide whether the poll is bounded and reads the right pods.
+    with patch("k8s_sandbox._helm.k8s_client"):
+        with patch("k8s_sandbox._helm.list_pods", return_value=[_pod()]) as m:
+            yield m
 
 
 @pytest.fixture
@@ -145,18 +215,18 @@ async def test_invalid_helm_timeout(
 
 @pytest.mark.req_k8s
 async def test_helm_install_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
-    release = Release(__file__, None, ValuesSource.none(), None)
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "20")
+    # A release which can never be scheduled, so this cannot race into success on a
+    # cluster which happens to have a warm node.
+    values = Path(__file__).parent / "resources" / "unschedulable-values.yaml"
+    release = Release(__file__, None, StaticValuesSource(values), None)
 
     with pytest.raises(RuntimeError) as excinfo:
         await release.install()
 
-    # Verify that we detect the install timeout and add our own message.
-    assert "The configured timeout value was 1s. Please see the docs" in str(
-        excinfo.value
-    )
-    # The release probably won't have been installed given the short timeout, but clean
-    # up just in case.
+    # The timeout names the real cause, not just that it expired.
+    assert "Helm release did not become ready within 20s" in str(excinfo.value)
+    assert "FailedScheduling" in str(excinfo.value)
     await release.uninstall(quiet=True)
 
 
@@ -184,6 +254,7 @@ async def test_helm_create_namespace(
 
     release = Release(__file__, None, ValuesSource.none(), None)
     with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
         await release.install()
 
     mock_run.assert_called_once()
@@ -299,6 +370,7 @@ async def test_helm_install_extra_values() -> None:
     release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
 
     with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
         await release.install()
 
     mock_run.assert_called_once()
@@ -311,6 +383,7 @@ async def test_helm_install_no_extra_values() -> None:
     release = Release(__file__, None, ValuesSource.none(), None)
 
     with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
         await release.install()
 
     mock_run.assert_called_once()
@@ -338,6 +411,7 @@ async def test_helm_install_extra_values_escaped() -> None:
     release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
 
     with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
         await release.install()
 
     args = mock_run.call_args[0][1]
@@ -486,6 +560,7 @@ async def test_coredns_image_env_var(
 
     release = Release(__file__, None, ValuesSource.none(), None)
     with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
         await release.install()
 
     mock_run.assert_called_once()
@@ -587,84 +662,6 @@ def test_get_wait_flag_is_cached() -> None:
         mock.assert_called_once()
 
 
-def _make_gpu_scheduling_event(release_name: str) -> MagicMock:
-    event = MagicMock()
-    event.involved_object.name = f"agent-env-{release_name}-default-abc123"
-    event.message = "0/3 nodes available: 3 Insufficient nvidia.com/gpu."
-    return event
-
-
-async def test_watcher_logs_on_gpu_scheduling_event(
-    caplog: LogCaptureFixture,
-) -> None:
-    release = Release(__file__, None, ValuesSource.none(), None)
-    mock_k8s = MagicMock()
-    mock_k8s.list_namespaced_event.return_value.items = [
-        _make_gpu_scheduling_event(release.release_name)
-    ]
-
-    with patch("k8s_sandbox._helm.k8s_client", return_value=mock_k8s):
-        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
-            with caplog.at_level(logging.WARNING):
-                await release._watch_for_scheduling_events()
-
-    assert "GPU node" in caplog.text
-    mock_k8s.list_namespaced_event.assert_called_once()
-
-
-async def test_watcher_does_not_log_for_non_gpu_event(
-    caplog: LogCaptureFixture,
-) -> None:
-    release = Release(__file__, None, ValuesSource.none(), None)
-    event = MagicMock()
-    event.involved_object.name = f"agent-env-{release.release_name}-default-abc123"
-    event.message = "0/3 nodes available: 3 Insufficient memory."
-    mock_k8s = MagicMock()
-    # Return a non-GPU event, then raise to terminate the polling loop.
-    mock_k8s.list_namespaced_event.side_effect = [
-        MagicMock(items=[event]),
-        Exception("terminate"),
-    ]
-
-    with patch("k8s_sandbox._helm.k8s_client", return_value=mock_k8s):
-        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
-            with caplog.at_level(logging.WARNING):
-                await release._watch_for_scheduling_events()
-
-    assert "GPU node" not in caplog.text
-
-
-async def test_watcher_does_not_log_for_different_release(
-    caplog: LogCaptureFixture,
-) -> None:
-    release = Release(__file__, None, ValuesSource.none(), None)
-    mock_k8s = MagicMock()
-    mock_k8s.list_namespaced_event.side_effect = [
-        MagicMock(items=[_make_gpu_scheduling_event("differentrelease")]),
-        Exception("terminate"),
-    ]
-
-    with patch("k8s_sandbox._helm.k8s_client", return_value=mock_k8s):
-        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
-            with caplog.at_level(logging.WARNING):
-                await release._watch_for_scheduling_events()
-
-    assert "GPU node" not in caplog.text
-
-
-async def test_watcher_exits_gracefully_on_k8s_client_error(
-    caplog: LogCaptureFixture,
-) -> None:
-    release = Release(__file__, None, ValuesSource.none(), None)
-
-    with patch("k8s_sandbox._helm.k8s_client", side_effect=Exception("no kubeconfig")):
-        with patch("k8s_sandbox._helm._SCHEDULING_POLL_INTERVAL", 0):
-            with caplog.at_level(logging.WARNING):
-                await release._watch_for_scheduling_events()  # must not raise
-
-    assert "GPU node" not in caplog.text
-
-
 @pytest.mark.parametrize(
     ("env_value", "expected_labels_arg"),
     [
@@ -689,6 +686,7 @@ async def test_helm_labels_env_var(
 
     release = Release(__file__, None, ValuesSource.none(), None)
     with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
         await release.install()
 
     mock_run.assert_called_once()
@@ -809,3 +807,466 @@ async def test_install_error_omits_diagnostics_when_unavailable() -> None:
             await release._raise_install_error(result)
 
     assert "Helm install failed." in str(excinfo.value)
+
+
+def _pod(
+    *,
+    ready: bool = True,
+    phase: str = "Running",
+    name: str = "p",
+    service: str | None = "default",
+) -> PodSnapshot:
+    return PodSnapshot(
+        name=name,
+        uid=name,
+        labels={_SERVICE_LABEL: service} if service is not None else {},
+        container_names=("default",),
+        container_statuses=(),
+        phase=phase,
+        ready=ready,
+    )
+
+
+_EVICTED = _pod(name="evicted", ready=False, phase="Failed")
+
+
+@pytest.mark.parametrize(
+    ("pod", "expected"),
+    [
+        pytest.param(_pod(ready=True), True, id="ready"),
+        pytest.param(_pod(ready=False, phase="Pending"), False, id="pending"),
+        pytest.param(_pod(ready=False, phase="Failed"), False, id="failed"),
+        # Reports Ready=False with reason PodCompleted, which Helm blocks on.
+        pytest.param(_pod(ready=False, phase="Succeeded"), True, id="completed"),
+    ],
+)
+def test_pod_ready(pod: PodSnapshot, expected: bool) -> None:
+    assert _pod_ready(pod) is expected
+
+
+def test_declared_object_names_covers_every_kind_including_nested_lists() -> None:
+    # These are what a Warning event on a non-pod object is matched against, so a kind
+    # missed here is a failure the diagnostics cannot explain.
+    stdout = _manifest(
+        "kind: ConfigMap\nmetadata: {name: cm}\n",
+        _stateful_set("default"),
+        "kind: List\nitems: [{kind: Service, metadata: {name: svc}}]\n",
+    )
+
+    names = frozenset(_declared_object_names(_rendered_docs(stdout, "abcdefgh")))
+
+    assert names == {"cm", "default", "svc"}
+
+
+def _services(stdout: str) -> frozenset[str]:
+    return _get_expected_services(_rendered_docs(stdout, "abcdefgh"), "abcdefgh")
+
+
+@pytest.mark.parametrize(
+    ("stdout", "expected"),
+    [
+        pytest.param(_manifest(_STATEFUL_SET), {"default"}, id="one-service"),
+        pytest.param(
+            _manifest(_TWO_SERVICES), {"default", "victim"}, id="two-services"
+        ),
+        # The documented custom-chart shape.
+        pytest.param(_manifest(_BARE_POD), {"default"}, id="bare-pod"),
+        # Replicas do not add sandboxes: get_sandbox_pods() keys one entry per label.
+        pytest.param(
+            _manifest(_stateful_set("default", replicas=3)), {"default"}, id="replicas"
+        ),
+        # A pod the chart does not declare to be a sandbox cannot serve as one.
+        pytest.param(
+            _manifest(_STATEFUL_SET, "kind: DaemonSet\nspec:\n  template:\n    {}\n"),
+            {"default"},
+            id="daemonset-declares-nothing",
+        ),
+        # A controller's own labels are not its pod template's: reading them invents
+        # a sandbox no pod will ever serve.
+        pytest.param(
+            _manifest(
+                "kind: StatefulSet\n"
+                f"metadata:\n  labels: {{{_SERVICE_LABEL}: phantom}}\n"
+                f"spec:\n  template:\n    metadata:\n"
+                f"      labels: {{{_SERVICE_LABEL}: default}}\n"
+            ),
+            {"default"},
+            id="controller-metadata-is-not-a-pod-template",
+        ),
+        # The same label appears on objects which select pods rather than make them.
+        pytest.param(
+            _manifest(
+                _STATEFUL_SET,
+                f"kind: Service\nspec:\n  selector: {{{_SERVICE_LABEL}: phantom}}\n",
+                "kind: CiliumNetworkPolicy\nspec:\n  endpointSelector:\n"
+                f"    matchLabels: {{{_SERVICE_LABEL}: phantom}}\n",
+            ),
+            {"default"},
+            id="selectors-are-not-sandboxes",
+        ),
+        pytest.param(
+            _manifest(
+                "kind: List\nitems: [" + _list_item("a") + ", " + _list_item("b") + "]"
+            ),
+            {"a", "b"},
+            id="list-wrapping-pods",
+        ),
+    ],
+)
+def test_expected_services(stdout: str, expected: set[str]) -> None:
+    assert _services(stdout) == expected
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        pytest.param("not json", id="unparseable"),
+        pytest.param("{}", id="no-manifest-key"),
+        pytest.param('{"manifest": null}', id="null-manifest"),
+        # Treating "no sandbox declared" as "nothing to wait for" is how a release
+        # gets handed over before its pods exist.
+        pytest.param(
+            _manifest("kind: ConfigMap\nmetadata: {name: c}\n"),
+            id="declares-no-sandbox",
+        ),
+    ],
+)
+def test_expected_services_fails_closed(stdout: str) -> None:
+    with pytest.raises(RuntimeError, match="manifest|declares no Pod"):
+        _services(stdout)
+
+
+async def _wait(
+    release: Release, polls: Iterable[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Drive the readiness wait against a scripted sequence of poll results.
+
+    Asserts the script is consumed exactly, so that a test which expects the wait to
+    keep polling fails if it returns early instead of passing for the wrong reason.
+    """
+    mock = MagicMock(side_effect=polls)
+    monkeypatch.setattr(Release, "_list_release_pods", mock, raising=True)
+    monkeypatch.setattr("k8s_sandbox._helm._READINESS_POLL_INTERVAL", 0)
+    # A short deadline of its own: the wait treats an exhausted script as a failed
+    # poll and would otherwise spin for the whole INSPECT_HELM_TIMEOUT.
+    await release._wait_until_ready(time.monotonic() + 2)
+    if isinstance(polls, list):
+        assert mock.call_count == len(polls), (
+            f"expected the wait to read the pods {len(polls)} times, not "
+            f"{mock.call_count}"
+        )
+
+
+async def test_wait_until_ready_returns_once_every_pod_is_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default"})
+
+    await _wait(
+        release,
+        [
+            # The evicted pod is terminal and never becomes ready; a controller
+            # replaces it, so it must not hold the release back.
+            [_pod(name="a"), _pod(name="b", ready=False), _EVICTED],
+            [_pod(name="a"), _pod(name="b"), _EVICTED],  # the cached poll says ready
+            [_pod(name="a"), _pod(name="b"), _EVICTED],  # and a consistent read agrees
+        ],
+        monkeypatch,
+    )
+
+
+async def test_wait_until_ready_keeps_waiting_for_a_pod_that_does_not_exist_yet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The point of naming the sandboxes: one of two being Ready is not ready, even
+    # though every pod currently visible is.
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default", "victim"})
+    both = [_pod(name="a", service="default"), _pod(name="b", service="victim")]
+    polls = [
+        [_pod(name="a", service="default")],
+        [_pod(name="a", service="default")],
+        both,
+        both,  # the confirming consistent read
+    ]
+
+    await _wait(release, polls, monkeypatch)
+
+
+async def test_wait_until_ready_keeps_waiting_while_no_pods_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default"})
+
+    await _wait(release, [[], [], [_pod()], [_pod()]], monkeypatch)
+
+
+async def test_wait_until_ready_ignores_pods_which_are_not_sandboxes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A DaemonSet's pods and a completed hook pod carry the release label but declare
+    # no sandbox, so they cannot stand in for one.
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default"})
+    strangers = [
+        _pod(name="ds-1", service=None),
+        _pod(name="ds-2", service=None),
+        # A completed hook pod, even one claiming the sandbox's name: nothing can be
+        # exec'd into it, so it must not stand in for the sandbox.
+        _pod(name="hook", service="default", ready=False, phase="Succeeded"),
+    ]
+    sandbox = _pod(name="default-0", service="default")
+
+    await _wait(
+        release, [strangers, [*strangers, sandbox], [*strangers, sandbox]], monkeypatch
+    )
+
+
+async def test_wait_until_ready_retries_a_transient_api_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default"})
+
+    await _wait(release, [ConnectionError("boom"), [_pod()], [_pod()]], monkeypatch)
+
+
+async def test_wait_until_ready_times_out_with_diagnostics(
+    monkeypatch: pytest.MonkeyPatch, log_err: LogCaptureFixture
+) -> None:
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
+    monkeypatch.setattr(
+        "k8s_sandbox._helm.describe_release_pods", lambda *_: "ImagePullBackOff"
+    )
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with pytest.raises(RuntimeError, match="did not become ready within 1s"):
+        await _wait(release, itertools.repeat([_pod(ready=False)]), monkeypatch)
+
+    assert "ImagePullBackOff" in log_err.text
+
+
+async def test_wait_until_ready_names_the_sandbox_which_never_arrived(
+    monkeypatch: pytest.MonkeyPatch, log_err: LogCaptureFixture
+) -> None:
+    # A controller which cannot create its pod at all leaves the release short of a
+    # sandbox while every pod that does exist looks healthy. Naming the whole declared
+    # set leaves the reader to work out which one is absent.
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
+    monkeypatch.setattr("k8s_sandbox._helm.describe_release_pods", lambda *_: None)
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default", "busybox-runc"})
+
+    with pytest.raises(RuntimeError, match="did not become ready within 1s") as excinfo:
+        await _wait(release, itertools.repeat([_pod(service="default")]), monkeypatch)
+
+    assert "busybox-runc" in str(excinfo.value)
+    assert "missing_sandboxes" in str(excinfo.value)
+    # The sandbox which did arrive is not a thing to go looking at.
+    assert "default" not in str(excinfo.value).split("missing_sandboxes")[1]
+
+
+async def test_wait_until_ready_says_so_when_the_chart_made_no_pods(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "1")
+    monkeypatch.setattr("k8s_sandbox._helm.describe_release_pods", lambda *_: None)
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._expected_services = frozenset({"default"})
+
+    with pytest.raises(RuntimeError, match="created no pods labelled"):
+        await _wait(release, itertools.repeat([]), monkeypatch)
+
+
+@pytest.mark.parametrize(
+    ("allow_stale", "resource_version"),
+    [pytest.param(True, "0", id="polling"), pytest.param(False, None, id="confirming")],
+)
+def test_list_release_pods_reads_the_cache_only_when_polling(
+    allow_stale: bool, resource_version: str | None, _mock_release_pods: MagicMock
+) -> None:
+    # A repeated poll may read a stale answer; the read confirming a ready verdict
+    # may not. Unbounded, neither leaves the deadline enforceable.
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    release._list_release_pods(allow_stale)
+
+    kwargs = _mock_release_pods.call_args.kwargs
+    assert kwargs["resource_version"] == resource_version
+    assert kwargs["request_timeout"] == _LIST_PODS_READ_TIMEOUT
+    assert kwargs["label_selector"] == (
+        f"app.kubernetes.io/instance={release.release_name}"
+    )
+
+
+async def test_the_timeout_covers_submission_as_well_as_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # INSPECT_HELM_TIMEOUT is one budget: a slow submission eats into the readiness
+    # wait rather than being free.
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "100")
+    # Submission takes 30 of the 100 seconds. Replace the module's `time` binding, not
+    # time.monotonic itself, which is shared with the whole process.
+    clock = itertools.chain([1_000.0, 1_030.0], itertools.repeat(1_030.0))
+    monkeypatch.setattr(
+        "k8s_sandbox._helm.time", SimpleNamespace(monotonic=lambda: next(clock))
+    )
+    deadlines: list[float] = []
+
+    async def capture(self: Release, deadline: float) -> list[PodSnapshot]:
+        deadlines.append(deadline)
+        return [_pod()]
+
+    monkeypatch.setattr(Release, "_wait_until_ready", capture)
+    release = Release(__file__, None, ValuesSource.none(), None)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
+        await release.install()
+
+    assert deadlines == [1_100.0]
+    # Helm gets what is left of the budget, not a fresh copy of it.
+    timeouts = [a for a in mock_run.call_args[0][1] if a.startswith("--timeout=")]
+    assert timeouts == ["--timeout=70s"]
+
+
+async def test_install_takes_the_pod_count_from_helm_and_waits_off_the_subprocess(
+    _mock_release_pods: MagicMock,
+) -> None:
+    release = Release(__file__, None, ValuesSource.none(), None)
+    _mock_release_pods.return_value = [
+        _pod(name="a", service="default"),
+        _pod(name="b", service="victim"),
+    ]
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run, _TWO_SERVICES)
+        await release.install()
+
+    args = mock_run.call_args[0][1]
+    assert "--output=json" in args
+    # The readiness wait happens off the install permit, not inside the subprocess.
+    assert not [a for a in args if a.startswith("--wait")]
+    # Both services, so this cannot pass on Release's empty default.
+    assert release._expected_services == {"default", "victim"}
+    # Handover uses the pods readiness confirmed, so nothing can change in between.
+    _mock_release_pods.return_value = []
+    assert set(await release.get_sandbox_pods()) == {"default", "victim"}
+    # Guards against the wait being dropped: deleting the call from install() would
+    # otherwise only make other tests hang rather than fail.
+    _mock_release_pods.assert_called()
+
+
+@pytest.mark.parametrize(
+    "phase",
+    [pytest.param("Succeeded", id="completed"), pytest.param("Failed", id="evicted")],
+)
+@pytest.mark.parametrize(
+    "terminal_first",
+    [pytest.param(False, id="terminal-last"), pytest.param(True, id="terminal-first")],
+)
+async def test_get_sandbox_pods_never_hands_over_a_terminated_pod(
+    phase: str, terminal_first: bool
+) -> None:
+    # A controller replaces a pod that has stopped for good, and the API can list both
+    # under the same sandbox label. Keying the map by label makes the last one win, so
+    # without a lifecycle filter the sandbox that gets handed over is whichever the
+    # cluster happened to return second, and an exec against the dead one fails.
+    live = _pod(name="live", service="default")
+    terminal = _pod(name="terminal", service="default", ready=False, phase=phase)
+    release = Release(__file__, None, ValuesSource.none(), None)
+    release._ready_pods = [terminal, live] if terminal_first else [live, terminal]
+
+    sandboxes = await release.get_sandbox_pods()
+
+    assert sandboxes["default"].info.name == "live"
+
+
+async def test_install_permit_is_released_before_the_readiness_wait(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A release waiting for capacity must not stop another release, whose capacity
+    # is available, from being submitted at all.
+    # Patch the semaphore rather than INSPECT_MAX_HELM_INSTALL: Inspect's concurrency
+    # registry caches by name, so the env var is a no-op once it has been created.
+    semaphore = asyncio.Semaphore(1)
+
+    @contextlib.asynccontextmanager
+    async def one_permit() -> AsyncGenerator[None, None]:
+        async with semaphore:
+            yield
+
+    waiting = asyncio.Event()
+    submitted: list[str] = []
+
+    async def block_forever(self: Release, deadline: float) -> None:
+        waiting.set()
+        await asyncio.sleep(3600)
+
+    async def record(cmd: str, args: list[str], capture_output: bool) -> ExecResult:
+        submitted.append(args[0])
+        return ExecResult(True, 0, _manifest(_STATEFUL_SET), "")
+
+    monkeypatch.setattr("k8s_sandbox._helm._install_semaphore", one_permit)
+    monkeypatch.setattr("k8s_sandbox._helm._run_subprocess", record)
+    monkeypatch.setattr(Release, "_wait_until_ready", block_forever)
+
+    blocked = asyncio.create_task(
+        Release(__file__, None, ValuesSource.none(), None).install()
+    )
+    await asyncio.wait_for(waiting.wait(), timeout=5)
+
+    # The first release is mid-wait; the second must still be able to submit.
+    monkeypatch.setattr(
+        Release, "_wait_until_ready", lambda self, deadline: asyncio.sleep(0)
+    )
+    await asyncio.wait_for(
+        Release(__file__, None, ValuesSource.none(), None).install(), timeout=5
+    )
+
+    assert submitted == ["install", "install"]
+    blocked.cancel()
+    await asyncio.gather(blocked, return_exceptions=True)
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [(None, f"{DEFAULT_TIMEOUT}s"), ("30", "30s")],
+)
+async def test_uninstall_timeout_is_independent_of_the_install_timeout(
+    env: str | None, expected: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # INSPECT_HELM_TIMEOUT is legitimately set to hours; an uninstall holds an
+    # uninstall permit and, on the error path, the sample's sandbox slot.
+    monkeypatch.setenv(INSPECT_HELM_TIMEOUT, "86400")
+    if env is not None:
+        monkeypatch.setenv(INSPECT_HELM_UNINSTALL_TIMEOUT, env)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
+        await uninstall("abcdefgh", "default", None, quiet=True)
+
+    args = mock_run.call_args[0][1]
+    assert args[args.index("--timeout") + 1] == expected
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "abcd"])
+@pytest.mark.parametrize(
+    ("get_timeout", "env_var"),
+    [
+        (_get_timeout, INSPECT_HELM_TIMEOUT),
+        (_get_uninstall_timeout, INSPECT_HELM_UNINSTALL_TIMEOUT),
+    ],
+)
+def test_invalid_timeout_env_var(
+    get_timeout: Callable[[], int],
+    env_var: str,
+    value: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(env_var, value)
+
+    with pytest.raises(ValueError, match=env_var):
+        get_timeout()
