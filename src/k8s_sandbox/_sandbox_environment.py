@@ -429,7 +429,13 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     """The user to run commands as in the container if user is not specified."""
     restarted_container_behavior: Literal["warn", "raise"] = "warn"
     max_pod_ops: int | None = None
-    """Maximum number of concurrent pod operations. Defaults to cpu_count * 4."""
+    """Maximum number of concurrent pod operations. Defaults to cpu_count * 4.
+
+    The limit is process-wide, not per-task: whichever task initialises the
+    executor first fixes it for the process. Set the same value on every task
+    run in the process (a task with a conflicting value fails at startup), or
+    use the INSPECT_MAX_POD_OPS env var instead.
+    """
 
 
 def _key_to_pascal(key: str) -> str:
