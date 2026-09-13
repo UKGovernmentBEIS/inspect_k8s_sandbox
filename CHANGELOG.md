@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
+  `read_file()` / `write_file()`, for deployments where that per-op
+  `read_namespaced_pod` call becomes a load problem on the Kubernetes API server at
+  high concurrency. Defaults to enabled, so behaviour is unchanged unless set.
+  `exec()` always performs the check regardless.
+
 - **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
   filesystem with only `NET_BIND_SERVICE`. A custom `corednsImage` must run under that
   context; set the new `corednsSecurityContext` if it cannot. The default image moves
