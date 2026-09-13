@@ -26,6 +26,10 @@
   a failed `ExecResult` rather than raised, so a caller that probes with a user and
   falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
   user that does not exist still raises.
+- Update `aiohttp` (a transitive dependency via `aiobotocore`/`s3fs`) from 3.13.2 to
+  3.14.3, fixing CVE-2026-34520 (a header-parsing flaw allowing injection of malformed
+  response headers) and a 3.14.0 fix for per-request cookies not being dropped on
+  cross-origin redirects.
 
 ## 2026-08-12 0.13.0
 
