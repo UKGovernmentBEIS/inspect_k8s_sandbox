@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Sandbox pods no longer see their Kubernetes namespace. The kubelet was writing the
+  pod's `<pod>.<subdomain>.<namespace>.svc.cluster.local` FQDN into `/etc/hosts`, so an
+  agent under evaluation could read whatever the namespace name gives away (e.g. the
+  model or benchmark being run). Pods no longer have a subdomain, so the kubelet writes
+  a plain `<pod IP> <pod name>` instead. Service-to-service DNS is unaffected. The
+  per-pod DNS name `<pod>.<service>.<namespace>.svc.cluster.local` no longer resolves —
+  nothing in this chart used it, but a deployment that created its own governing
+  Service to reach individual pods by name must now use the pod IP.
+
 - **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
   filesystem with only `NET_BIND_SERVICE`. A custom `corednsImage` must run under that
   context; set the new `corednsSecurityContext` if it cannot. The default image moves
