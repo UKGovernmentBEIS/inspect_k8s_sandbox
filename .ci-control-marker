@@ -1,0 +1,2 @@
+CI control marker. Temporary; this branch exists only to run the k8s CI legs
+against unmodified upstream main. Nothing here ships.
