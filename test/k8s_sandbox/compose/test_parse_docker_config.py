@@ -108,3 +108,26 @@ def test_security_opt_reaches_converter_via_compose_entrypoint(
 
     security_context = values["services"]["default"]["securityContext"]
     assert security_context["seccompProfile"] == {"type": "Unconfined"}
+
+
+def test_no_new_privileges_reaches_converter_via_compose_entrypoint(
+    tmp_file: TmpFileFixture,
+) -> None:
+    # Same entrypoint as above: inspect_ai's ComposeConfig must not strip
+    # no-new-privileges before the converter maps it.
+    compose_file = tmp_file(
+        "compose.yaml",
+        "services:\n"
+        "  default:\n"
+        "    image: ubuntu:24.04\n"
+        "    security_opt:\n"
+        "      - no-new-privileges:true\n",
+    )
+
+    config = parse_docker_config(str(compose_file))
+    with ComposeConfigValuesSource(config).values_file() as values_file:
+        assert values_file is not None
+        values = yaml.safe_load(values_file.read_text())
+
+    security_context = values["services"]["default"]["securityContext"]
+    assert security_context["allowPrivilegeEscalation"] is False

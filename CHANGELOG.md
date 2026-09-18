@@ -26,6 +26,9 @@
   a failed `ExecResult` rather than raised, so a caller that probes with a user and
   falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
   user that does not exist still raises.
+- Map Compose `no-new-privileges:true` (`security_opt`) to Kubernetes
+  `allowPrivilegeEscalation: false`. See [Compose to Helm](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/)
+  for details.
 
 ## 2026-08-12 0.13.0
 
