@@ -284,28 +284,38 @@ class _ServiceConverter:
         _transform(
             src, "user", result, "securityContext", self._user_to_security_context
         )
-        # security_opt: map a seccomp entry (`seccomp=<value>` or `seccomp:<value>`) to
-        # a seccompProfile in securityContext (which `user` above may also populate).
+        # security_opt: map seccomp and no-new-privileges into securityContext (which
+        # `user` above may also populate). Both Compose `=` and `:` forms are accepted.
         if (security_opt := src.pop("security_opt", None)) is not None:
             # The Compose schema constrains `security_opt` to an array, so a scalar is
             # already rejected by `_validate_compose` before we get here.
             seccomp_profile = None
+            no_new_privileges: bool | None = None
             unsupported = []
             for entry in security_opt:
                 option, value = _split_security_opt(entry)
                 if option == "seccomp":
                     seccomp_profile = self._seccomp_to_profile(value)
+                elif option == "no-new-privileges":
+                    no_new_privileges = self._no_new_privileges_enabled(value)
                 else:
                     unsupported.append(entry)
             if unsupported:
                 raise ComposeConverterError(
                     f"Unsupported 'security_opt' entries: {unsupported}. Only "
-                    f"'seccomp=<value>' (or 'seccomp:<value>') is supported. "
-                    f"{self.context}"
+                    f"'seccomp=<value>' and 'no-new-privileges=<true|false>' "
+                    f"(or the ':' forms) are supported. {self.context}"
                 )
             if seccomp_profile is not None:
                 result.setdefault("securityContext", {})["seccompProfile"] = (
                     seccomp_profile
+                )
+            # Compose true -> k8s allowPrivilegeEscalation: false (both set Linux
+            # no_new_privs). An explicit false omits the field rather than emitting
+            # true, so we do not override a stricter cluster policy default.
+            if no_new_privileges is True:
+                result.setdefault("securityContext", {})["allowPrivilegeEscalation"] = (
+                    False
                 )
         # memswap_limit: k8s exposes no Compose-equivalent per-container swap limit, so
         # this Docker-only knob has no conversion target and is ignored (the rest of the
@@ -675,6 +685,16 @@ class _ServiceConverter:
             f"launch, not conversion. {self.context}"
         )
         return {"type": "Localhost", "localhostProfile": value}
+
+    def _no_new_privileges_enabled(self, value: str | None) -> bool:
+        if value is not None:
+            value = value.strip()
+        if value not in ("true", "false"):
+            raise ComposeConverterError(
+                f"Invalid 'no-new-privileges' value in 'security_opt': '{value}'. "
+                f"Expected 'true' or 'false'. {self.context}"
+            )
+        return value == "true"
 
     def _duration_to_seconds(self, value: str) -> int:
         """Convert Docker Compose duration format (e.g., '30s', '1m') to seconds.

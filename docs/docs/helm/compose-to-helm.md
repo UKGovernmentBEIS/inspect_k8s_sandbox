@@ -192,7 +192,8 @@ matters, disable swap at the node or pod level.
 
 A `security_opt` **seccomp** entry (`seccomp=<value>` or `seccomp:<value>`) is converted
 to a `seccompProfile` in the pod's `securityContext` (merged with any context derived
-from `user`). Docker's special values map to Kubernetes profile types:
+from `user` or `no-new-privileges`). Docker's special values map to Kubernetes profile
+types:
 
 | Compose value                  | Kubernetes `seccompProfile`                                 |
 | ------------------------------ | ----------------------------------------------------------- |
@@ -212,9 +213,6 @@ Notes:
   (default `/var/lib/kubelet/seccomp/<path>`).** This is not verified at conversion time;
   a missing profile fails only when the pod is launched. The converter logs an info-level
   reminder.
-- Non-seccomp entries (e.g. `apparmor=...`, `no-new-privileges`) have no mapping here and
-  are rejected rather than silently dropped, so a workload can't believe a security
-  control is applied when it isn't.
 - **Runtime caveat (gVisor).** A seccomp profile only changes which syscalls the kernel
   *allows*; it can't add syscalls the runtime doesn't implement. The chart defaults to the
   `gvisor` runtime, whose `personality()` does not support `ADDR_NO_RANDOMIZE`. So a
@@ -231,3 +229,21 @@ services:
     security_opt:
       - seccomp=profiles/no-aslr.json
 ```
+
+A `security_opt` **no-new-privileges** entry (`no-new-privileges=true` or
+`no-new-privileges:true`) is converted to `allowPrivilegeEscalation: false` in the
+pod's `securityContext` (merged with any context derived from `user` or `seccomp`).
+Both flags control Linux `no_new_privs`.
+
+| Compose value             | Kubernetes `securityContext`        |
+| ------------------------- | ----------------------------------- |
+| `no-new-privileges=true`  | `{allowPrivilegeEscalation: false}` |
+| `no-new-privileges=false` | field omitted                       |
+
+An explicit `false` omits the Kubernetes field rather than setting it to `true`, so
+the conversion does not override a stricter cluster policy default.
+Malformed values (missing, empty, or anything other than `true`/`false`) are rejected.
+
+Other `security_opt` entries (e.g. `apparmor=...`) have no mapping here and are
+rejected rather than silently dropped, so a workload can't believe a security control
+is applied when it isn't.

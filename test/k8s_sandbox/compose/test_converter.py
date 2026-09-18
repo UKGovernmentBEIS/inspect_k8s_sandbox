@@ -1054,24 +1054,177 @@ services:
     assert "Invalid seccomp profile" in str(exc_info.value)
 
 
-def test_rejects_non_seccomp_security_opt(
+def test_rejects_unsupported_security_opt(
     tmp_compose: TmpComposeFixture,
 ) -> None:
-    # Non-seccomp security_opt entries have no k8s mapping and must be rejected rather
-    # than silently dropped (so a security control isn't believed-applied when it
-    # isn't).
+    # Remaining non-seccomp/non-no-new-privileges security_opt entries have no k8s
+    # mapping and must be rejected rather than silently dropped (so a security control
+    # isn't believed-applied when it isn't).
     compose_path = tmp_compose("""
 services:
   my-service:
     image: my-image
     security_opt:
-      - no-new-privileges:true
+      - apparmor=unconfined
 """)
 
     with pytest.raises(ComposeConverterError) as exc_info:
         convert_compose_to_helm_values(compose_path)
 
     assert "Unsupported 'security_opt' entries" in str(exc_info.value)
+    assert "apparmor=unconfined" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("sep", ["=", ":"])
+def test_converts_security_opt_no_new_privileges(
+    sep: str, tmp_compose: TmpComposeFixture
+) -> None:
+    compose_path = tmp_compose(f"""
+services:
+  my-service:
+    image: my-image
+    security_opt:
+      - "no-new-privileges{sep}true"
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert (
+        result["services"]["my-service"]["securityContext"]["allowPrivilegeEscalation"]
+        is False
+    )
+
+
+@pytest.mark.parametrize("sep", ["=", ":"])
+def test_omits_allow_privilege_escalation_when_no_new_privileges_false(
+    sep: str, tmp_compose: TmpComposeFixture
+) -> None:
+    # Emitting allowPrivilegeEscalation: true would override a stricter cluster policy.
+    compose_path = tmp_compose(f"""
+services:
+  my-service:
+    image: my-image
+    security_opt:
+      - "no-new-privileges{sep}false"
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert "securityContext" not in result["services"]["my-service"]
+
+
+def test_no_new_privileges_false_does_not_clear_user_security_context(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    user: "1000"
+    security_opt:
+      - no-new-privileges:false
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"] == {"runAsUser": 1000}
+
+
+def test_merges_no_new_privileges_into_user_and_seccomp_security_context(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    user: 1000:1001
+    security_opt:
+      - seccomp=./profiles/no-aslr.json
+      - no-new-privileges:true
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["securityContext"] == {
+        "runAsUser": 1000,
+        "runAsGroup": 1001,
+        "seccompProfile": {
+            "type": "Localhost",
+            "localhostProfile": "./profiles/no-aslr.json",
+        },
+        "allowPrivilegeEscalation": False,
+    }
+
+
+def test_no_new_privileges_output_validates_against_chart_schema(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: my-image
+    security_opt:
+      - no-new-privileges:true
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    schema_path = (
+        Path(k8s_sandbox.__file__).parent
+        / "resources"
+        / "helm"
+        / "agent-env"
+        / "values.schema.json"
+    )
+    schema = json.loads(schema_path.read_text())
+    jsonschema.validate({**result, "global": {}}, schema)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "no-new-privileges",
+        "no-new-privileges:",
+        "no-new-privileges=",
+        "no-new-privileges:TRUE",
+        "no-new-privileges=yes",
+        "no-new-privileges:1",
+    ],
+)
+def test_rejects_malformed_no_new_privileges(
+    value: str, tmp_compose: TmpComposeFixture
+) -> None:
+    compose_path = tmp_compose(f"""
+services:
+  my-service:
+    image: my-image
+    security_opt:
+      - "{value}"
+""")
+
+    with pytest.raises(ComposeConverterError) as exc_info:
+        convert_compose_to_helm_values(compose_path)
+
+    assert "Invalid 'no-new-privileges' value" in str(exc_info.value)
+
+
+def test_converts_no_new_privileges_with_space_after_separator(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    security_opt:
+      - "no-new-privileges: true"
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert (
+        result["services"]["my-service"]["securityContext"]["allowPrivilegeEscalation"]
+        is False
+    )
 
 
 def test_rejects_non_seccomp_security_opt_alongside_seccomp(
