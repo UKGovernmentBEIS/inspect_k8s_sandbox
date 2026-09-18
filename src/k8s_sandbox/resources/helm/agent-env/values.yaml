@@ -7,7 +7,9 @@ global:
 # --  Domains the agent environment may reach. Egress is restricted to ports
 # 80/443 and the request identity must match an entry (TLS SNI on 443, HTTP Host
 # on 80). Use allowDomainsPorts to open other ports. Wildcard entries require
-# Cilium >= 1.18.
+# Cilium >= 1.18. A "*" entry means the whole internet and is rendered as the
+# Cilium "world" entity rather than a wildcard FQDN pattern, which would claim
+# every name resolved on the node and revoke other sandboxes' domain egress.
 # @default -- Empty list (no internet access)
 allowDomains: []
 # - "pypi.org"

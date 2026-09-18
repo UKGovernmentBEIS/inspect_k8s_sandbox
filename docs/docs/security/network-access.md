@@ -59,4 +59,8 @@ evals.
     internet access (including the ability to use DNS to exfiltrate data).
 
     To allow **all** DNS queries and **all** internet access, set
-    `allowDomains: ["*"]` or `allowEntities: "all"` in the `values.yaml` file.
+    `allowDomains: ["*"]` or `allowEntities: "all"` in the `values.yaml` file. Both
+    render as a Cilium entity grant rather than a wildcard `toFQDNs` pattern, so an
+    unrestricted sandbox cannot disturb the FQDN policy of a sandbox that names
+    domains (see
+    [FQDN identity contention](../design/limitations.md#fqdn-identity-contention)).

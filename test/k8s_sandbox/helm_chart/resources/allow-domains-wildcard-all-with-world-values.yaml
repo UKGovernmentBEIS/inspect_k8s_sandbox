@@ -1,0 +1,9 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+# The shape a caller produces for an unrestricted sandbox: the whole internet named
+# twice, once as a domain wildcard and once as the entity that actually expresses it.
+allowDomains:
+  - "*"
+allowEntities:
+  - "world"

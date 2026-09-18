@@ -708,7 +708,7 @@ def test_allow_domains_ports_rejects_unlisted_scope_domain(
         )
 
 
-def test_allow_domains_wildcard_all_skips_identity_enforcement(
+def test_allow_domains_wildcard_all_becomes_a_world_entity_grant(
     chart_dir: Path, test_resources_dir: Path
 ) -> None:
     documents = _run_helm_template(
@@ -720,12 +720,51 @@ def test_allow_domains_wildcard_all_skips_identity_enforcement(
         for cnp in _get_documents(documents, "CiliumNetworkPolicy")
         if cnp["metadata"]["name"].endswith("-sandbox-egress")
     )["spec"]["egress"]
-    fqdn_rule = next(r for r in egress if "toFQDNs" in r)
 
-    # "*" (allow all) has no valid serverNames form, so no identity-enforcing
-    # toPorts is emitted -- egress to all resolved IPs is permitted on all ports.
-    assert [m["matchPattern"] for m in fqdn_rule["toFQDNs"]] == ["*"]
-    assert "toPorts" not in fqdn_rule
+    # A `matchPattern: "*"` toFQDNs selector claims every name any sandbox on the
+    # node resolves, re-allocating the shared per-IP identity and permanently
+    # breaking egress for sandboxes that named a specific domain. "*" is the
+    # `world` entity, so render it as one: the grant is unchanged and no FQDN
+    # selector exists to evict anyone.
+    assert [r for r in egress if "toFQDNs" in r] == []
+    assert [r for r in egress if "toEntities" in r] == [{"toEntities": ["world"]}]
+
+    # DNS still resolves any name, or the grant would be unusable.
+    dns = [
+        entry["matchPattern"]
+        for rule in egress
+        for tp in rule.get("toPorts", [])
+        for entry in (tp.get("rules", {}) or {}).get("dns", []) or []
+    ]
+    assert "*" in dns
+
+
+def test_allow_domains_wildcard_all_with_world_entity_grants_world_once(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        test_resources_dir / "allow-domains-wildcard-all-with-world-values.yaml",
+    )
+
+    egress = next(
+        cnp
+        for cnp in _get_documents(documents, "CiliumNetworkPolicy")
+        if cnp["metadata"]["name"].endswith("-sandbox-egress")
+    )["spec"]["egress"]
+
+    # Naming the whole internet twice must not produce two grants, and must still
+    # produce no toFQDNs selector.
+    assert [r for r in egress if "toFQDNs" in r] == []
+    assert [r for r in egress if "toEntities" in r] == [{"toEntities": ["world"]}]
+
+    dns = [
+        entry["matchPattern"]
+        for rule in egress
+        for tp in rule.get("toPorts", [])
+        for entry in (tp.get("rules", {}) or {}).get("dns", []) or []
+    ]
+    assert dns.count("*") == 1
 
 
 def test_service_args_render_as_a_list(

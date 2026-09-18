@@ -102,6 +102,25 @@ Therefore, when an agent tries to access a blocked resource via a client like `w
 We recommend that any tools you define or use pass the `timeout` parameter (e.g.
 `timeout=60`) in case the model runs a command that doesn't have a built-in timeout.
 
+## Overlapping `allowDomains` patterns on one node can revoke egress { #fqdn-identity-contention }
+
+Cilium stores one security identity per resolved IP per node, labelled from the
+`toFQDNs` patterns that claimed the name. Every claim re-allocates that identity, and
+only the claiming Pod's BPF policy map is rewritten for the new number. A sandbox that
+is still running therefore keeps the old identity and its egress to that name starts
+being dropped with `POLICY_DENIED`, even though DNS still resolves. Its own subsequent
+lookups do not recover it, because the name is already in the node's DNS cache and so
+produces no change to reclaim the identity with.
+
+Two sandboxes only contend when their patterns differ but match the same name — for
+example `*.example.com` in one release and `files.example.com` in another. Identical
+patterns share one claim and are safe, and `allowDomains: ["*"]` is rendered as a
+`world` entity rather than a wildcard pattern precisely so that an unrestricted
+sandbox cannot contend with every named one.
+
+If concurrent releases on the same cluster need the same host, give them the same
+`allowDomains` spelling, or use `allowCIDR`, which pins no name.
+
 
 ## Reverse DNS lookups aren't supported
 

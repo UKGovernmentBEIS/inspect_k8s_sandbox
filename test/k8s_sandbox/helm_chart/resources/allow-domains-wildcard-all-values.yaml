@@ -1,7 +1,8 @@
 services:
   default:
     image: "python:3.12-bookworm"
-# "*" means allow all domains; the chart must not emit serverNames (which has no
-# allow-all form and would be rejected by Cilium's CRD validation).
+# "*" means allow all domains, which is the `world` entity: the chart must render it
+# as one and emit no toFQDNs selector, because a `matchPattern: "*"` selector claims
+# every name resolved on the node and evicts other sandboxes' FQDN identities.
 allowDomains:
   - "*"

@@ -26,6 +26,13 @@
   a failed `ExecResult` rather than raised, so a caller that probes with a user and
   falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
   user that does not exist still raises.
+- Fix a sandbox with a named `allowDomains` list permanently losing egress to those
+  domains — `POLICY_DENIED` on every connection while DNS still resolved — when a
+  sandbox using `allowDomains: ["*"]` ran on the same node. `allowDomains: ["*"]` now
+  renders as a Cilium `world` entity grant, which permits the same traffic without
+  claiming every name resolved on the node. Concurrent releases whose `allowDomains`
+  patterns differ but match the same name (e.g. `*.example.com` and
+  `files.example.com`) can still contend; see Limitations in the docs.
 
 ## 2026-08-12 0.13.0
 

@@ -20,6 +20,22 @@ spec:
     matchLabels:
       io.kubernetes.pod.namespace: {{ .Release.Namespace }}
       {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
+  {{- /* `allowDomains: ["*"]` is a whole-internet grant, and a toFQDNs selector is
+       the wrong way to express it. Cilium keeps one security identity per resolved
+       IP per node, labelled from the FQDN selectors that claimed the name; a
+       `matchPattern: "*"` selector claims every name every sandbox on the node
+       resolves, and each claim re-allocates that identity. A sandbox that is still
+       running keeps the previous identity number in its BPF policy map, so it loses
+       egress to the name for the rest of its life. Render the grant as the `world`
+       entity instead: it pins no IP, so it allocates no FQDN identity and cannot
+       disturb a scoped sandbox's. */}}
+  {{- $allowAllDomains := has "*" .Values.allowDomains }}
+  {{- $entities := .Values.allowEntities | default list }}
+  {{- $worldGranted := or (has "all" $entities) (has "world" $entities) }}
+  {{- if and $allowAllDomains (not $worldGranted) }}
+  {{- $entities = append $entities "world" }}
+  {{- $worldGranted = true }}
+  {{- end }}
   egress:
     - toEndpoints:
       - matchLabels:
@@ -38,7 +54,7 @@ spec:
               {{- range .Values.allowDomains }}
               - matchPattern: "{{ . }}"
               {{- end }}
-              {{- if or (has "all" .Values.allowEntities) (has "world" .Values.allowEntities) }}
+              {{- if and $worldGranted (not $allowAllDomains) }}
               - matchPattern: "*"
               {{- end }}
     - toEndpoints:
@@ -56,14 +72,11 @@ spec:
     {{- fail (printf "allowDomainsPorts: domain %q (port %v) must also appear in allowDomains" $p.domain $p.port) }}
     {{- end }}
     {{- end }}
+    {{- if not $allowAllDomains }}
     - toFQDNs:
     {{- range .Values.allowDomains }}
       - matchPattern: "{{ . }}"
     {{- end }}
-      {{- if has "*" .Values.allowDomains }}
-      # allowDomains includes "*" (allow all): identity enforcement is moot and
-      # serverNames has no allow-all form, so all resolved IPs are permitted.
-      {{- else }}
       # Enforce the request identity on the pinned IPs (TLS SNI on 443, HTTP Host
       # on 80) so a pinned IP cannot be reused to reach a different host. Host is a
       # case-insensitive anchored regex built from the glob. Wildcard SNI (443)
@@ -98,7 +111,6 @@ spec:
           {{- end }}
           {{- end }}
         {{- end }}
-      {{- end }}
     {{- /* Extra ports with a domain are scoped to that domain only, via their own rule. */}}
     {{- range $p := .Values.allowDomainsPorts }}
     {{- if $p.domain }}
@@ -111,9 +123,10 @@ spec:
     {{- end }}
     {{- end }}
     {{- end }}
-    {{- with .Values.allowEntities }}
+    {{- end }}
+    {{- if $entities }}
     - toEntities:
-      {{- toYaml . | nindent 6 }}
+      {{- toYaml $entities | nindent 6 }}
     {{- end }}
     {{- with .Values.allowCIDR }}
     - toCIDR:
