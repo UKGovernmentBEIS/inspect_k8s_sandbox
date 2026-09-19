@@ -20,6 +20,7 @@
   nothing in this chart used it, but a deployment that created its own governing
   Service to reach individual pods by name must now use the pod IP.
 
+- Cancelling a sandbox operation (e.g. an eval timing out or being interrupted) now closes its connection and waits for its worker to finish, instead of leaving a thread blocked on the pod. Previously that thread held a slot in the shared pod-operation pool so the next operation could not start, kept the process from exiting, and could write into a `read_file` destination that had already been closed (`ValueError: write to closed file`).
 - **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
   filesystem with only `NET_BIND_SERVICE`. A custom `corednsImage` must run under that
   context; set the new `corednsSecurityContext` if it cannot. The default image moves
