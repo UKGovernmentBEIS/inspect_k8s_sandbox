@@ -178,7 +178,9 @@ def check_for_pod_restart(pod: PodInfo) -> None:
             (treated as a permanent misconfiguration).
     """
     api = k8s_client(pod.context_name)
-    snapshot = read_pod(api, name=pod.name, namespace=pod.namespace)
+    snapshot = read_pod(
+        api, name=pod.name, namespace=pod.namespace, request_timeout=API_TIMEOUT
+    )
     if snapshot.uid != pod.uid:
         # Capture the new pod's restart count for the default container so the
         # caller can refresh its full cached identity atomically.

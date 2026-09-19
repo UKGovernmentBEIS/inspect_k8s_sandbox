@@ -10,7 +10,9 @@ and can still write into a destination its caller has already disposed
 
 import asyncio
 import threading
+import time
 
+import anyio
 import pytest
 
 from k8s_sandbox._pod.executor import PodOpExecutor
@@ -108,3 +110,48 @@ async def test_a_worker_that_never_wakes_does_not_block_the_caller_forever(
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(task, timeout=5)
     never_wakes.set()
+
+
+async def test_settle_survives_cancellation_from_an_anyio_cancel_scope(
+    one_worker_executor: PodOpExecutor,
+) -> None:
+    """inspect_ai callers cancel via anyio scopes, not bare task.cancel().
+
+    anyio's asyncio backend re-delivers cancellation at every await until the
+    scope exits, so an unshielded settle is cancelled instantly and the worker
+    is abandoned after all -- exactly what the settle exists to prevent.
+    """
+    transport = _FakeTransport()
+    finished = threading.Event()
+
+    def operation() -> None:
+        transport.block_until_released(timeout=10)
+        finished.set()
+
+    with anyio.move_on_after(0.1):
+        await one_worker_executor.queue_operation(operation, on_cancel=transport.close)
+
+    assert transport.closed, "the cancelling caller must close the transport"
+    assert finished.is_set(), "the worker must settle under a cancel scope too"
+
+
+async def test_cancelling_an_operation_with_no_transport_unwinds_immediately(
+    one_worker_executor: PodOpExecutor,
+) -> None:
+    """No transport means nothing can wake the worker: waiting is a pure tax.
+
+    Such operations (the pod-restart check) also write to no caller-owned
+    destination, so there is nothing to settle for; the caller must not pay
+    the settle bound (default 30s) for them.
+    """
+    release = threading.Event()
+    task = asyncio.create_task(
+        one_worker_executor.queue_operation(lambda: release.wait(timeout=10))
+    )
+    await asyncio.sleep(0.1)
+    started = time.monotonic()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert time.monotonic() - started < 1.0, "no-transport cancel must not settle"
+    release.set()
