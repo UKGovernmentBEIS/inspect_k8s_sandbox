@@ -31,6 +31,11 @@ _KEEPALIVE_INTERVAL_SECONDS = 30
 # MiB) make the kubelet/API-server/TLS layer reset the connection
 # (ConnectionResetError / ssl.SSLEOFError), so stdin is written in chunks.
 _STDIN_CHUNK_SIZE = 1024**2  # 1 MiB
+# How long a worker blocks in one `WSClient.update()` poll while it is enforcing a
+# deadline. Between polls it checks the deadline; the poll itself is still woken
+# early by data or by `close_transport()`, so this only bounds how late a deadline
+# can be noticed, not how long a live stream waits.
+TRANSPORT_POLL_SECONDS = 1.0
 
 logger = logging.getLogger(__name__)
 
