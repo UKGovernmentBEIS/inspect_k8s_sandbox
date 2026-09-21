@@ -82,12 +82,29 @@ class _ResourceQuotaModifiedError(Exception):
     pass
 
 
+def _is_allowed_null_value(parent_path: str, key: str) -> bool:
+    """Return True for nulls that Helm should treat as key deletion.
+
+    `services.<name>.command: null` unsets the chart-default entrypoint so a
+    compose `command:` without `entrypoint:` uses the image ENTRYPOINT.
+    """
+    return (
+        key == "command"
+        and parent_path.startswith("services.")
+        and parent_path.count(".") == 1
+    )
+
+
 def validate_no_null_values(values: dict[str, Any], source_description: str) -> None:
     """Validate that the values dict does not contain any null values.
 
     Helm filters out null values from maps during template processing, which can
     cause unexpected behavior. This function checks for null values and raises an
     error with instructions to replace them with empty objects.
+
+    An exception is `services.<name>.command: null`, which is Helm's documented
+    way to delete the chart-default entrypoint (`tail -f /dev/null` on the
+    `default` service) so the image ENTRYPOINT is used.
 
     Args:
         values: The values dictionary to validate.
@@ -106,6 +123,8 @@ def validate_no_null_values(values: dict[str, Any], source_description: str) -> 
             for key, value in obj.items():
                 current_path = f"{path}.{key}" if path else key
                 if value is None:
+                    if _is_allowed_null_value(path, key):
+                        continue
                     null_paths.append(current_path)
                 else:
                     null_paths.extend(find_null_paths(value, current_path))

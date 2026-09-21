@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 import k8s_sandbox
+from k8s_sandbox._helm import validate_no_null_values
 from k8s_sandbox.compose._converter import (
     ComposeConverterError,
     convert_compose_to_helm_values,
@@ -173,6 +174,7 @@ services:
     result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["args"] == ["foo"]
+    assert result["services"]["my-service"]["command"] is None
 
 
 def test_converts_command_with_spaces(tmp_compose: TmpComposeFixture) -> None:
@@ -185,6 +187,7 @@ services:
     result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["args"] == ["foo", "bar"]
+    assert result["services"]["my-service"]["command"] is None
 
 
 def test_converts_command_list(tmp_compose: TmpComposeFixture) -> None:
@@ -200,6 +203,105 @@ services:
     result = convert_compose_to_helm_values(compose_path)
 
     assert result["services"]["my-service"]["args"] == ["foo", "bar", "baz"]
+    assert result["services"]["my-service"]["command"] is None
+
+
+def test_command_without_entrypoint_unsets_chart_default_command(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # Chart values.yaml sets services.default.command to ["tail", "-f", "/dev/null"].
+    # A null deletes that key so the image ENTRYPOINT is used (compose semantics).
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: busybox:1.37
+    command: ["sh", "-c", "touch /tmp/i-ran && tail -f /dev/null"]
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["default"]["command"] is None
+    assert result["services"]["default"]["args"] == [
+        "sh",
+        "-c",
+        "touch /tmp/i-ran && tail -f /dev/null",
+    ]
+
+
+def test_command_with_entrypoint_keeps_explicit_helm_command(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: busybox:1.37
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["echo hello"]
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["default"]["command"] == ["/bin/sh", "-c"]
+    assert result["services"]["default"]["args"] == ["echo hello"]
+
+
+def test_entrypoint_only_does_not_emit_null_command(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: busybox:1.37
+    entrypoint: ["/bin/sh"]
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["default"]["command"] == ["/bin/sh"]
+    assert "args" not in result["services"]["default"]
+
+
+def test_command_null_survives_values_plumbing(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    # ComposeValuesSource validates converted values before writing the Helm
+    # values file. `command: null` must not be rejected, and must dump as YAML null
+    # so Helm can delete the chart default.
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: busybox:1.37
+    command: ["sh", "-c", "touch /tmp/i-ran && tail -f /dev/null"]
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+    dumped = yaml.dump(result, sort_keys=False)
+
+    validate_no_null_values(result, f"compose file {compose_path}")
+    assert "command: null" in dumped
+
+
+def test_command_null_output_validates_against_chart_schema(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  default:
+    image: busybox:1.37
+    command: ["sh", "-c", "touch /tmp/i-ran && tail -f /dev/null"]
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    schema_path = (
+        Path(k8s_sandbox.__file__).parent
+        / "resources"
+        / "helm"
+        / "agent-env"
+        / "values.schema.json"
+    )
+    schema = json.loads(schema_path.read_text())
+    jsonschema.validate({**result, "global": {}}, schema)
 
 
 def test_converts_working_dir(tmp_compose: TmpComposeFixture) -> None:

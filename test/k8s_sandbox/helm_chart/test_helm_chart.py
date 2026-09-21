@@ -31,6 +31,12 @@ def test_default_chart(chart_dir: Path) -> None:
     assert services[0]["spec"]["template"]["metadata"]["labels"][
         "aisi.gov.uk/k8s-sandbox-version"
     ] == _chart_version(chart_dir)
+    default_container = next(
+        c
+        for c in services[0]["spec"]["template"]["spec"]["containers"]
+        if c["name"] == "default"
+    )
+    assert default_container["command"] == ["tail", "-f", "/dev/null"]
 
 
 def test_additional_resources(chart_dir: Path, test_resources_dir: Path) -> None:
@@ -774,6 +780,27 @@ def test_service_args_render_as_a_list(
     # four the caller asked for, so assert on the parsed list, not a substring.
     assert container["args"] == ["setarch", "-R", "/bin/echo", "hello"]
     assert container["command"] == ["/bin/sh", "-c"]
+
+
+def test_service_command_null_omits_entrypoint(
+    chart_dir: Path, test_resources_dir: Path
+) -> None:
+    # Compose `command:` without `entrypoint:` is converted to `command: null`
+    # plus `args`. Helm must delete the chart-default `tail -f /dev/null` so the
+    # image ENTRYPOINT runs with the user's args as CMD.
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / "service-command-null-values.yaml"
+    )
+
+    pod_spec = _get_documents(documents, "StatefulSet")[0]["spec"]["template"]["spec"]
+    container = next(c for c in pod_spec["containers"] if c["name"] == "default")
+
+    assert "command" not in container
+    assert container["args"] == [
+        "sh",
+        "-c",
+        "touch /tmp/i-ran && tail -f /dev/null",
+    ]
 
 
 def _run_helm_template(
