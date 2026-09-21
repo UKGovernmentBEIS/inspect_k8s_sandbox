@@ -1,0 +1,16 @@
+# A release which can never become ready: no node carries this label, and no NodePool
+# declares it either, so a cluster autoscaler cannot provision one.
+services:
+  default:
+    runtimeClassName: CLUSTER_DEFAULT
+    image: "busybox:1.37.0"
+    command: ["tail", "-f", "/dev/null"]
+    nodeSelector:
+      example.com/no-such-node: "true"
+    resources:
+      limits:
+        memory: "64Mi"
+        cpu: "50m"
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
