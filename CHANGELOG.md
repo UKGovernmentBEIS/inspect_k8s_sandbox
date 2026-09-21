@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fix sandbox startup failing with `is not valid SemVer string` when Helm prints a
+  trailing newline and `semver` 3.1 or later is installed.
+
 - **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
   filesystem with only `NET_BIND_SERVICE`. A custom `corednsImage` must run under that
   context; set the new `corednsSecurityContext` if it cannot. The default image moves
