@@ -64,6 +64,19 @@ async def test_ping_on_victim(sandbox: K8sSandboxEnvironment):
     assert "1 packets transmitted, 1 received" in result.stdout
 
 
+async def test_etc_hosts_does_not_name_the_namespace(
+    sandbox: K8sSandboxEnvironment,
+):
+    # The namespace often names what is being evaluated, so it must not reach the
+    # sandbox. The kubelet only writes the FQDN which carries it when the pod has a
+    # subdomain (see serviceName in templates/services.yaml).
+    hosts = await sandbox.exec(["cat", "/etc/hosts"], timeout=10)
+    fqdn = await sandbox.exec(["hostname", "-f"], timeout=10)
+
+    assert ".svc.cluster.local" not in hosts.stdout
+    assert ".svc.cluster.local" not in fqdn.stdout
+
+
 async def test_non_existent_service(sandbox: K8sSandboxEnvironment):
     result = await sandbox.exec(
         ["curl", "-sI", "http://non-existent-service"],
