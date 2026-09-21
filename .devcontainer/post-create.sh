@@ -14,6 +14,16 @@ if [ "$CLUSTER" = true ]; then
   # github actions runner has 2 cpus, 8G memory
   minikube start --addons=gvisor --cni bridge --container-runtime=containerd --memory=4g
 
+  GVISOR_RELEASE=20260817.0
+  for gvisor_binary in runsc containerd-shim-runsc-v1; do
+    echo "Installing gVisor $GVISOR_RELEASE $gvisor_binary..."
+    curl -L --fail -o "$gvisor_binary" \
+      "https://storage.googleapis.com/gvisor/releases/release/${GVISOR_RELEASE}/x86_64/${gvisor_binary}"
+    chmod +x "$gvisor_binary"
+    minikube cp "$gvisor_binary" "/usr/bin/${gvisor_binary}"
+    rm "$gvisor_binary"
+  done
+
   # Add the containerd RuntimeClass to the cluster.
   kubectl apply -f - <<EOF
 apiVersion: node.k8s.io/v1
