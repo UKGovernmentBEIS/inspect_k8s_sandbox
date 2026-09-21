@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
+  `read_file()` / `write_file()`, for deployments where that per-op
+  `read_namespaced_pod` call becomes a load problem on the Kubernetes API server at
+  high concurrency. Defaults to enabled, so behaviour is unchanged unless set.
+  `exec()` always performs the check regardless.
+- `network_mode: none` isolation is now enforced by omitting any ingress allow for the
+  service rather than an unconditional ingress deny. Observable behaviour is unchanged
+  for a chart used on its own, but a network policy layered on top of this chart (e.g.
+  to allow a specific port) now takes effect instead of being silently shadowed.
 - Sandbox pods no longer see their Kubernetes namespace. The kubelet was writing the
   pod's `<pod>.<subdomain>.<namespace>.svc.cluster.local` FQDN into `/etc/hosts`, so an
   agent under evaluation could read whatever the namespace name gives away (e.g. the
