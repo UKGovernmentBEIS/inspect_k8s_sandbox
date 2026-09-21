@@ -14,6 +14,9 @@ if [ "$CLUSTER" = true ]; then
   # github actions runner has 2 cpus, 8G memory
   minikube start --addons=gvisor --cni bridge --container-runtime=containerd --memory=4g
 
+  echo "Waiting for the gvisor addon to finish..."
+  timeout 300 sh -c 'until kubectl -n kube-system logs gvisor 2>/dev/null | grep -q "gvisor successfully enabled in cluster"; do sleep 2; done'
+
   GVISOR_RELEASE=20260817.0
   for gvisor_binary in runsc containerd-shim-runsc-v1; do
     echo "Installing gVisor $GVISOR_RELEASE $gvisor_binary..."
