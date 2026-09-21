@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `network_mode: none` isolation is now enforced by omitting any ingress allow for the
+  service rather than an unconditional ingress deny. Observable behaviour is unchanged
+  for a chart used on its own, but a network policy layered on top of this chart (e.g.
+  to allow a specific port) now takes effect instead of being silently shadowed.
 - Sandbox pods no longer see their Kubernetes namespace. The kubelet was writing the
   pod's `<pod>.<subdomain>.<namespace>.svc.cluster.local` FQDN into `/etc/hosts`, so an
   agent under evaluation could read whatever the namespace name gives away (e.g. the
