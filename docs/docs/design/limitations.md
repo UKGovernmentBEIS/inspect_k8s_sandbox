@@ -58,8 +58,8 @@ the eval will fail the sample immediately on detection, even if `exec()` has not
     the cases where restarts are not desirable. However, this introduces some
     complexities:
 
-    1. The `--wait` flag passed to `helm install` does not wait for Pods belonging to
-    Jobs to be in a Running state. We'd have to implement our own waiting mechanism,
+    1. The readiness wait does not wait for Pods belonging to Jobs to be created
+    (nor did the `--wait` flag that preceded it). We'd have to implement our own waiting mechanism,
     possibly as a Helm post-install hook to avoid coupling the Python code to the Helm
     chart.
 
@@ -75,10 +75,9 @@ the eval will fail the sample immediately on detection, even if `exec()` has not
 
     What about bare Pods?
 
-    When using bare Pods (i.e. not managed by a workload controller),
-    `helm install --wait` will wait for all Pods to be in a Running state. However, if
-    a Pod enters a failed state, it will not be restarted and `helm install` will wait
-    indefinitely.
+    When using bare Pods (i.e. not managed by a workload controller), the readiness
+    wait covers them like any other Pod. However, if a Pod enters a failed state it
+    will not be restarted, and the install will wait until the timeout.
 
 
 ## Denied network requests behaviour
