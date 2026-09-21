@@ -243,7 +243,20 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         sandbox: K8sSandboxEnvironment = cast(
             K8sSandboxEnvironment, next(iter(environments.values()))
         )
-        await HelmReleaseManager.get_instance().uninstall(sandbox.release, quiet=True)
+        try:
+            await HelmReleaseManager.get_instance().uninstall(
+                sandbox.release, quiet=True
+            )
+        except Exception as e:
+            # Inspect turns an exception raised here into a sample error, which would
+            # discard a sample that had otherwise succeeded. The release stays tracked
+            # for uninstall_all().
+            log_warn(
+                "Failed to uninstall Helm release during sample cleanup; it will be "
+                "retried at the end of the eval.",
+                release=sandbox.release.release_name,
+                error=e,
+            )
 
     async def exec(
         self,

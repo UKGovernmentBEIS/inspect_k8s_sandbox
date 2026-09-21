@@ -123,7 +123,20 @@ def test_read_pod_requests_raw_json_and_parses():
     assert snapshot.uid == "uid-42"
 
 
-def test_list_pods_parses_all_items():
+@pytest.mark.parametrize(
+    ("options", "forwarded"),
+    [
+        pytest.param(
+            {}, {"resource_version": None, "_request_timeout": None}, id="default"
+        ),
+        pytest.param(
+            {"resource_version": "0", "request_timeout": (5, 30)},
+            {"resource_version": "0", "_request_timeout": (5, 30)},
+            id="watch-cache",
+        ),
+    ],
+)
+def test_list_pods_parses_all_items(options: dict, forwarded: dict):
     # Arrange
     api = MagicMock()
     api.list_namespaced_pod.return_value = _raw_response(
@@ -131,11 +144,11 @@ def test_list_pods_parses_all_items():
     )
 
     # Act
-    snapshots = list_pods(api, "ns", label_selector="app=x")
+    snapshots = list_pods(api, "ns", label_selector="app=x", **options)
 
     # Assert
     api.list_namespaced_pod.assert_called_once_with(
-        "ns", label_selector="app=x", _preload_content=False
+        "ns", label_selector="app=x", _preload_content=False, **forwarded
     )
     assert [s.uid for s in snapshots] == ["a", "b"]
 
@@ -145,3 +158,30 @@ def test_list_pods_handles_empty_items():
     api.list_namespaced_pod.return_value = _raw_response({})
 
     assert list_pods(api, "ns", label_selector="app=x") == []
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        pytest.param(
+            {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]},
+            (True, "Running"),
+            id="ready",
+        ),
+        pytest.param(
+            {"phase": "Pending", "conditions": [{"type": "Ready", "status": "False"}]},
+            (False, "Pending"),
+            id="not-ready",
+        ),
+        pytest.param({}, (False, None), id="kubelet-has-not-reported-yet"),
+    ],
+)
+def test_list_pods_parses_readiness(status: dict, expected: tuple[bool, str | None]):
+    api = MagicMock()
+    api.list_namespaced_pod.return_value = _raw_response(
+        {"items": [_pod_body(uid="p") | {"status": status}]}
+    )
+
+    pod = list_pods(api, "ns", label_selector="app=x")[0]
+
+    assert (pod.ready, pod.phase) == expected
