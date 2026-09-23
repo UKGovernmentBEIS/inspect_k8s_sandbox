@@ -3,14 +3,20 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Callable, TypeVar
 
+import anyio
 from inspect_ai.util import concurrency
 
-from k8s_sandbox._logger import log_debug
+from k8s_sandbox._logger import log_debug, log_warn
 
 T = TypeVar("T")
+
+# How long a cancelled operation's worker is given to finish once its transport
+# has been closed. Waking it is near-instant when the socket is live; this is
+# the ceiling for a transport that does not wake at all.
+SETTLE_AFTER_CANCEL_SECONDS = 30.0
 
 
 class PodOpExecutor:
@@ -72,7 +78,9 @@ class PodOpExecutor:
             )
         return cls._instance
 
-    async def queue_operation(self, callable: Callable[[], T]) -> T:
+    async def queue_operation(
+        self, callable: Callable[[], T], on_cancel: Callable[[], None] | None = None
+    ) -> T:
         """
         Queue a synchronous pod operation to run asynchronously and return the result.
 
@@ -89,6 +97,58 @@ class PodOpExecutor:
             # worker thread, so pass it directly to preserve Inspect
             # sandbox config overrides
             context = contextvars.copy_context()
-            return await asyncio.get_event_loop().run_in_executor(
-                self._executor, lambda: context.run(callable)
+            worker = self._executor.submit(lambda: context.run(callable))
+            try:
+                return await asyncio.wrap_future(worker)
+            except asyncio.CancelledError:
+                # Cancelling the await does not stop the worker: it is a thread
+                # blocked on a socket read that may never return. Left alone it
+                # holds a pool slot the next operation needs, keeps the process
+                # from exiting (ThreadPoolExecutor joins its threads at
+                # interpreter exit), and may still write into a destination the
+                # caller is about to dispose. So wake it by closing its
+                # transport, then wait for it to finish before unwinding.
+                # Without a transport to close there is nothing to wake the
+                # worker with: waiting would tax the cancelling caller for the
+                # whole settle bound and change nothing, and such operations
+                # (e.g. the pod-restart check) write to no caller-owned
+                # destination, so there is nothing to settle FOR.
+                if on_cancel is not None:
+                    on_cancel()
+                    await self._settle(worker)
+                raise
+
+    @staticmethod
+    async def _settle(worker: Future[T]) -> None:
+        """Wait for a cancelled operation's worker to finish, within a bound.
+
+        The caller is unwinding from cancellation, and under an anyio cancel
+        scope (how inspect_ai cancels, e.g. `anyio.move_on_after` around a
+        transcript drain) the backend re-delivers that cancellation at every
+        await until the scope exits -- an unshielded wait here is cancelled
+        immediately and the worker is abandoned after all. Shield the wait;
+        the settle bound is what keeps it finite.
+        """
+        with anyio.move_on_after(SETTLE_AFTER_CANCEL_SECONDS, shield=True) as scope:
+            try:
+                await asyncio.wrap_future(worker)
+            except Exception as e:
+                # The worker finished, which is all settling needs. Closing its
+                # transport usually makes it finish by raising (BrokenPipeError
+                # wrapped in PodError, K8sError, ...); the caller is unwinding
+                # with CancelledError and will never see that exception, so
+                # record what was dropped rather than swallowing it silently.
+                log_debug(
+                    "Cancelled pod operation's worker finished by raising; "
+                    "dropping its exception in favour of the cancellation.",
+                    error=repr(e),
+                )
+        if scope.cancelled_caught or not worker.done():
+            # The transport did not wake it. Nothing further is available from
+            # here, and blocking the event loop would spread one stuck socket
+            # to the whole eval; say so where an operator can see it.
+            log_warn(
+                "Pod operation did not settle after its transport was closed; "
+                "its worker thread is still running.",
+                settle_timeout=SETTLE_AFTER_CANCEL_SECONDS,
             )
