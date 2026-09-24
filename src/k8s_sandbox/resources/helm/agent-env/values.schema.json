@@ -75,6 +75,14 @@
     "corednsSecurityContext": {
       "type": "object"
     },
+    "corednsUpstream": {
+      "type": "array",
+      "description": "Interpolated into the CoreDNS Corefile, so restricted to IP addresses.",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F.:]+$"
+      }
+    },
     "imagePullSecrets": {
       "type": "array",
       "items": {

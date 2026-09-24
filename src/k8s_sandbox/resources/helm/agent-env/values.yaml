@@ -65,6 +65,13 @@ corednsSecurityContext:
   runAsUser: 65532
   seccompProfile:
     type: RuntimeDefault
+# -- DNS servers (IP addresses) the CoreDNS sidecar forwards to, e.g. the cluster DNS
+# Service IP. Set it for a runtime that cannot mount a single file over
+# `/etc/resolv.conf`, such as Kata Containers: the pod then uses `dnsPolicy: None`
+# with the sidecar as its only nameserver. Init containers run before the sidecar
+# starts, so in that mode they cannot resolve names.
+# @default -- Empty list (forward to the node's cluster DNS via the kubelet's resolv.conf)
+corednsUpstream: []
 # -- A collection of services to deploy within the agent environment. A service can
 # connect to another service using DNS, e.g. `http://nginx:80`.
 # @default -- see [values.yaml](./values.yaml)
