@@ -67,7 +67,7 @@ corednsSecurityContext:
     type: RuntimeDefault
 # -- DNS servers (IP addresses) the CoreDNS sidecar forwards to, e.g. the cluster DNS
 # Service IP. Set it for a runtime that cannot mount a single file over
-# `/etc/resolv.conf`, such as Kata Containers: the pod then uses `dnsPolicy: None`
+# `/etc/resolv.conf` with `subPath`: the pod then uses `dnsPolicy: None`
 # with the sidecar as its only nameserver. Init containers run before the sidecar
 # starts, so in that mode they cannot resolve names.
 # @default -- Empty list (forward to the node's cluster DNS via the kubelet's resolv.conf)
