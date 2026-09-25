@@ -65,6 +65,10 @@ corednsSecurityContext:
   runAsUser: 65532
   seccompProfile:
     type: RuntimeDefault
+# -- Containers added, as written, to every service's pod beside the service and
+# CoreDNS containers, e.g. a relay a runtime needs in the pod. Each carries its own
+# `securityContext`: none of the service's hardening applies to it.
+extraContainers: []
 # -- DNS servers (IP addresses) the CoreDNS sidecar forwards to, e.g. the cluster DNS
 # Service IP. Set it for a runtime that cannot mount a single file over
 # `/etc/resolv.conf` with `subPath`: the pod then uses `dnsPolicy: None`

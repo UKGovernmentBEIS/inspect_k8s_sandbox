@@ -2,12 +2,13 @@
 
 ## Unreleased
 
+- A new `extraContainers` value adds containers, as written, to every service's pod,
+  for a runtime that needs a helper in the pod beside the service.
 - The CoreDNS sidecar's `Corefile` is now mounted as a directory rather than with
   `subPath`. A new `corednsUpstream` value (a list of DNS server IPs, e.g. the cluster
   DNS Service IP) replaces the `/etc/resolv.conf` `subPath` mount with
   `dnsPolicy: None`, for container runtimes that cannot mount a single file with
   `subPath`. Init containers cannot resolve names in that mode.
-
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
   `read_file()` / `write_file()`, for deployments where that per-op
   `read_namespaced_pod` call becomes a load problem on the Kubernetes API server at

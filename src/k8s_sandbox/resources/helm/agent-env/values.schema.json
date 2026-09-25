@@ -75,6 +75,16 @@
     "corednsSecurityContext": {
       "type": "object"
     },
+    "extraContainers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "image"
+        ]
+      }
+    },
     "corednsUpstream": {
       "type": "array",
       "description": "Interpolated into the CoreDNS Corefile, so restricted to IP addresses.",

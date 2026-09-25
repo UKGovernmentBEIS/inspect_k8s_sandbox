@@ -572,6 +572,30 @@ def test_coredns_security_context_can_be_overridden(chart_dir: Path) -> None:
     }
 
 
+def test_extra_containers_join_every_service_pod_as_written(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        set_str="extraContainers[0].name=relay,extraContainers[0].image=relay:1,"
+        "extraContainers[0].securityContext.runAsUser=65534",
+    )
+
+    containers = _get_documents(documents, "StatefulSet")[0]["spec"]["template"][
+        "spec"
+    ]["containers"]
+    assert [c["name"] for c in containers] == ["default", "coredns", "relay"]
+    assert containers[-1] == {
+        "name": "relay",
+        "image": "relay:1",
+        "securityContext": {"runAsUser": 65534},
+    }
+
+
+def test_extra_containers_need_a_name_and_an_image(chart_dir: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        _run_helm_template(chart_dir, set_str="extraContainers[0].name=relay")
+    assert "image is required" in exc_info.value.stderr
+
+
 @pytest.mark.parametrize(
     "values_file",
     [

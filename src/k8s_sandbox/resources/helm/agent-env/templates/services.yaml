@@ -191,6 +191,9 @@ spec:
           - name: coredns-config
             mountPath: /etc/coredns
             readOnly: true
+      {{- with $.Values.extraContainers }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
       {{- with $service.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
