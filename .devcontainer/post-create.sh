@@ -9,26 +9,39 @@ for arg in "$@"; do
 done
 
 if [ "$CLUSTER" = true ]; then
-  echo "Setting up Minikube..."
+  # One minikube profile per checkout, so several devcontainers on one host don't fight
+  # over the default "minikube" cluster. Profile names allow only [A-Za-z0-9-].
+  export MINIKUBE_PROFILE
+  MINIKUBE_PROFILE=$(basename "$PWD" | tr -c 'A-Za-z0-9-\n' '-')
+  echo "Setting up Minikube profile '${MINIKUBE_PROFILE}'..."
   minikube delete
   # github actions runner has 2 cpus, 8G memory
-  minikube start --addons=gvisor --cni bridge --container-runtime=containerd --memory=4g
+  minikube start --cni bridge --container-runtime=containerd --memory=4g
 
-  echo "Waiting for the gvisor addon to finish..."
-  timeout 300 sh -c 'until kubectl -n kube-system logs gvisor 2>/dev/null | grep -q "gvisor successfully enabled in cluster"; do sleep 2; done'
-
+  # gVisor is installed by hand rather than with the minikube addon. The addon downloads
+  # runsc from a URL that now 404s and re-appends its containerd config every time the
+  # node restarts, which breaks containerd (kubernetes/minikube#23709). Everything below
+  # lands in the node container's filesystem and survives restarts.
   GVISOR_RELEASE=20260817.0
   for gvisor_binary in runsc containerd-shim-runsc-v1; do
     echo "Installing gVisor $GVISOR_RELEASE $gvisor_binary..."
     curl -L --fail -o "$gvisor_binary" \
       "https://storage.googleapis.com/gvisor/releases/release/${GVISOR_RELEASE}/x86_64/${gvisor_binary}"
-    chmod +x "$gvisor_binary"
     minikube cp "$gvisor_binary" "/usr/bin/${gvisor_binary}"
     rm "$gvisor_binary"
   done
+  minikube cp .devcontainer/gvisor-containerd.toml /tmp/gvisor-containerd.toml
+  # minikube cp doesn't preserve the executable bit
+  minikube ssh -- sudo chmod 755 /usr/bin/runsc /usr/bin/containerd-shim-runsc-v1
+  minikube ssh -- "sudo sh -c 'cat /tmp/gvisor-containerd.toml >> /etc/containerd/config.toml && systemctl restart containerd'"
 
-  # Add the containerd RuntimeClass to the cluster.
   kubectl apply -f - <<EOF
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+handler: runsc
+---
 apiVersion: node.k8s.io/v1
 kind: RuntimeClass
 metadata:
