@@ -68,13 +68,14 @@ EOF
   echo "Installing Cilium CLI $CILIUM_CLI_VERSION $CILIUM_CLI_ARCH..."
   curl -L --fail --remote-name-all https://github.com/cilium/cilium-cli/releases/download/${CILIUM_CLI_VERSION}/cilium-linux-${CILIUM_CLI_ARCH}.tar.gz{,.sha256sum}
   sha256sum --check cilium-linux-${CILIUM_CLI_ARCH}.tar.gz.sha256sum
-  sudo tar xzvfC cilium-linux-${CILIUM_CLI_ARCH}.tar.gz /usr/local/bin
+  mkdir -p ~/.local/bin
+  tar xzvfC cilium-linux-${CILIUM_CLI_ARCH}.tar.gz ~/.local/bin
   rm cilium-linux-${CILIUM_CLI_ARCH}.tar.gz{,.sha256sum}
 
   echo "Installing Cilium..."
-  cilium install
-  cilium status --wait
-  cilium hubble enable --ui
+  ~/.local/bin/cilium install
+  ~/.local/bin/cilium status --wait
+  ~/.local/bin/cilium hubble enable --ui
 else
   echo "Skipping cluster setup (--no-cluster)"
 fi
