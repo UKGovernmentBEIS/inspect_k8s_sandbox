@@ -83,59 +83,132 @@ limitations on using gVisor versus `runc`.
     about the "lower level" OCI runtimes (like `runc` or `runsc`) which are used to
     actually run the container processes.
 
+## Service accounts and Kubernetes API access
+
+Sandbox pods do not mount a Kubernetes service-account API token by default. You can
+set `serviceAccountName` to select an externally managed ServiceAccount for cloud
+workload identity such as IRSA; provider integrations inject their own projected token
+separately. The chart does not create the account by default, so its annotations and
+RBAC can be managed independently and concurrent sandbox releases can reference it
+without Helm ownership conflicts.
+
+Set `serviceAccountCreate: true` if the chart should create the selected account. This
+retains the previous behavior, but a fixed account name cannot be owned by multiple
+concurrent Helm releases.
+
+Only opt into a Kubernetes API token when sandbox code must call the Kubernetes API:
+
+```yaml
+serviceAccountName: dedicated-sandbox-api-client
+serviceAccountCreate: false
+automountServiceAccountToken: true
+allowEntities:
+  - kube-apiserver
+```
+
+!!! danger
+
+    Enabling `automountServiceAccountToken` exposes the selected ServiceAccount's
+    Kubernetes API credentials to untrusted sandbox code. Use a dedicated,
+    least-privileged ServiceAccount and do not reuse the identity used by Inspect,
+    Helm, an operator, or another controller. API network access is controlled
+    separately; the example permits it through the built-in Cilium policy.
+
+    Concurrent samples that select the same ServiceAccount share its Kubernetes
+    identity. Scope RBAC so one sandbox cannot access another sandbox's resources
+    unless that is explicitly intended.
+
+See [Kubernetes workload security](../security/kubernetes-workloads.md) for RBAC and
+admission-control guidance.
+
 ## Internet access
+
+!!! danger
+
+    We recommend against allowing internet access, this is a common way for
+    agents to violate or bypass other sandbox restrictions.
 
 By default, containers will not be able to access the internet which is an important
 security measure when running untrusted LLM-generated code. If you wish to allow limited
 internet access, there are 3 methods, each of which influence the Cilium Network Policy.
 
-1. Populate the `allowDomains` list in your `values.yaml` with one or more Fully
+### `allowDomains`
+
+Populate the `allowDomains` list in your `values.yaml` with one or more Fully
 Qualified Domain Names. The following example list allows agents to install packages
 from a variety of sources:
 
-    ```yaml
-    services:
-      default:
-        image: ubuntu:24.04
-        command: ["tail", "-f", "/dev/null"]
-    allowDomains:
-      - "pypi.org"
-      - "files.pythonhosted.org"
-      - "bitbucket.org"
-      - "github.com"
-      - "raw.githubusercontent.com"
-      - "*.debian.org"
-      - "*.kali.org"
-      - "kali.download"
-      - "archive.ubuntu.com"
-      - "security.ubuntu.com"
-      - "mirror.vinehost.net"
-      - "*.rubygems.org"
-    ```
+```yaml
+services:
+  default:
+    image: ubuntu:24.04
+    command: ["tail", "-f", "/dev/null"]
+allowDomains: # TCP on ports 80/443 allowed on all domains
+  - "pypi.org"
+  - "files.pythonhosted.org"
+  - "bitbucket.org"
+  - "github.com"
+  - "raw.githubusercontent.com"
+  - "*.debian.org"
+  - "*.kali.org"
+  - "kali.download"
+  - "archive.ubuntu.com"
+  - "security.ubuntu.com"
+  - "mirror.vinehost.net"
+  - "*.rubygems.org"
+allowDomainsPorts:
+  # Optionally allow specific ports.
+  # For example to allow ssh cloning from github.com:
+  - port: 22
+    protocol: TCP      # One of TCP/UDP/ANY
+    domain: github.com # NOTE: must be in `allowDomains` list. If the
+                       # domain is omitted, the port is allowed for
+                       # for all domains listed.
+```
 
-    !!! note
+By default, egress is restricted to TCP on 80/443. Use `allowDomainsPorts` to enable
+access to other ports and protocols. Wildcard subdomains (e.g.  `*.aisi.org`) require cilium >= 1.18 due to
+[SNI limiting](https://docs.cilium.io/en/latest/security/policy/layer4/#limit-tls-server-name-indication-sni)
+(see Domain Fronting below).
 
-        An entry of e.g. `aisi.org` won't allow access to the subdomain of
-        `www.aisi.org`. Either also include `www.aisi.org`, or if you want to provide
-        access to all subdomains, use a wildcard: `*.aisi.org`.
+#### Domain Fronting
 
-2. Populate the `allowCIDR` list with one or more [CIDR
+[Domain Fronting](https://www.zscaler.com/blogs/security-research/analysis-domain-fronting-technique-abuse-and-hiding-cdns) can be leveraged to circumvent cillium networking constraints. In order to avoid this threat:
+
+* We [limit SNI](https://docs.cilium.io/en/latest/security/policy/layer4/#limit-tls-server-name-indication-sni) to the values in `allowDomains` for HTTPS and restrict the `Host` headers to the same list for HTTP.
+* All traffic is restricted to TCP by default. A significant consequence is HTTP/3 will be unable to use [QUIC](https://www.cloudflare.com/learning/performance/what-is-http3/). If HTTP/3 is required, allow UDP on port 443 in `allowDomainsPorts`.
+* For HTTP, a similar exploit can be achieved with `Host` header manipulation, so we also restrict this in the same way as SNI.
+* Domain fronting can still occur in extreme cases where [ECH](https://blog.cloudflare.com/handshake-encryption-endgame-an-ech-update/) is leveraged by an agent. To attempt to reduce the likelihood of this:
+    * SNI limiting prevents this for the most part. The outer SNI will need to be listed in `allowDomains` already and serve ECH requests to the alternate domain the agent is trying to reach.
+    * The ECH config will need to be either known to the agent or available on an existing `allowDomains` site.
+    * Domain fronting is mainly applicable to CDNs, but they have dedicated domains for serving these and additional checks on the decrypted inner SNI.
+    * Consequently, a restrictive `allowDomains` list should prevent Domain Fronting through ECH
+
+!!! tip
+
+    The best way to avoid this complexity is to not allow internet access at all
+
+### `allowCIDR`
+
+Populate the `allowCIDR` list with one or more [CIDR
 ranges](https://docs.cilium.io/en/stable/security/policy/language/#cidr-based). These
 are translated to `toCIDRs` entries in the Cilium Network Policy:
 
-    ```yaml
-    allowCIDR:
-      - "8.8.8.8/32"
-    ```
+```yaml
+allowCIDR:
+  - "8.8.8.8/32"
+```
 
-3. Populate the `allowEntities` list with one or more
+### `allowEntities`
+
+Populate the `allowEntities` list with one or more
 [entities](https://docs.cilium.io/en/stable/security/policy/language/#entities-based).
 These get translated to `toEntities` entries in the Cilium Network Policy:
 
-    ```yaml
-    allowEntities:
-      - "world"
-    ```
+```yaml
+allowEntities:
+  - "world"
+```
 
 ## DNS
 
@@ -158,6 +231,10 @@ services:
     additionalDnsRecords:
       - example.com
 ```
+
+Records are interpolated into the CoreDNS configuration, so they are restricted to
+letters, digits and `_ - .` (e.g. `_dmarc.example.com` is fine). Anything containing
+whitespace or other characters is rejected when the chart is installed.
 
 To achieve this, whilst maintaining support for deploying multiple instances of the same
 chart in a given namespace, a CoreDNS "sidecar" container is deployed in each service
@@ -183,6 +260,16 @@ the nameserver.
 
 Note that the CoreDNS sidecar only binds to `127.0.0.1` so won't be accessible from
 outside the Pod.
+
+The bundled sidecar image is pinned by digest and runs under a hardened security
+context: UID/GID 65532, a read-only root filesystem, RuntimeDefault seccomp, no
+privilege escalation, and no Linux capability other than `NET_BIND_SERVICE`. A custom
+`corednsImage` must be able to run under that contract, or must override
+`corednsSecurityContext` as well.
+
+`NET_BIND_SERVICE` is required rather than merely defensive: the CoreDNS binary carries
+a `cap_net_bind_service` file capability, so dropping it from the capability set stops
+the container from starting at all.
 
 CoreDNS is used over Dnsmasq for 2 reasons:
 

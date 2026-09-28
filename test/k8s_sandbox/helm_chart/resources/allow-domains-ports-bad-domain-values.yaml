@@ -1,0 +1,9 @@
+services:
+  default:
+    image: "python:3.12-bookworm"
+allowDomains:
+  - "pypi.org"
+# github.com is not in allowDomains, so scoping a port to it must be rejected.
+allowDomainsPorts:
+  - port: 22
+    domain: github.com

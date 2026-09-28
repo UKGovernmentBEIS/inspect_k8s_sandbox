@@ -4,7 +4,7 @@ import re
 import shlex
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Generator, Literal, cast, overload
 
@@ -184,8 +184,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
     async def cli_cleanup(cls, id: str | None) -> None:
         if id is not None:
             await uninstall_unmanaged_release(id)
-        else:
-            await uninstall_all_unmanaged_releases()
+        elif await uninstall_all_unmanaged_releases():
+            sys.exit(1)
 
     @classmethod
     async def sample_init(
@@ -225,8 +225,21 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             sample_uuid=sample_uuid,
             extra_values=extra_values,
         )
-        await HelmReleaseManager.get_instance().install(release)
-        return reorder_default_first(await get_sandboxes(release, resolved_config))
+        manager = HelmReleaseManager.get_instance()
+        try:
+            await manager.install(release)
+            return reorder_default_first(await get_sandboxes(release, resolved_config))
+        except Exception:
+            # Inspect does not call sample_cleanup() when sample_init() raises, and
+            # uninstall_all() does not run until the whole eval ends, so nothing else
+            # removes what Helm created. Without this, each retried sample leaves a
+            # full set of sandbox pods behind.
+            # A failed uninstall must not replace the original error (which carries the
+            # pod diagnostics), and leaves the release tracked so that uninstall_all()
+            # retries it and reports it.
+            with suppress(Exception):
+                await manager.uninstall(release, quiet=True)
+            raise
 
     @classmethod
     async def sample_cleanup(
@@ -243,7 +256,20 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         sandbox: K8sSandboxEnvironment = cast(
             K8sSandboxEnvironment, next(iter(environments.values()))
         )
-        await HelmReleaseManager.get_instance().uninstall(sandbox.release, quiet=True)
+        try:
+            await HelmReleaseManager.get_instance().uninstall(
+                sandbox.release, quiet=True
+            )
+        except Exception as e:
+            # Inspect turns an exception raised here into a sample error, which would
+            # discard a sample that had otherwise succeeded. The release stays tracked
+            # for uninstall_all().
+            log_warn(
+                "Failed to uninstall Helm release during sample cleanup; it will be "
+                "retried at the end of the eval.",
+                release=sandbox.release.release_name,
+                error=e,
+            )
 
     async def exec(
         self,
@@ -285,21 +311,13 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             return result
 
     async def write_file(self, file: str, contents: str | bytes) -> None:
-        # Write contents to a temporary file on the client system and pass the file
-        # handle.
-        with tempfile.NamedTemporaryFile("w+b") as temp_file:
-            if isinstance(contents, str):
-                temp_file.write(contents.encode("utf-8"))
-            else:
-                temp_file.write(contents)
-            temp_file.seek(0)
-            # Do not log these at error level or re-raise as enriched K8sError.
-            expected_exceptions = (PermissionError, IsADirectoryError)
-            with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
-                async for attempt in _retry():
-                    with attempt:
-                        temp_file.seek(0)
-                        await self._pod.write_file(temp_file.file, Path(file))
+        data = contents.encode("utf-8") if isinstance(contents, str) else contents
+        # Do not log these at error level or re-raise as enriched K8sError.
+        expected_exceptions = (PermissionError, IsADirectoryError)
+        with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
+            async for attempt in _retry():
+                with attempt:
+                    await self._pod.write_file(data, Path(file))
 
     @overload
     async def read_file(self, file: str, text: Literal[True] = True) -> str: ...
@@ -368,8 +386,18 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 # Whilst Inspect's trace_action will have logged the exception, log it
                 # at ERROR level here for user visibility.
                 log_error(f"Error during: {op}.", cause=e, **log_kwargs)
-                # Enrich the unexpected exception with additional context.
-                raise K8sError(f"Error during: {op}.", **log_kwargs) from e
+                # Enrich the unexpected exception with additional context. The
+                # cause's type and short message are included in the K8sError's
+                # own message so callers reading str(error) (e.g. an LLM agent
+                # reading the bash tool's error string) can distinguish a
+                # transient infra failure like PodReplacedError from
+                # destructive-class errors. The original exception remains
+                # reachable via __cause__ for callers that walk the chain.
+                raise K8sError(
+                    f"Error during: {op}.",
+                    cause=f"{type(e).__name__}: {e}",
+                    **log_kwargs,
+                ) from e
 
     @classmethod
     def config_deserialize(cls, config: dict[str, Any]) -> BaseModel:

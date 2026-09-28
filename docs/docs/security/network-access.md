@@ -1,11 +1,23 @@
 # Network Access
 
+!!! danger
+
+    We recommend against allowing internet access, this is a common way for
+    agents to violate or bypass other sandbox restrictions.
+
 It is good security practice to prevent your containers from communicating with the
 internet by default.
 
-However, some evals may require internet access (e.g. to install packages or research
-topics). The [built-in Helm chart](../helm/built-in-chart.md) allows you to specify a
-list of domains that your containers can access.
+However, some evals may require internet access (e.g. to research topics). The
+[built-in Helm chart](../helm/built-in-chart.md) allows you to specify a list of
+domains that your containers can access. Use this with care.
+
+??? tip "Internet access for dependencies"
+
+    Allowing broad internet access for installing dependencies is not
+    recommended. Where possible, use an internal mirror or artefact storage for
+    downloading packages from within your own infrastructure, or include
+    critical packages preinstalled in the docker container running the eval.
 
 ## Cilium
 

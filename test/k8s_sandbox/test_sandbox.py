@@ -2,8 +2,10 @@ import asyncio
 import logging
 import os
 import re
+import time
+from contextlib import contextmanager
 from textwrap import dedent
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Generator
 from unittest.mock import patch
 
 import pytest
@@ -49,6 +51,13 @@ async def sandbox_busybox(
     sandboxes: dict[str, K8sSandboxEnvironment],
 ) -> K8sSandboxEnvironment:
     return sandboxes["busybox"]
+
+
+@pytest_asyncio.fixture(scope="module")
+async def sandbox_busybox_runc(
+    sandboxes: dict[str, K8sSandboxEnvironment],
+) -> K8sSandboxEnvironment:
+    return sandboxes["busybox-runc"]
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -113,6 +122,21 @@ async def test_exec_with_error_via_bash(sandbox: K8sSandboxEnvironment) -> None:
     assert result.returncode == 127
     assert result.stdout == ""
     assert "command not found" in result.stderr.casefold()
+
+
+async def test_service_account_token_not_mounted(
+    sandbox: K8sSandboxEnvironment,
+) -> None:
+    result = await sandbox.exec(
+        [
+            "test",
+            "!",
+            "-e",
+            "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        ]
+    )
+
+    assert result.success
 
 
 async def test_exec_flushes_stderr(sandbox: K8sSandboxEnvironment) -> None:
@@ -271,31 +295,49 @@ async def test_exec_user_when_specified_user_does_not_exist(
 
 
 async def test_exec_user_when_not_running_as_root(
-    sandbox_non_root: K8sSandboxEnvironment,
+    sandbox_non_root: K8sSandboxEnvironment, log_warning: LogCaptureFixture
 ) -> None:
-    with pytest.raises(K8sError) as excinfo:
-        await sandbox_non_root.exec(["whoami"], user="nobody")
+    # A container that cannot perform the switch is a property of the environment
+    # rather than a bad argument, so this warns and returns a failed ExecResult. That
+    # lets a caller which probes with a user fall back to the container's own user, as
+    # inspect-ai does when injecting its sandbox tools.
+    result = await sandbox_non_root.exec(["whoami"], user="nobody")
 
-    error_msg = str(excinfo.value.__cause__)
-    assert (
-        "When a user parameter ('nobody') is provided to exec(), the container must be "
-        "running as root" in error_msg
+    assert not result.success
+    assert "may not be used by non-root users" in result.stderr
+    assert any(
+        "the container is not running as root" in record.message
+        and "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
+        in record.message
+        for record in log_warning.records
     )
-    assert "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user" in error_msg
 
 
 async def test_exec_user_when_runuser_not_installed(
-    sandbox_busybox: K8sSandboxEnvironment,
+    sandbox_busybox: K8sSandboxEnvironment, log_warning: LogCaptureFixture
 ) -> None:
-    with pytest.raises(K8sError) as excinfo:
-        await sandbox_busybox.exec(["whoami"], user="foo")
+    """A container without runuser cannot switch users, but can still be used.
 
-    error_msg = str(excinfo.value.__cause__)
-    assert (
-        "When a user parameter ('foo') is provided to exec(), the runuser binary "
-        "must be installed in the container"
-    ) in error_msg
-    assert "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user" in error_msg
+    Like the non-root case, this is the environment being unable to perform the
+    switch rather than the caller naming a user that does not exist, so it warns
+    and returns the failed result instead of raising. The caller can then retry
+    without a user -- which is what inspect-ai's tool injector does.
+    """
+    result = await sandbox_busybox.exec(["whoami"], user="foo")
+
+    assert not result.success
+    assert "runuser" in result.stderr
+    assert any(
+        "runuser binary" in record.message
+        and "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
+        in record.message
+        for record in log_warning.records
+    )
+
+    # The recovery the warning exists to permit.
+    fallback = await sandbox_busybox.exec(["whoami"])
+
+    assert fallback.success
 
 
 async def test_exec_does_not_raise_error_if_command_happens_to_use_runuser(
@@ -356,9 +398,11 @@ async def test_exec_timeout_terminates_foreground_commands(
     assert file_exists_result.success
 
 
-async def test_exec_unicode_decode_error(sandbox: K8sSandboxEnvironment) -> None:
-    with pytest.raises(UnicodeDecodeError):
-        await sandbox.exec(["head", "-c", "1024", "/bin/ls"])
+async def test_exec_non_utf8_output_is_replaced(sandbox: K8sSandboxEnvironment) -> None:
+    result = await sandbox.exec(["bash", "-c", r"printf 'before \xbb after'"])
+
+    assert result.success
+    assert result.stdout == "before \ufffd after"
 
 
 async def test_exec_background_returns(sandbox: K8sSandboxEnvironment) -> None:
@@ -714,6 +758,39 @@ async def test_write_file_is_a_directory_error(
         await sandbox.write_file("/root/", "Hello, World!")
 
     assert not log_err.records
+
+
+@contextmanager
+def _delayed_stdin() -> Generator[None, None, None]:
+    """Stall each stdin frame, emulating a client outside the cluster."""
+    original_write_stdin = WSClient.write_stdin
+
+    def slow_write_stdin(self: WSClient, data, *args, **kwargs):  # type: ignore[no-untyped-def]
+        time.sleep(1.0)
+        return original_write_stdin(self, data, *args, **kwargs)
+
+    with patch.object(WSClient, "write_stdin", slow_write_stdin):
+        yield
+
+
+async def test_write_file_is_not_truncated_when_stdin_is_delayed(
+    sandbox_busybox_runc: K8sSandboxEnvironment,
+) -> None:
+    # The write command redirects `head`'s stdout to the destination file, so once the
+    # shell execs into `head` nothing holds the exec stdout pipe open. The runtime sees
+    # EOF on stdout and closes stdin while `head` is still reading; `head -c N` treats
+    # the short stdin as a normal EOF and exits 0, leaving a truncated file. Delaying
+    # the stdin frame makes the close win.
+    # https://github.com/UKGovernmentBEIS/inspect_k8s_sandbox/issues/225
+    dst = "/tmp/test-write-file-delayed-stdin.bin"
+    contents = b"x" * 4096
+
+    with _delayed_stdin():
+        await sandbox_busybox_runc.write_file(dst, contents)
+
+    result = await sandbox_busybox_runc.exec(["wc", "-c", dst])
+    assert result.success, result.stderr
+    assert int(result.stdout.split()[0]) == len(contents)
 
 
 ### #read_file() ###

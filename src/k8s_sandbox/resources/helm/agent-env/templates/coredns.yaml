@@ -8,7 +8,6 @@ data:
     .:53 {
         log
         errors
-        ready
 
         # Add rewrite rules for each service which exposes ports.
 
@@ -26,7 +25,10 @@ data:
         {{- end }}
 
         # Forward all queries to the Kubernetes cluster DNS server.
-        forward . /etc/resolv.conf
+        forward . /etc/resolv.conf {
+            # Bound memory use when an untrusted workload floods the local resolver.
+            max_concurrent 1000
+        }
 
         # Only process DNS requests from localhost as we're deployed as a sidecar.
         # This prevents our port 53 from appearing open to other Pods.

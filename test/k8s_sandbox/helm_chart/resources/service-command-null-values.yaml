@@ -1,0 +1,8 @@
+services:
+  default:
+    image: busybox:1.37
+    command: null
+    args:
+      - sh
+      - -c
+      - touch /tmp/i-ran && tail -f /dev/null

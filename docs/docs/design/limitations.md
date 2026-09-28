@@ -41,9 +41,10 @@ chart](../helm//built-in-chart.md#resource-requests-and-limits).
 
 You can reduce the impact of a container restarting by using persistent volumes.
 
-The framework will issue a warning if a container restarts during an eval. If you set
-the `restarted_container_behaviour` parameter to `raise`, the eval will fail the sample
-if it detects a container restart.
+The framework will issue a warning if a container restarts during an eval. If a
+subsequent `exec()` fails after a detected restart, the restart is raised as the cause
+regardless of mode. If you set the `restarted_container_behaviour` parameter to `raise`,
+the eval will fail the sample immediately on detection, even if `exec()` has not failed.
 
 ??? question "Why not use Jobs over StatefulSets?"
 
@@ -57,8 +58,8 @@ if it detects a container restart.
     the cases where restarts are not desirable. However, this introduces some
     complexities:
 
-    1. The `--wait` flag passed to `helm install` does not wait for Pods belonging to
-    Jobs to be in a Running state. We'd have to implement our own waiting mechanism,
+    1. The readiness wait does not wait for Pods belonging to Jobs to be created
+    (nor did the `--wait` flag that preceded it). We'd have to implement our own waiting mechanism,
     possibly as a Helm post-install hook to avoid coupling the Python code to the Helm
     chart.
 
@@ -74,10 +75,9 @@ if it detects a container restart.
 
     What about bare Pods?
 
-    When using bare Pods (i.e. not managed by a workload controller),
-    `helm install --wait` will wait for all Pods to be in a Running state. However, if
-    a Pod enters a failed state, it will not be restarted and `helm install` will wait
-    indefinitely.
+    When using bare Pods (i.e. not managed by a workload controller), the readiness
+    wait covers them like any other Pod. However, if a Pod enters a failed state it
+    will not be restarted, and the install will wait until the timeout.
 
 
 ## Denied network requests behaviour
@@ -177,8 +177,21 @@ started with is **not recommended**. Generally, specifying users in tool definit
 result in undesirable coupling between your tools and sandbox.
 
 That said, if you need to run commands as different users, the `user` parameter to
-`exec()` is supported. However, you must run the container as root and ensure that
-`runuser` is installed in the container.
+`exec()` is supported. To switch to a *different* user, you must run the container as
+root, ensure that `runuser` is installed in the container, and keep `CAP_SETGID` — the
+switch goes through `runuser`, which calls `setgroups(2)`. A container with
+`capabilities: {drop: [ALL]}` therefore cannot switch users.
+
+Naming the user the container already runs as needs none of those: that case skips
+`runuser` entirely, so it works on a capability-dropped or non-root container, and on an
+image with no `runuser` installed.
+
+When the switch cannot be made, what happens depends on why. A container that is not
+root, one that has had `CAP_SETGID` dropped, and one without `runuser` installed are all
+properties of the environment rather than bad arguments: each logs a warning and returns
+a failed `ExecResult`, so a caller which probes with a user can fall back to the
+container's own user. Only naming a user that does not exist raises, since no fallback
+makes an absent account work.
 
 ## Images are not automatically built, tagged or pushed
 
@@ -191,8 +204,14 @@ The `timeout` binary on busybox images behaves differently, causing a 128 + 15 (
 = 143 exit code rather than a 124 exit code. This will result in a suitable `ExecResult`
 being returned rather than raising a `TimeoutError`.
 
-## Service names must be lower case alphanumeric
+## Service and network names must be lower case alphanumeric
 
 In the built-in Helm chart, service names (i.e. the keys in the `services` dict) must
 match the case-sensitive regex `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` e.g. `my-name` or
-`123-abc`. The Helm chart will fail to install if this is not the case.
+`123-abc`. Network names may additionally contain `.`. The Helm chart will fail to
+install if this is not the case.
+
+Both are also length-limited: 63 characters for a service name and 55 for a network
+name. These are outer guards rather than usable budgets — each is combined with the
+release name to form Kubernetes object names and label keys which are themselves capped
+at 63 characters, so the practical limit is considerably shorter.

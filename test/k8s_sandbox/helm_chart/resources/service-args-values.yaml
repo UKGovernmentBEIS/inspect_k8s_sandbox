@@ -1,0 +1,5 @@
+services:
+  default:
+    image: "ubuntu"
+    command: ["/bin/sh", "-c"]
+    args: ["setarch", "-R", "/bin/echo", "hello"]

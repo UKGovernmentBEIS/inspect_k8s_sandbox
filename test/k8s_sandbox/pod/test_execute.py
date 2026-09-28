@@ -1,10 +1,15 @@
+import shlex
+from contextlib import contextmanager
+from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
+from inspect_ai.util import ExecResult
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
+import k8s_sandbox._pod.op as op_module
 from k8s_sandbox._pod.error import PodError
-from k8s_sandbox._pod.execute import ExecuteOperation
+from k8s_sandbox._pod.execute import ExecuteOperation, _shell_command
 
 
 def _make_ws_client(
@@ -158,6 +163,44 @@ class TestBrokenPipeWithoutSentinel:
             executor._handle_shell_output(ws, user=None, timeout=None)
 
 
+class TestNonUtf8Output:
+    """A command emitting non-UTF-8 bytes must not abort exec()."""
+
+    def test_binary_byte_with_sentinel_in_same_frame(self) -> None:
+        ws = _make_ws_client(
+            stdout_frames=[b"before \xbb after<completed-sentinel-value-0>"],
+        )
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user=None, timeout=None)
+
+        assert result.returncode == 0
+        assert result.stdout == "before \ufffd after"
+
+    def test_binary_byte_on_stderr(self) -> None:
+        ws = _make_ws_client(
+            stdout_frames=[b"<completed-sentinel-value-0>"],
+            stderr_frames=[b"warn \xbb done\n"],
+        )
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user=None, timeout=None)
+
+        assert result.returncode == 0
+        assert result.stderr == "warn \ufffd done\n"
+
+    def test_binary_byte_in_earlier_frame_than_sentinel(self) -> None:
+        ws = _make_ws_client(
+            stdout_frames=[b"raw \xbb bytes", b"more<completed-sentinel-value-0>"],
+        )
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user=None, timeout=None)
+
+        assert result.returncode == 0
+        assert result.stdout == "raw \ufffd bytesmore"
+
+
 class TestRunuserErrors:
     def test_user_command_runuser_error_with_sentinel_returns_result(self) -> None:
         ws = _make_ws_client(
@@ -222,3 +265,130 @@ class TestConnectionResetWithoutSentinel:
         executor = ExecuteOperation(MagicMock())
         with pytest.raises(PodError, match="WebSocket connection lost"):
             executor._handle_shell_output(ws, user=None, timeout=None)
+
+
+class TestExecChunksStdin:
+    def test_exec_writes_shell_script_in_chunks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Tiny chunk size (patched in op.py, where _write_stdin_chunked reads it)
+        # plus stubbed shell creation + output handling, so only the write path runs.
+        monkeypatch.setattr(op_module, "_STDIN_CHUNK_SIZE", 16)
+        ws = MagicMock(spec=WSClient)
+
+        @contextmanager
+        def fake_interactive_shell(
+            user: str | None,
+        ) -> Generator[MagicMock, None, None]:
+            yield ws
+
+        op = ExecuteOperation(MagicMock())
+        monkeypatch.setattr(op, "_interactive_shell", fake_interactive_shell)
+        sentinel = ExecResult(success=True, returncode=0, stdout="", stderr="")
+        monkeypatch.setattr(op, "_handle_shell_output", lambda *a, **k: sentinel)
+
+        # The assembled script (base64 input + pipeline) is several hundred bytes,
+        # well above the 16-byte chunk size, so it splits into many frames.
+        result = op.exec(
+            ["cat"], stdin=b"x" * 100, cwd=None, env={}, user=None, timeout=None
+        )
+
+        expected_script = op._build_shell_script(["cat"], b"x" * 100, None, {}, None)
+        written = "".join(call.args[0] for call in ws.write_stdin.call_args_list)
+        assert written == expected_script
+        assert ws.write_stdin.call_count > 1
+        assert all(len(c.args[0]) <= 16 for c in ws.write_stdin.call_args_list)
+        assert result is sentinel
+
+
+class TestShellCommand:
+    """`runuser` is only reached for when the container is not already that user."""
+
+    def test_no_user_opens_a_plain_shell(self) -> None:
+        assert _shell_command(None) == ["/bin/sh"]
+
+    def test_user_falls_back_to_runuser(self) -> None:
+        command = _shell_command("agent")
+
+        assert command[:2] == ["/bin/sh", "-c"]
+        assert "exec runuser -u agent -- /bin/sh" in command[2]
+
+    def test_user_skips_runuser_when_already_that_user(self) -> None:
+        """A no-op switch still needs CAP_SETGID, so avoid runuser when we can."""
+        script = _shell_command("agent")[2]
+
+        assert '[ "$(id -un 2>/dev/null)" = agent ]' in script
+        assert "then exec /bin/sh; fi" in script
+
+    def test_a_name_is_compared_against_the_name_and_a_uid_against_the_uid(
+        self,
+    ) -> None:
+        """Cross-comparing would match an account *named* "0" against uid 0."""
+        by_name = _shell_command("agent")[2]
+        by_uid = _shell_command("1000")[2]
+
+        assert "id -un" in by_name and "id -u " not in by_name
+        assert '[ "$(id -u 2>/dev/null)" = 1000 ]' in by_uid
+        assert "id -un" not in by_uid
+
+    def test_an_empty_user_is_left_to_runuser(self) -> None:
+        """It matches nothing, and an empty `id` output must not look equal."""
+        assert _shell_command("") == ["runuser", "-u", "", "--", "/bin/sh"]
+
+    @pytest.mark.parametrize("user", ["a b", "a;rm -rf /", "$(whoami)", "'"])
+    def test_user_is_quoted(self, user: str) -> None:
+        """The user reaches two more shell words than it used to; quote all three."""
+        script = _shell_command(user)[2]
+
+        assert script.count(shlex.quote(user)) == 2
+        assert user not in script.replace(shlex.quote(user), "")
+
+
+class TestRunuserErrorMessages:
+    @pytest.mark.parametrize(
+        ("stderr", "expected"),
+        [
+            ("runuser: user agent does not exist", "does not appear to exist"),
+        ],
+    )
+    def test_an_unknown_user_still_raises(self, stderr: str, expected: str) -> None:
+        """The one case no fallback can rescue: the name simply isn't there."""
+        executor = ExecuteOperation(MagicMock())
+
+        with pytest.raises(RuntimeError, match=expected):
+            executor._check_for_runuser_error(stderr, "agent")
+
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "runuser: may not be used by non-root users",
+            "runuser: cannot set groups: Operation not permitted",
+            "/bin/sh: 1: exec: runuser: not found",
+        ],
+    )
+    def test_environment_failures_warn_rather_than_raise(self, stderr: str) -> None:
+        """inspect-ai probes with user="root" and falls back when it fails.
+
+        All three describe an environment that cannot switch users, rather than a
+        caller naming something that does not exist. Raising made the fallback
+        unreachable, so a sandbox that is merely unable to switch could not run
+        any task using the injected tools.
+        """
+        executor = ExecuteOperation(MagicMock())
+
+        executor._check_for_runuser_error(stderr, "agent")  # does not raise
+
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "ls: /nope: No such file",
+            "newgrp: cannot set groups: Operation not permitted",
+            "su: cannot set groups: Operation not permitted",
+        ],
+    )
+    def test_unrelated_stderr_is_not_claimed_as_a_runuser_error(
+        self, stderr: str
+    ) -> None:
+        executor = ExecuteOperation(MagicMock())
+
+        executor._check_for_runuser_error(stderr, "agent")  # does not raise
