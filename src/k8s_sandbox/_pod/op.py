@@ -9,6 +9,8 @@ from kubernetes.stream import stream  # type: ignore
 from kubernetes.stream.ws_client import RESIZE_CHANNEL, WSClient  # type: ignore
 
 from k8s_sandbox._kubernetes_api import k8s_client
+from k8s_sandbox._pod.error import ContainerRestartedError, PodReplacedError
+from k8s_sandbox._pod.snapshot import read_pod
 
 # The duration to wait for an initial response from the k8s API server.
 # The initial response is received before the command is necessarily complete, so
@@ -25,6 +27,10 @@ API_TIMEOUT = 60
 # [1] https://github.com/kubernetes/kubernetes/blob/db9fcfeed29b860d8dd7188bc1903c4709977890/staging/src/k8s.io/kubelet/pkg/cri/streaming/server.go#L100-L105
 # [2] https://github.com/kubernetes/kubernetes/blob/77b02b7ad40d36cd803856de5ba5922c947cb0aa/staging/src/k8s.io/apimachinery/pkg/util/httpstream/wsstream/conn.go#L348-L356
 _KEEPALIVE_INTERVAL_SECONDS = 30
+# Maximum size of a single WebSocket stdin frame. Larger single writes (tens of
+# MiB) make the kubelet/API-server/TLS layer reset the connection
+# (ConnectionResetError / ssl.SSLEOFError), so stdin is written in chunks.
+_STDIN_CHUNK_SIZE = 1024**2  # 1 MiB
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +65,16 @@ class PodOperation(ABC):
 
     def __init__(self, pod: PodInfo):
         self._pod = pod
+
+    def _write_stdin_chunked(self, ws_client: WSClient, data: str | bytes) -> None:
+        """Write ``data`` to the stdin channel in ``_STDIN_CHUNK_SIZE`` frames.
+
+        Used by both exec and write_file (see ``_STDIN_CHUNK_SIZE`` for why we
+        chunk). The slice type is preserved: ``str`` -> text frames, ``bytes``
+        -> binary frames.
+        """
+        for i in range(0, len(data), _STDIN_CHUNK_SIZE):
+            ws_client.write_stdin(data[i : i + _STDIN_CHUNK_SIZE])
 
     def create_websocket_client_for_exec(
         self, **kwargs
@@ -118,57 +134,51 @@ class PodOperation(ABC):
             return
         ws_client._all = _IgnoredIO()
 
-    def _check_for_pod_restart(self):
-        check_for_pod_restart(self._pod)
-
 
 def check_for_pod_restart(pod: PodInfo) -> None:
-    """Check if the pod has been replaced or its container has restarted."""
+    """Check whether the pod has been replaced or its container has restarted.
+
+    Always raises a typed exception when a change is detected; callers
+    (typically ``Pod._check_for_pod_restart_sync``) are responsible for
+    applying the ``restarted_container_behavior`` policy and refreshing any
+    cached identity.
+
+    Raises:
+        PodReplacedError: the pod's UID has changed since ``pod.uid``.
+        ContainerRestartedError: the default container's restart count has
+            increased since ``pod.initial_restart_count``.
+        RuntimeError: the named container is no longer present on the pod
+            (treated as a permanent misconfiguration).
+    """
     api = k8s_client(pod.context_name)
-    k8s_pod = api.read_namespaced_pod(name=pod.name, namespace=pod.namespace)
-    assert k8s_pod.metadata is not None
-    assert k8s_pod.status is not None
-    if k8s_pod.metadata.uid != pod.uid:
-        message = (
-            f"Pod UID mismatch: expected {pod.uid}, got {k8s_pod.metadata.uid} "
-            f"for {k8s_pod.metadata.name}"
+    snapshot = read_pod(api, name=pod.name, namespace=pod.namespace)
+    if snapshot.uid != pod.uid:
+        # Capture the new pod's restart count for the default container so the
+        # caller can refresh its full cached identity atomically.
+        raise PodReplacedError(
+            pod_name=pod.name,
+            old_uid=pod.uid,
+            new_uid=snapshot.uid,
+            new_restart_count=snapshot.restart_count_for(pod.default_container_name),
         )
-        if pod.restarted_container_behavior == "warn":
-            logger.warning(message)
-        else:
-            raise RuntimeError(message)
-    assert k8s_pod.status.container_statuses is not None
-    status = next(
-        (
-            container_status
-            for container_status in k8s_pod.status.container_statuses
-            if container_status.name == pod.default_container_name
-        ),
-        None,
-    )
+    if snapshot.container_statuses is None:
+        # Kubelet hasn't published container statuses yet (briefly possible
+        # right after pod scheduling). Nothing to compare against — skip the
+        # restart-count check.
+        return
+    status = snapshot.status_for(pod.default_container_name)
     if status is None:
-        message = (
-            f"Pod '{k8s_pod.metadata.name}' does not have a container named "
+        raise RuntimeError(
+            f"Pod '{snapshot.name}' does not have a container named "
             f"'{pod.default_container_name}'"
         )
-        if pod.restarted_container_behavior == "warn":
-            logger.warning(message)
-            return
-        else:
-            raise RuntimeError(message)
     if status.restart_count > pod.initial_restart_count:
-        last_state = status.last_state
-        terminated = last_state.terminated if last_state else None
-        last_reason = terminated.reason if terminated else "unknown"
-        message = (
-            f"Container '{status.name}' in pod '{k8s_pod.metadata.name}' has restarted "
-            f"{status.restart_count} time(s) (last reason: {last_reason}); "
-            "pod state is no longer guaranteed."
+        raise ContainerRestartedError(
+            pod_name=pod.name,
+            container_name=status.name,
+            restart_count=status.restart_count,
+            last_reason=status.last_terminated_reason or "unknown",
         )
-        if pod.restarted_container_behavior == "warn":
-            logger.warning(message)
-        else:
-            raise RuntimeError(message)
 
 
 def _send_keepalive(ws_client: WSClient, stop: threading.Event) -> None:

@@ -105,6 +105,32 @@ your code; the check simply fails.
 Consider using the recommended [Rewrap](https://stkb.github.io/Rewrap/) extension
 (`.vscode/extensions.json`) for VS Code to wrap Markdown text at 88 characters.
 
+## Changelog
+
+If appropriate, add an entry under the `## Unreleased` heading in `CHANGELOG.md` when
+submitting a PR. Create that heading if the last release consumed it.
+
+Entries under a dated release heading are published history — don't add to or edit
+them. In particular, if a release is cut after you branch, a stale branch can silently
+land your entry in the just-released section (the release commit renames `##
+Unreleased` to the dated heading, so your diff still applies): after rebasing onto
+`main`, check your entry still sits under `## Unreleased`.
+
+## Releasing
+
+Releases are published manually using uv's standard
+[build](https://docs.astral.sh/uv/guides/package/#building-your-package) and
+[publish](https://docs.astral.sh/uv/guides/package/#publishing-your-package) flow —
+this guide does not duplicate those steps.
+
+The repo-specific parts are:
+
+- Bump `version` in `pyproject.toml` and run `uv lock` to update `uv.lock`. Set the
+  bundled `agent-env` chart version in `Chart.yaml` to match.
+- Replace the `## Unreleased` heading in `CHANGELOG.md` with `## <YYYY-MM-DD> <version>`
+  (see existing entries for the format).
+- After merging, tag the release commit `vX.Y.Z` and push the tag.
+
 ## Conventions
 
 ### Package Structure and API Visibility

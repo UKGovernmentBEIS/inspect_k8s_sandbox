@@ -9,7 +9,16 @@ metadata:
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
 spec:
-  serviceName: {{ $name }}-service
+  {{- /*
+    Deliberately empty. The kubelet writes the pod's FQDN --
+    <pod>.<subdomain>.<namespace>.svc.cluster.local -- into /etc/hosts, but only when
+    the pod has a subdomain, and a StatefulSet's pods take their subdomain from
+    serviceName. Left empty, the kubelet writes a plain "<pod IP> <pod name>" and the
+    namespace stays out of the sandbox, where an agent under evaluation can read it.
+    Nothing resolved the per-pod DNS name this would create: the Services below are
+    what the coredns sidecar rewrites service names to.
+  */}}
+  serviceName: ""
   replicas: 1
   selector:
     matchLabels:
@@ -20,6 +29,9 @@ spec:
       labels:
         {{- include "agentEnv.labelsFromValues" $ | nindent 8 }}
         {{- include "agentEnv.selectorLabels" $ | nindent 8 }}
+        {{- /* The StatefulSet gets this via helm.sh/chart; Pods don't, and knowing
+               which chart version created a leaked Pod is useful when triaging. */}}
+        aisi.gov.uk/k8s-sandbox-version: {{ $.Chart.Version | quote }}
         {{- if $service.networks }}
         {{- range $service.networks }}
         aisi.gov.uk/network-{{ . }}: "true"
@@ -32,6 +44,10 @@ spec:
       {{- /* "CLUSTER_DEFAULT" (magic string) prevents runtimeClassName being set. */}}
       {{- if ne $service.runtimeClassName "CLUSTER_DEFAULT" }}
       runtimeClassName: {{ $service.runtimeClassName | default "gvisor" }}
+      {{- end }}
+      automountServiceAccountToken: {{ $.Values.automountServiceAccountToken }}
+      {{- if $.Values.serviceAccountName }}
+      serviceAccountName: {{ $.Values.serviceAccountName | quote }}
       {{- end }}
       {{- /* Do not leak info on services via env vars */}}
       enableServiceLinks: false
@@ -85,7 +101,8 @@ spec:
           {{- toYaml $service.command | nindent 10 }}
         {{- end }}
         {{- if $service.args }}
-        args: {{ $service.args }}
+        args:
+          {{- toYaml $service.args | nindent 10 }}
         {{- end }}
         {{- if $service.workingDir }}
         workingDir: {{ $service.workingDir }}
@@ -144,6 +161,8 @@ spec:
         image: {{ quote $.Values.corednsImage }}
         command:
           {{- toYaml $.Values.corednsCommand | nindent 10 }}
+        securityContext:
+          {{- toYaml $.Values.corednsSecurityContext | nindent 10 }}
         resources:
           requests:
             memory: "128Mi"
@@ -162,6 +181,7 @@ spec:
           - name: coredns-config
             mountPath: /etc/coredns/Corefile
             subPath: Corefile
+            readOnly: true
       {{- with $service.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}

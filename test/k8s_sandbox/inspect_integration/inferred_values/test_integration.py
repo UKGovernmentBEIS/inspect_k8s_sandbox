@@ -14,7 +14,7 @@ from test.k8s_sandbox.inspect_integration.testing_utils.utils import (
 def test_default_chart_with_inferred_values_yaml() -> None:
     # Verify that the `values.yaml` file in the task dir is automatically used.
     model = MockToolCallModel(
-        [tool_call("bash", {"cmd": "cat /etc/os-release | grep VERSION_CODENAME"})],
+        [tool_call("bash", {"command": "cat /etc/os-release | grep VERSION_CODENAME"})],
     )
     task = create_task(__file__, target="bullseye")
 

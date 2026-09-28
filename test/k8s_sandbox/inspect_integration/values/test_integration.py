@@ -17,7 +17,7 @@ pytestmark = pytest.mark.req_k8s
 @pytest.fixture
 def model() -> MockToolCallModel:
     return MockToolCallModel(
-        [tool_call("bash", {"cmd": "echo $VALUES_SOURCE"})],
+        [tool_call("bash", {"command": "echo $VALUES_SOURCE"})],
     )
 
 

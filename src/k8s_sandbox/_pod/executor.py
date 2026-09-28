@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, TypeVar
@@ -55,14 +56,20 @@ class PodOpExecutor:
         Args:
             max_pod_ops: Maximum number of concurrent pod operations. If provided
                 on the first call, overrides the INSPECT_MAX_POD_OPS env var and
-                the default (cpu_count * 4). Ignored on subsequent calls since the
-                singleton is already created.
+                the default (cpu_count * 4). A later call with a different value
+                raises ValueError rather than silently ignoring the configuration.
 
         This method is async-safe (because it doesn't await anything) but not
         thread-safe.
         """
         if cls._instance is None:
             cls._instance = cls(max_pod_ops=max_pod_ops)
+        elif max_pod_ops is not None and cls._instance._max_workers != max_pod_ops:
+            raise ValueError(
+                "PodOpExecutor is already initialized with "
+                f"max_pod_ops={cls._instance._max_workers}; cannot use "
+                f"max_pod_ops={max_pod_ops}."
+            )
         return cls._instance
 
     async def queue_operation(self, callable: Callable[[], T]) -> T:
@@ -78,6 +85,10 @@ class PodOpExecutor:
         This method is async-safe but not thread-safe.
         """
         async with concurrency("pod-op", self._max_workers):
+            # run_in_executor does not propagate the caller's context into the
+            # worker thread, so pass it directly to preserve Inspect
+            # sandbox config overrides
+            context = contextvars.copy_context()
             return await asyncio.get_event_loop().run_in_executor(
-                self._executor, callable
+                self._executor, lambda: context.run(callable)
             )

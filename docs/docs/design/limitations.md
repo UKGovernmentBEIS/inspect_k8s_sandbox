@@ -41,9 +41,10 @@ chart](../helm//built-in-chart.md#resource-requests-and-limits).
 
 You can reduce the impact of a container restarting by using persistent volumes.
 
-The framework will issue a warning if a container restarts during an eval. If you set
-the `restarted_container_behaviour` parameter to `raise`, the eval will fail the sample
-if it detects a container restart.
+The framework will issue a warning if a container restarts during an eval. If a
+subsequent `exec()` fails after a detected restart, the restart is raised as the cause
+regardless of mode. If you set the `restarted_container_behaviour` parameter to `raise`,
+the eval will fail the sample immediately on detection, even if `exec()` has not failed.
 
 ??? question "Why not use Jobs over StatefulSets?"
 
@@ -57,8 +58,8 @@ if it detects a container restart.
     the cases where restarts are not desirable. However, this introduces some
     complexities:
 
-    1. The `--wait` flag passed to `helm install` does not wait for Pods belonging to
-    Jobs to be in a Running state. We'd have to implement our own waiting mechanism,
+    1. The readiness wait does not wait for Pods belonging to Jobs to be created
+    (nor did the `--wait` flag that preceded it). We'd have to implement our own waiting mechanism,
     possibly as a Helm post-install hook to avoid coupling the Python code to the Helm
     chart.
 
@@ -74,10 +75,9 @@ if it detects a container restart.
 
     What about bare Pods?
 
-    When using bare Pods (i.e. not managed by a workload controller),
-    `helm install --wait` will wait for all Pods to be in a Running state. However, if
-    a Pod enters a failed state, it will not be restarted and `helm install` will wait
-    indefinitely.
+    When using bare Pods (i.e. not managed by a workload controller), the readiness
+    wait covers them like any other Pod. However, if a Pod enters a failed state it
+    will not be restarted, and the install will wait until the timeout.
 
 
 ## Denied network requests behaviour
@@ -151,25 +151,11 @@ chart](../helm/built-in-chart.md#dns). Or, if using a custom Helm chart, conside
 the `hostAliases` field in the Pod spec
 ([docs](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/)).
 
-## Transient network or infrastructure issues during `exec()` won't be retried
+## Transient errors are automatically retried
 
-The following exceptions have occasionally been observed during calls to `exec()`,
-`read_file()` or `write_file()`:
+Transient network or infrastructure errors during `exec()`, `read_file()`, and `write_file()` are automatically retried (up to 5 times). These are typically caused by issues such as a node becoming unhealthy, a Pod being rescheduled, or the Kubernetes control plane being overloaded.
 
-* `WebSocketBadStatusException: pod does not exist` (re-raised as `ApiException`)
-* `WebSocketBadStatusException: container not found` (re-raised as `ApiException`)
-* `WebSocketBadStatusException: Handshake status 500 Internal Server Error` (re-raised
-  as `ApiException`)
-* `WebSocketConnectionClosedException: Connection to remote host was lost`
-* `SSLEOFError: EOF occurred in violation of protocol`
-
-These are likely due to transient network or infrastructure issues. For example, when a
-node becomes unhealthy and the Pod is rescheduled.
-
-The `k8s_sandbox` package will not retry the remote command execution when any of these
-(or other) exceptions are raised because it cannot assume that the command is idempotent
-and that the command did not at least start executing. This will result in that sample
-of the eval failing.
+Note that retries cannot guarantee idempotency — if a command partially executed before the error, it may run again on retry.
 
 ## Must run as root to use the `user` parameter in `exec()` { #exec-user }
 
@@ -191,8 +177,21 @@ started with is **not recommended**. Generally, specifying users in tool definit
 result in undesirable coupling between your tools and sandbox.
 
 That said, if you need to run commands as different users, the `user` parameter to
-`exec()` is supported. However, you must run the container as root and ensure that
-`runuser` is installed in the container.
+`exec()` is supported. To switch to a *different* user, you must run the container as
+root, ensure that `runuser` is installed in the container, and keep `CAP_SETGID` — the
+switch goes through `runuser`, which calls `setgroups(2)`. A container with
+`capabilities: {drop: [ALL]}` therefore cannot switch users.
+
+Naming the user the container already runs as needs none of those: that case skips
+`runuser` entirely, so it works on a capability-dropped or non-root container, and on an
+image with no `runuser` installed.
+
+When the switch cannot be made, what happens depends on why. A container that is not
+root, one that has had `CAP_SETGID` dropped, and one without `runuser` installed are all
+properties of the environment rather than bad arguments: each logs a warning and returns
+a failed `ExecResult`, so a caller which probes with a user can fall back to the
+container's own user. Only naming a user that does not exist raises, since no fallback
+makes an absent account work.
 
 ## Images are not automatically built, tagged or pushed
 
@@ -205,8 +204,14 @@ The `timeout` binary on busybox images behaves differently, causing a 128 + 15 (
 = 143 exit code rather than a 124 exit code. This will result in a suitable `ExecResult`
 being returned rather than raising a `TimeoutError`.
 
-## Service names must be lower case alphanumeric
+## Service and network names must be lower case alphanumeric
 
 In the built-in Helm chart, service names (i.e. the keys in the `services` dict) must
 match the case-sensitive regex `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` e.g. `my-name` or
-`123-abc`. The Helm chart will fail to install if this is not the case.
+`123-abc`. Network names may additionally contain `.`. The Helm chart will fail to
+install if this is not the case.
+
+Both are also length-limited: 63 characters for a service name and 55 for a network
+name. These are outer guards rather than usable budgets — each is combined with the
+release name to form Kubernetes object names and label keys which are themselves capped
+at 63 characters, so the practical limit is considerably shorter.

@@ -29,6 +29,7 @@ async def test_invalid_chart() -> None:
         )
 
 
+@pytest.mark.req_k8s
 async def test_invalid_kubeconfig_context_name() -> None:
     with pytest.raises(ValueError):
         await K8sSandboxEnvironment.sample_init(

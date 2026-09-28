@@ -2,12 +2,31 @@
 
 ## Helm install timeout { #helm-install-timeout }
 
-The built-in Helm install timeout is 10 minutes. If you're running large eval sets and
-expect to run into cluster capacity issues, you can increase the timeout by setting the
-`INSPECT_HELM_TIMEOUT` environment variable to a number of seconds.
+The built-in Helm install timeout is 10 minutes. It bounds how long a sandbox may take
+to become ready once Helm has created it. If you're running large eval sets and expect
+to run into cluster capacity issues, you can increase the timeout by setting the
+`INSPECT_HELM_TIMEOUT` environment variable to a number of seconds. A sandbox waiting
+for capacity does not hold an install slot, so a long timeout does not slow down
+sandboxes whose capacity is already available.
+
+Creating the release is bounded by the Kubernetes client's own connection timeouts
+rather than by this setting.
 
 ```sh
 export INSPECT_HELM_TIMEOUT=21600   # 6 hours
+```
+
+
+## Helm uninstall timeout { #helm-uninstall-timeout }
+
+Uninstalling has its own 10 minute timeout, which you can change by setting the
+`INSPECT_HELM_UNINSTALL_TIMEOUT` environment variable to a number of seconds. It is
+deliberately separate from `INSPECT_HELM_TIMEOUT`: waiting hours for a sandbox to
+become ready is reasonable, but waiting hours to tear one down holds up the sample that
+is trying to clean up after itself.
+
+```sh
+export INSPECT_HELM_UNINSTALL_TIMEOUT=1800   # 30 minutes
 ```
 
 
@@ -21,6 +40,34 @@ via `helm list --selector`.
 ```sh
 export INSPECT_HELM_LABELS="ci-branch=my-feature,run-id=42"
 ```
+
+
+## Default namespace override { #default-namespace }
+
+By default, the namespace for sandbox pods is determined from the kubeconfig context or
+the service account token mount (when running in-cluster). You can override this by
+setting the `INSPECT_K8S_DEFAULT_NAMESPACE` environment variable.
+
+```sh
+export INSPECT_K8S_DEFAULT_NAMESPACE=my-sandbox-namespace
+```
+
+When set, this takes precedence over both kubeconfig and in-cluster namespace resolution.
+
+
+## Kubernetes client refresh { #client-refresh }
+
+By default, the Kubernetes API client is created once and reused for the lifetime of the
+process. On clusters where service account tokens have a short lifetime (e.g. EKS 1.35
+caps tokens at 24 hours), long-running evaluations may encounter 401 Unauthorized errors
+when the cached token expires. You can set `INSPECT_K8S_CLIENT_REFRESH_SECONDS` to
+periodically re-create the client, causing it to re-read the token from disk.
+
+```sh
+export INSPECT_K8S_CLIENT_REFRESH_SECONDS=600   # refresh every 10 minutes
+```
+
+Disabled by default (unset or `0`).
 
 
 ## Targeting specific or multiple kubeconfig contexts

@@ -4,7 +4,7 @@ import re
 import shlex
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Generator, Literal, cast, overload
 
@@ -26,6 +26,7 @@ from pydantic import BaseModel, TypeAdapter
 from tenacity import retry_if_exception, stop_after_attempt, wait_exponential_jitter
 from tenacity.asyncio import AsyncRetrying
 
+from k8s_sandbox._error import K8sError
 from k8s_sandbox._helm import (
     DEFAULT_CHART,
     Release,
@@ -34,7 +35,6 @@ from k8s_sandbox._helm import (
 )
 from k8s_sandbox._kubernetes_api import validate_context_name
 from k8s_sandbox._logger import (
-    format_log_message,
     inspect_trace_action,
     log_error,
     log_trace,
@@ -46,7 +46,11 @@ from k8s_sandbox._manager import (
     uninstall_unmanaged_release,
 )
 from k8s_sandbox._pod import Pod
-from k8s_sandbox._pod.error import ExecutableNotFoundError, GetReturncodeError, PodError
+from k8s_sandbox._pod.error import (
+    ExecutableNotFoundError,
+    GetReturncodeError,
+    PodError,
+)
 from k8s_sandbox._pod.executor import PodOpExecutor
 from k8s_sandbox._prereqs import validate_prereqs
 from k8s_sandbox.compose._compose import (
@@ -76,17 +80,24 @@ _PERMANENT_TYPES = (
     RuntimeError,
     PermissionError,
     TimeoutError,
+    FileNotFoundError,
+    IsADirectoryError,
 )
 
-_exec_retry = AsyncRetrying(
-    stop=stop_after_attempt(5),
-    wait=wait_exponential_jitter(initial=1, max=10),
-    retry=retry_if_exception(
-        lambda e: isinstance(e, _TRANSIENT_TYPES)
-        and not isinstance(e, _PERMANENT_TYPES)
-    ),
-    reraise=True,
-)
+
+def _retry() -> AsyncRetrying:
+    # Must create a new instance per call: AsyncRetrying.__aiter__ returns
+    # `self` and mutates _retry_state, so a shared instance is not safe for
+    # concurrent use.
+    return AsyncRetrying(
+        stop=stop_after_attempt(5),
+        wait=wait_exponential_jitter(initial=1, max=10),
+        retry=retry_if_exception(
+            lambda e: isinstance(e, _TRANSIENT_TYPES)
+            and not isinstance(e, _PERMANENT_TYPES)
+        ),
+        reraise=True,
+    )
 
 
 @sandboxenv(name="k8s")
@@ -173,8 +184,8 @@ class K8sSandboxEnvironment(SandboxEnvironment):
     async def cli_cleanup(cls, id: str | None) -> None:
         if id is not None:
             await uninstall_unmanaged_release(id)
-        else:
-            await uninstall_all_unmanaged_releases()
+        elif await uninstall_all_unmanaged_releases():
+            sys.exit(1)
 
     @classmethod
     async def sample_init(
@@ -214,8 +225,21 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             sample_uuid=sample_uuid,
             extra_values=extra_values,
         )
-        await HelmReleaseManager.get_instance().install(release)
-        return reorder_default_first(await get_sandboxes(release, resolved_config))
+        manager = HelmReleaseManager.get_instance()
+        try:
+            await manager.install(release)
+            return reorder_default_first(await get_sandboxes(release, resolved_config))
+        except Exception:
+            # Inspect does not call sample_cleanup() when sample_init() raises, and
+            # uninstall_all() does not run until the whole eval ends, so nothing else
+            # removes what Helm created. Without this, each retried sample leaves a
+            # full set of sandbox pods behind.
+            # A failed uninstall must not replace the original error (which carries the
+            # pod diagnostics), and leaves the release tracked so that uninstall_all()
+            # retries it and reports it.
+            with suppress(Exception):
+                await manager.uninstall(release, quiet=True)
+            raise
 
     @classmethod
     async def sample_cleanup(
@@ -232,7 +256,20 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         sandbox: K8sSandboxEnvironment = cast(
             K8sSandboxEnvironment, next(iter(environments.values()))
         )
-        await HelmReleaseManager.get_instance().uninstall(sandbox.release, quiet=True)
+        try:
+            await HelmReleaseManager.get_instance().uninstall(
+                sandbox.release, quiet=True
+            )
+        except Exception as e:
+            # Inspect turns an exception raised here into a sample error, which would
+            # discard a sample that had otherwise succeeded. The release stays tracked
+            # for uninstall_all().
+            log_warn(
+                "Failed to uninstall Helm release during sample cleanup; it will be "
+                "retried at the end of the eval.",
+                release=sandbox.release.release_name,
+                error=e,
+            )
 
     async def exec(
         self,
@@ -250,6 +287,10 @@ class K8sSandboxEnvironment(SandboxEnvironment):
     ) -> ExecResult[str]:
         log_kwargs = dict(cmd=cmd, stdin=input, cwd=cwd, env=env, timeout=timeout)
         # Do not log these at error level or re-raise as enriched K8sError.
+        # PodReplacedError / ContainerRestartedError are intentionally NOT in
+        # this list: they're operator-visible incidents we want logged at ERROR
+        # with full op context, and callers that need to discriminate by type
+        # can walk `K8sError.__cause__`.
         expected_exceptions = (
             TimeoutError,
             UnicodeDecodeError,
@@ -261,8 +302,7 @@ class K8sSandboxEnvironment(SandboxEnvironment):
 
         op = "K8s execute command in Pod"
         with self._log_op(op, expected_exceptions, **log_kwargs):
-            await self._pod.check_for_pod_restart()
-            async for attempt in _exec_retry:
+            async for attempt in _retry():
                 with attempt:
                     result = await self._pod.exec(
                         cmd, input, cwd, env or {}, user, timeout
@@ -271,18 +311,13 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             return result
 
     async def write_file(self, file: str, contents: str | bytes) -> None:
-        # Write contents to a temporary file on the client system and pass the file
-        # handle.
-        with tempfile.NamedTemporaryFile("w+b") as temp_file:
-            if isinstance(contents, str):
-                temp_file.write(contents.encode("utf-8"))
-            else:
-                temp_file.write(contents)
-            temp_file.seek(0)
-            # Do not log these at error level or re-raise as enriched K8sError.
-            expected_exceptions = (PermissionError, IsADirectoryError)
-            with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
-                await self._pod.write_file(temp_file.file, Path(file))
+        data = contents.encode("utf-8") if isinstance(contents, str) else contents
+        # Do not log these at error level or re-raise as enriched K8sError.
+        expected_exceptions = (PermissionError, IsADirectoryError)
+        with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
+            async for attempt in _retry():
+                with attempt:
+                    await self._pod.write_file(data, Path(file))
 
     @overload
     async def read_file(self, file: str, text: Literal[True] = True) -> str: ...
@@ -303,7 +338,11 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 OutputLimitExceededError,
             )
             with self._log_op("K8s read file from Pod", expected_exceptions, file=file):
-                await self._pod.read_file(Path(file), temp_file)
+                async for attempt in _retry():
+                    with attempt:
+                        temp_file.seek(0)
+                        temp_file.truncate()
+                        await self._pod.read_file(Path(file), temp_file)
                 temp_file.seek(0)
                 return (
                     temp_file.read() if not text else temp_file.read().decode("utf-8")
@@ -347,8 +386,18 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 # Whilst Inspect's trace_action will have logged the exception, log it
                 # at ERROR level here for user visibility.
                 log_error(f"Error during: {op}.", cause=e, **log_kwargs)
-                # Enrich the unexpected exception with additional context.
-                raise K8sError(f"Error during: {op}.", **log_kwargs) from e
+                # Enrich the unexpected exception with additional context. The
+                # cause's type and short message are included in the K8sError's
+                # own message so callers reading str(error) (e.g. an LLM agent
+                # reading the bash tool's error string) can distinguish a
+                # transient infra failure like PodReplacedError from
+                # destructive-class errors. The original exception remains
+                # reachable via __cause__ for callers that walk the chain.
+                raise K8sError(
+                    f"Error during: {op}.",
+                    cause=f"{type(e).__name__}: {e}",
+                    **log_kwargs,
+                ) from e
 
     @classmethod
     def config_deserialize(cls, config: dict[str, Any]) -> BaseModel:
@@ -407,16 +456,6 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     restarted_container_behavior: Literal["warn", "raise"] = "warn"
     max_pod_ops: int | None = None
     """Maximum number of concurrent pod operations. Defaults to cpu_count * 4."""
-
-
-class K8sError(Exception):
-    """An error that occurred during a Kubernetes operation.
-
-    This will typically cause the eval to fail.
-    """
-
-    def __init__(self, message: str, **kwargs: Any):
-        super().__init__(format_log_message(message, **kwargs))
 
 
 def _key_to_pascal(key: str) -> str:
