@@ -6,6 +6,7 @@ from inspect_ai.model import Model
 from inspect_ai.util import SandboxEnvironmentSpec
 
 from k8s_sandbox import K8sSandboxEnvironmentConfig
+from k8s_sandbox._helm import Release, ValuesSource
 from k8s_sandbox._kubernetes_api import get_current_context_name
 from test.k8s_sandbox.inspect_integration.testing_utils.mock_model import (
     MockToolCallModel,
@@ -102,3 +103,22 @@ def test_specified_kube_config_context_flows_to_error_message(model: Model) -> N
         "Could not find a context named 'does-not-exist' in the kubeconfig file."
         in result.error.message
     )
+
+
+async def test_custom_chart_pods_are_ready_before_the_eval_starts() -> None:
+    # A chart rendering a bare Pod rather than a controller must still be waited for,
+    # or Inspect is handed a pod that is still ContainerCreating.
+    release = Release(
+        __file__,
+        chart_path=Path(__file__).parent / "my-custom-chart",
+        values_source=ValuesSource.none(),
+        context_name=None,
+    )
+
+    try:
+        await release.install()
+        pods = release._list_release_pods()
+        assert pods, "the release rendered no pods"
+        assert all(p.ready for p in pods), [(p.name, p.phase, p.ready) for p in pods]
+    finally:
+        await release.uninstall(quiet=True)

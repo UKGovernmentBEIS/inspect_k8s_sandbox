@@ -254,8 +254,17 @@ class _ServiceConverter:
         # Ordered as per built-in Helm chart values.yaml documentation.
         _transform(src, "runtime", result, "runtimeClassName")
         _transform(src, "image", result, "image")
+        # Compose `command:` maps to Helm `args` (image CMD). Compose
+        # `entrypoint:` maps to Helm `command` (image ENTRYPOINT). If the user
+        # sets `command:` without `entrypoint:`, emit `command: null` so Helm
+        # deletes the chart default (`tail -f /dev/null` on `services.default`)
+        # and the image ENTRYPOINT is used - matching Docker Compose.
+        has_entrypoint = src.get("entrypoint") is not None
+        has_command = src.get("command") is not None
         _transform(src, "entrypoint", result, "command", _str_to_list)
         _transform(src, "command", result, "args", _str_to_list)
+        if has_command and not has_entrypoint:
+            result["command"] = None
         _transform(src, "working_dir", result, "workingDir")
         # Create a DNS record for every service (same behaviour as Docker Compose).
         result["dnsRecord"] = True

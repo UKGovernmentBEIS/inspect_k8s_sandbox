@@ -1,4 +1,5 @@
 import base64
+import logging
 import re
 import shlex
 from contextlib import contextmanager
@@ -9,13 +10,56 @@ from inspect_ai.util import SandboxEnvironmentLimits as limits
 from kubernetes.stream.ws_client import WSClient  # type: ignore[import-untyped]
 
 from k8s_sandbox._pod.buffer import LimitedBuffer
-from k8s_sandbox._pod.error import ExecutableNotFoundError, PodError
+from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.get_returncode import get_returncode
 from k8s_sandbox._pod.op import PodOperation
 
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
 EXEC_USER_URL = "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
+
+logger = logging.getLogger(__name__)
+
+
+def _shell_command(user: str | None) -> list[str]:
+    """The command to open the interactive shell an exec() runs inside.
+
+    When a user is requested, only reach for `runuser` if the container is not
+    already running as that user. `runuser` calls setgroups(2), which needs
+    CAP_SETGID even when switching root -> root, so an unconditional wrapper
+    makes every exec(user=...) fail in a container whose capabilities have been
+    dropped. Skipping it is close to a no-op, but not exactly one: runuser also
+    normalizes HOME, SHELL, USER, LOGNAME and PATH, which the skip path
+    inherits from the container instead.
+
+    The check runs in the container rather than here so that it costs no extra
+    round trip. `sh -c` takes its script from argv, so stdin reaches whichever
+    shell is exec'd unread, and the caller's protocol is unchanged.
+
+    `user` may be a name or a uid, and the two must be compared against
+    different things: testing a uid against `id -un` (or a name against `id -u`)
+    would match an account merely *named* "0" against uid 0 and run the command
+    as the wrong user. So only the applicable test is emitted.
+
+    `id -un` reports only the first passwd name for a uid, so a second name for
+    the same uid (root/toor) is not recognised and falls through to `runuser` --
+    i.e. the previous behaviour, which is the safe direction.
+    """
+    if user is None:
+        return ["/bin/sh"]
+    if not user:
+        # Matches nothing; leave runuser to reject it as it did before.
+        return ["runuser", "-u", user, "--", "/bin/sh"]
+    quoted = shlex.quote(user)
+    # A missing or failing `id` leaves the substitution empty, which cannot
+    # equal a non-empty user, so that also falls through to `runuser`.
+    current = "id -u" if user.isdigit() else "id -un"
+    return [
+        "/bin/sh",
+        "-c",
+        f'if [ "$({current} 2>/dev/null)" = {quoted} ]; then exec /bin/sh; fi; '
+        f"exec runuser -u {quoted} -- /bin/sh",
+    ]
 
 
 class ExecuteOperation(PodOperation):
@@ -38,28 +82,18 @@ class ExecuteOperation(PodOperation):
 
     @contextmanager
     def _interactive_shell(self, user: str | None) -> Generator[WSClient, None, None]:
-        command = ["/bin/sh"]
-        if user is not None:
-            command = ["runuser", "-u", user] + command
-        try:
-            yield from self.create_websocket_client_for_exec(
-                command=command,
-                stderr=True,
-                stdin=True,
-                stdout=True,
-                # Leave stdout and stderr as binary. Has no effect on stdin.
-                binary=True,
-            )
-        # Raised if /bin/sh or runuser cannot be found in the Pod (not if a
-        # user-supplied) command cannot be found.
-        except ExecutableNotFoundError as e:
-            if 'error finding executable "runuser"' in str(e):
-                raise RuntimeError(
-                    f"When a user parameter ('{user}') is provided to exec(), the "
-                    f"runuser binary must be installed in the container. Docs: "
-                    f"{EXEC_USER_URL}"
-                ) from e
-            raise
+        # ExecutableNotFoundError from here now only means /bin/sh is missing. A
+        # missing `runuser` is exec'd by the shell rather than by the API server,
+        # so it surfaces as a 127 on stderr and is handled by
+        # _check_for_runuser_error instead.
+        yield from self.create_websocket_client_for_exec(
+            command=_shell_command(user),
+            stderr=True,
+            stdin=True,
+            stdout=True,
+            # Leave stdout and stderr as binary. Has no effect on stdin.
+            binary=True,
+        )
 
     def _build_shell_script(
         self,
@@ -186,11 +220,46 @@ class ExecuteOperation(PodOperation):
                 f"The user parameter '{user}' provided to exec() does "
                 f"not appear to exist in the container. Docs: {EXEC_USER_URL}\n{stderr}"
             )
+        # The three arms below describe an environment that cannot perform the
+        # switch, not a caller asking for something that does not exist. Callers
+        # are entitled to handle that: inspect-ai probes with `user="root"` and
+        # falls back to the default user when it fails, which is how a rootless
+        # sandbox is meant to work. Raising here made that fallback unreachable
+        # and turned a supported configuration into a fatal error, so warn and
+        # let the failed ExecResult through. Only an unknown user still raises,
+        # because no fallback makes a name that isn't there work.
         if "runuser: may not be used by non-root users" in stderr.casefold():
-            raise RuntimeError(
-                f"When a user parameter ('{user}') is provided to exec(), the "
-                f"container must be running as root. Docs: {EXEC_USER_URL}\n{stderr}"
+            logger.warning(
+                "exec(user=%r) failed: the container is not running as root, so "
+                "runuser cannot switch users. Docs: %s\n%s",
+                user,
+                EXEC_USER_URL,
+                stderr,
             )
+            return
+        # Anchored on the `runuser: ` prefix like the arms above it: `newgrp`,
+        # `sg`, `su` and `login` print the same message body, so an unanchored
+        # match would blame the sandbox's capabilities for a user command's own
+        # failure.
+        if re.search(r"runuser: cannot set groups", stderr, re.IGNORECASE):
+            logger.warning(
+                "exec(user=%r) failed: runuser needs CAP_SETGID to call "
+                "setgroups(2), and the container's capabilities appear to have "
+                "been dropped. Docs: %s\n%s",
+                user,
+                EXEC_USER_URL,
+                stderr,
+            )
+            return
+        if re.search(r"runuser: not found", stderr, re.IGNORECASE):
+            logger.warning(
+                "exec(user=%r) failed: switching users needs the runuser binary, "
+                "which is not installed in this container. Docs: %s\n%s",
+                user,
+                EXEC_USER_URL,
+                stderr,
+            )
+            return
 
     def _filter_sentinel_and_returncode(self, frame: bytes) -> tuple[bytes, int | None]:
         # latin-1 maps each byte 1:1 to a codepoint, so it decodes arbitrary binary

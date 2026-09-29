@@ -2,11 +2,24 @@
 
 ## Unreleased
 
-- Raise an error when a conflicting `max_pod_ops` setting would otherwise be ignored.
+- `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
+  `read_file()` / `write_file()`, for deployments where that per-op
+  `read_namespaced_pod` call becomes a load problem on the Kubernetes API server at
+  high concurrency. Defaults to enabled, so behaviour is unchanged unless set.
+  `exec()` always performs the check regardless.
+- `network_mode: none` isolation is now enforced by omitting any ingress allow for the
+  service rather than an unconditional ingress deny. Observable behaviour is unchanged
+  for a chart used on its own, but a network policy layered on top of this chart (e.g.
+  to allow a specific port) now takes effect instead of being silently shadowed.
+- Sandbox pods no longer see their Kubernetes namespace. The kubelet was writing the
+  pod's `<pod>.<subdomain>.<namespace>.svc.cluster.local` FQDN into `/etc/hosts`, so an
+  agent under evaluation could read whatever the namespace name gives away (e.g. the
+  model or benchmark being run). Pods no longer have a subdomain, so the kubelet writes
+  a plain `<pod IP> <pod name>` instead. Service-to-service DNS is unaffected. The
+  per-pod DNS name `<pod>.<service>.<namespace>.svc.cluster.local` no longer resolves —
+  nothing in this chart used it, but a deployment that created its own governing
+  Service to reach individual pods by name must now use the pod IP.
 
-## 2026-08-12 0.13.0
-
-- Fix `write_file()` silently writing a truncated or empty file while reporting success
 - **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
   filesystem with only `NET_BIND_SERVICE`. A custom `corednsImage` must run under that
   context; set the new `corednsSecurityContext` if it cannot. The default image moves
@@ -16,6 +29,55 @@
   release that fails later or resolves unexpectedly.
 - The CoreDNS sidecar no longer serves its `ready` endpoint on port 8181, and refuses
   queries beyond 1000 concurrent.
+- Raise an error when a conflicting `max_pod_ops` setting would otherwise be ignored.
+- Fix a service's `args` (compose `command:`) reaching the container as a single
+  space-joined string instead of a list.
+- Honour compose `command:` on the `default` service. Previously the chart default
+  entrypoint (`tail -f /dev/null`) was deep-merged in, so the user's command never ran.
+- `exec(user=...)` no longer wraps the shell in `runuser` when the container is already
+  running as that user. `runuser` calls `setgroups(2)`, which needs `CAP_SETGID` even
+  for a root -> root switch, so the unconditional wrapper made every `exec(user=...)`
+  fail in a container whose capabilities had been dropped. On that path the process
+  environment is the container's rather than one `runuser` has reset (`HOME`, `USER`,
+  supplementary groups). A container that cannot switch users at all -- non-root, no
+  `CAP_SETGID`, or no `runuser` installed -- is now logged as a warning and returned as
+  a failed `ExecResult` rather than raised, so a caller that probes with a user and
+  falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
+  user that does not exist still raises.
+- A sandbox waiting for cluster capacity no longer blocks other sandboxes from being
+  created. Inspect's console count of in-progress installs now reflects submissions in
+  flight rather than sandboxes still starting up.
+- A release which does not become ready now reports `Helm release did not become ready
+  within Ns` together with the state of its containers, rather than Helm's
+  `context deadline exceeded`. It names the sandboxes still missing, and reports
+  Warning events against the rest of the release rather than only its pods, so a
+  controller which cannot create its pod at all (a missing `RuntimeClass`, say) is
+  explained rather than merely counted as absent.
+- A timeout now always reports, rather than hanging, when the Kubernetes API is slow to
+  answer the reads which gather the error's diagnostics.
+- Charts which render Pods directly, rather than via a StatefulSet or Deployment, are
+  now waited for. The eval no longer starts before every Pod labelled `inspect/service`
+  is Ready, even when the chart also creates Pods which are not sandboxes — a
+  `DaemonSet`, a hook, or anything added through `additionalResources`.
+- A chart which declares no Pod labelled `inspect/service` now fails the install,
+  rather than starting an eval with no sandbox.
+- Fix a sandbox being backed by a pod which had already terminated, when the cluster
+  still listed it beside its replacement. `exec()` failed intermittently.
+- Add `INSPECT_HELM_UNINSTALL_TIMEOUT` (default 600s). Uninstalls previously used
+  `INSPECT_HELM_TIMEOUT`, which is now safe to set to hours.
+- A Helm release which fails to uninstall during sample cleanup no longer fails the
+  sample. It is retried and reported at the end of the eval as before.
+- Remove the `No GPU node is currently available` warning, which also fired for
+  releases that requested no GPU.
+- Fix sandbox pods being left in the cluster when a sample's sandbox fails to start
+  (e.g. `helm install` timing out): every retry of the sample added another set of
+  pods, none of which were removed until the eval ended. A chart with fixed-name
+  `additionalResources` no longer fails the retry with `exists and cannot be imported
+  into the current release`.
+
+## 2026-08-12 0.13.0
+
+- Fix `write_file()` silently writing a truncated or empty file while reporting success
 - `inspect sandbox cleanup k8s` (with no release name) now **exits non-zero** if any release fails to uninstall, rather than reporting `Complete.` and exiting 0. Releases which fail to uninstall are named, at end-of-task cleanup too, along with their namespace and the `inspect sandbox cleanup k8s <release>` command to retry them.
 - **BREAKING CHANGE**: Sandbox pods created by the built-in Helm chart no longer mount
   Kubernetes service-account API tokens by default. Set
@@ -30,7 +92,7 @@
 - On Helm install failure, the raised error now includes pod diagnostics.
 - Compose to HELM: Support the `security_opt` seccomp option (mapped to a pod `seccompProfile`) and ignore the unsupported `memswap_limit`. See [Compose to Helm](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/) for details.
 - The package and bundled `agent-env` chart versions are now unified, both jumping to
-  `0.14.0` (intervening numbers are unused).
+  `0.13.0` (intervening numbers are unused).
 
 ## 2026-06-25 0.6.1
 

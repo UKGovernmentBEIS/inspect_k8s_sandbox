@@ -63,6 +63,16 @@ the service with `x-default: true` is renamed. For rule 3, the "first" service (
 by YAML order, not alphabetical order) is renamed. Single-service compose files are left
 unchanged.
 
+## Command and Entrypoint
+
+Compose `entrypoint:` maps to Helm `command` (the container entrypoint).
+Compose `command:` maps to Helm `args` (the container args, i.e. the image CMD).
+
+If you set `command:` without `entrypoint:`, the image's ENTRYPOINT is used.
+The converter emits `command: null` so Helm deletes the chart default
+(`tail -f /dev/null` on the `default` service) rather than appending your command
+to it.
+
 ## Internet Access
 
 As per the built-in Helm chart, internet access is disabled by default. This is in

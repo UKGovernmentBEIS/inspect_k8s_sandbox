@@ -108,7 +108,13 @@ Consider using the recommended [Rewrap](https://stkb.github.io/Rewrap/) extensio
 ## Changelog
 
 If appropriate, add an entry under the `## Unreleased` heading in `CHANGELOG.md` when
-submitting a PR.
+submitting a PR. Create that heading if the last release consumed it.
+
+Entries under a dated release heading are published history — don't add to or edit
+them. In particular, if a release is cut after you branch, a stale branch can silently
+land your entry in the just-released section (the release commit renames `##
+Unreleased` to the dated heading, so your diff still applies): after rebasing onto
+`main`, check your entry still sits under `## Unreleased`.
 
 ## Releasing
 
