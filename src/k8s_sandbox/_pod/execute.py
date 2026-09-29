@@ -2,6 +2,7 @@ import base64
 import logging
 import re
 import shlex
+import time
 from contextlib import contextmanager
 from typing import Generator
 
@@ -9,6 +10,7 @@ from inspect_ai.util import ExecResult, OutputLimitExceededError
 from inspect_ai.util import SandboxEnvironmentLimits as limits
 from kubernetes.stream.ws_client import WSClient  # type: ignore[import-untyped]
 
+import k8s_sandbox._pod.op as op_module
 from k8s_sandbox._pod.buffer import LimitedBuffer
 from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.get_returncode import get_returncode
@@ -17,6 +19,12 @@ from k8s_sandbox._pod.op import PodOperation
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
 EXEC_USER_URL = "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
+# The in-pod `timeout -k 5s Ns` wrapper is the primary enforcement of an exec's
+# timeout, but it can only fire while the pod is alive. When the pod has gone the
+# stream simply never completes, so the client also enforces `timeout` plus this
+# grace: enough for the wrapper's 5s SIGKILL escalation, the shell's `sync` and
+# sentinel, and the API server relaying the final frames.
+EXEC_COMPLETION_GRACE_SECONDS = 30
 
 logger = logging.getLogger(__name__)
 
@@ -154,11 +162,29 @@ class ExecuteOperation(PodOperation):
             stdout = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
             stderr = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
             returncode: int | None = None
+            deadline = (
+                None
+                if timeout is None
+                else time.monotonic() + timeout + EXEC_COMPLETION_GRACE_SECONDS
+            )
             while ws_client.is_open():
                 try:
-                    # `timeout=None` means `update` will block
-                    # indefinitely until there is data to read.
-                    ws_client.update(timeout=None)
+                    if deadline is None:
+                        # The caller asked for an unbounded command: block until
+                        # there is data to read (or the transport is closed).
+                        ws_client.update(timeout=None)
+                    else:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise TimeoutError(
+                                f"Command exceeded its {timeout}s timeout and the pod "
+                                f"did not report completion within a further "
+                                f"{EXEC_COMPLETION_GRACE_SECONDS}s; the pod is not "
+                                f"answering."
+                            )
+                        ws_client.update(
+                            timeout=min(remaining, op_module.TRANSPORT_POLL_SECONDS)
+                        )
                     # Note: `peek_*()` and `read_*()` may call `update(timeout=0)`.
                     if ws_client.peek_stderr():
                         stderr.append(ws_client.read_stderr())

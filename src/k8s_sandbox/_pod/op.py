@@ -31,6 +31,11 @@ _KEEPALIVE_INTERVAL_SECONDS = 30
 # MiB) make the kubelet/API-server/TLS layer reset the connection
 # (ConnectionResetError / ssl.SSLEOFError), so stdin is written in chunks.
 _STDIN_CHUNK_SIZE = 1024**2  # 1 MiB
+# How long a worker blocks in one `WSClient.update()` poll while it is enforcing a
+# deadline. Between polls it checks the deadline; the poll itself is still woken
+# early by data or by `close_transport()`, so this only bounds how late a deadline
+# can be noticed, not how long a live stream waits.
+TRANSPORT_POLL_SECONDS = 1.0
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +70,24 @@ class PodOperation(ABC):
 
     def __init__(self, pod: PodInfo):
         self._pod = pod
+        # The operation's live transport, so a cancelling caller can close it
+        # from another thread. `update(timeout=None)` blocks until the socket
+        # has data or is closed; closing it is the only way to wake the worker.
+        self._transport_lock = threading.Lock()
+        self._transport: WSClient | None = None
+
+    def close_transport(self) -> None:
+        """Close this operation's WebSocket, waking a blocked worker thread.
+
+        Called from the event loop (not the worker) when the awaiting caller is
+        cancelled. Safe to call at any time, including before the transport
+        exists or after it has gone: the worker owns the close in its `finally`
+        either way, and `WSClient.close()` tolerates being called twice.
+        """
+        with self._transport_lock:
+            transport = self._transport
+        if transport is not None:
+            transport.close()
 
     def _write_stdin_chunked(self, ws_client: WSClient, data: str | bytes) -> None:
         """Write ``data`` to the stdin channel in ``_STDIN_CHUNK_SIZE`` frames.
@@ -98,11 +121,15 @@ class PodOperation(ABC):
             daemon=True,
             name="ws-keepalive",
         )
+        with self._transport_lock:
+            self._transport = ws_client
         try:
             self._discard_duplicate_channel(ws_client)
             keepalive.start()
             yield ws_client
         finally:
+            with self._transport_lock:
+                self._transport = None
             stop_keepalive.set()
             ws_client.close()
 
@@ -151,7 +178,9 @@ def check_for_pod_restart(pod: PodInfo) -> None:
             (treated as a permanent misconfiguration).
     """
     api = k8s_client(pod.context_name)
-    snapshot = read_pod(api, name=pod.name, namespace=pod.namespace)
+    snapshot = read_pod(
+        api, name=pod.name, namespace=pod.namespace, request_timeout=API_TIMEOUT
+    )
     if snapshot.uid != pod.uid:
         # Capture the new pod's restart count for the default container so the
         # caller can refresh its full cached identity atomically.
