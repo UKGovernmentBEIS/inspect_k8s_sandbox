@@ -74,6 +74,7 @@
   pods, none of which were removed until the eval ended. A chart with fixed-name
   `additionalResources` no longer fails the retry with `exists and cannot be imported
   into the current release`.
+- Fix startup failing with `... is not valid SemVer string`.
 
 ## 2026-08-12 0.13.0
 
