@@ -17,6 +17,9 @@
       "minikube": "1.38.0"
     }
   },
+  "containerEnv": {
+    "MINIKUBE_HOME": "/home/vscode/.minikube/${localWorkspaceFolderBasename}"
+  },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "postStartCommand": "bash .devcontainer/post-start.sh",
   "remoteUser": "vscode"
