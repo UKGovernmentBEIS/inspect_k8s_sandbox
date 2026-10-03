@@ -502,12 +502,49 @@ def test_coredns_container(
     }
     assert corends_container["volumeMounts"] == [
         {
-            "mountPath": "/etc/coredns/Corefile",
+            "mountPath": "/etc/coredns",
             "name": "coredns-config",
             "readOnly": True,
-            "subPath": "Corefile",
         }
     ]
+
+
+def test_coredns_upstream_replaces_the_resolv_conf_file_mount(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, set_str="corednsUpstream[0]=10.96.0.10,corednsUpstream[1]=fd00::a"
+    )
+
+    pod_spec = _get_documents(documents, "StatefulSet")[0]["spec"]["template"]["spec"]
+    assert pod_spec["dnsPolicy"] == "None"
+    assert pod_spec["dnsConfig"] == {"nameservers": ["127.0.0.1"]}
+    mounts = [m for c in pod_spec["containers"] for m in c.get("volumeMounts") or []]
+    assert all("subPath" not in m for m in mounts)
+    assert "resolv-conf" not in [v["name"] for v in pod_spec["volumes"]]
+    config_maps = {
+        cm["metadata"]["name"]: cm for cm in _get_documents(documents, "ConfigMap")
+    }
+    assert "agent-env-my-release-resolv-conf" not in config_maps
+    corefile = config_maps["agent-env-my-release-coredns-configmap"]["data"]["Corefile"]
+    assert "forward . 10.96.0.10 fd00::a {" in corefile
+
+
+def test_coredns_upstream_defaults_to_the_kubelet_resolv_conf(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir)
+
+    pod_spec = _get_documents(documents, "StatefulSet")[0]["spec"]["template"]["spec"]
+    assert "dnsPolicy" not in pod_spec
+    corefile = next(
+        cm["data"]["Corefile"]
+        for cm in _get_documents(documents, "ConfigMap")
+        if cm["metadata"]["name"] == "agent-env-my-release-coredns-configmap"
+    )
+    assert "forward . /etc/resolv.conf {" in corefile
+
+
+def test_coredns_upstream_rejects_non_addresses(chart_dir: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        _run_helm_template(chart_dir, set_str="corednsUpstream[0]=evil}")
+    assert "corednsUpstream" in exc_info.value.stderr
 
 
 def test_coredns_security_context_can_be_overridden(chart_dir: Path) -> None:
@@ -533,6 +570,30 @@ def test_coredns_security_context_can_be_overridden(chart_dir: Path) -> None:
         "runAsUser": 1000,
         "seccompProfile": {"type": "RuntimeDefault"},
     }
+
+
+def test_extra_containers_join_every_service_pod_as_written(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        set_str="extraContainers[0].name=relay,extraContainers[0].image=relay:1,"
+        "extraContainers[0].securityContext.runAsUser=65534",
+    )
+
+    containers = _get_documents(documents, "StatefulSet")[0]["spec"]["template"][
+        "spec"
+    ]["containers"]
+    assert [c["name"] for c in containers] == ["default", "coredns", "relay"]
+    assert containers[-1] == {
+        "name": "relay",
+        "image": "relay:1",
+        "securityContext": {"runAsUser": 65534},
+    }
+
+
+def test_extra_containers_need_a_name_and_an_image(chart_dir: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        _run_helm_template(chart_dir, set_str="extraContainers[0].name=relay")
+    assert "image is required" in exc_info.value.stderr
 
 
 @pytest.mark.parametrize(

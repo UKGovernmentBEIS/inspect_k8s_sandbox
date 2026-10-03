@@ -25,7 +25,7 @@ data:
         {{- end }}
 
         # Forward all queries to the Kubernetes cluster DNS server.
-        forward . /etc/resolv.conf {
+        forward . {{ if .Values.corednsUpstream }}{{ join " " .Values.corednsUpstream }}{{ else }}/etc/resolv.conf{{ end }} {
             # Bound memory use when an untrusted workload floods the local resolver.
             max_concurrent 1000
         }
@@ -34,6 +34,7 @@ data:
         # This prevents our port 53 from appearing open to other Pods.
         bind 127.0.0.1
     }
+{{- if not .Values.corednsUpstream }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -42,3 +43,4 @@ metadata:
 data:
   resolv.conf: |
     nameserver 127.0.0.1
+{{- end }}

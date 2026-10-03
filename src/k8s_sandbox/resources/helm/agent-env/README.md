@@ -16,6 +16,7 @@
 | corednsCommand | list | `["/coredns","-conf","/etc/coredns/Corefile"]` | The command to use for the coredns container. |
 | corednsImage | string | `"coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea"` | The image to use for the coredns container. Pinned by digest; the tag is recorded alongside it for readability and the two must be updated together. An override must run under `corednsSecurityContext` below, or that must be overridden too. |
 | corednsSecurityContext | object | Non-root 65532, read-only root filesystem, RuntimeDefault seccomp, no privilege escalation, and no capability other than `NET_BIND_SERVICE` | Security context for the coredns container. Override only if a custom `corednsImage` cannot run under the hardened default. |
+| extraContainers | list | `[]` | Containers added, as written, to every service's pod beside the service and CoreDNS containers, e.g. a relay a runtime needs in the pod. Each carries its own `securityContext`: none of the service's hardening applies to it. |
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
 | imagePullSecrets | list | `[]` | References to pre-existing secrets that contain registry credentials. |
 | labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |
