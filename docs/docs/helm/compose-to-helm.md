@@ -178,6 +178,16 @@ resources. It covers CPU and memory requests/limits (via `cpus`/`mem_limit` and
 `deploy.resources`), but has no concept of a disk (`ephemeral-storage`) request or
 limit, nor of resources such as `hugepages-*`.
 
+### Swap (`memswap_limit`)
+
+`memswap_limit` is ignored (with an info-level log) because Kubernetes has no
+Compose-equivalent per-container swap limit. On typical clusters, swap is disabled on
+nodes, so this is a no-op. However, if your cluster enables swap (via the Kubernetes
+[NodeSwap](https://kubernetes.io/docs/concepts/cluster-administration/swap-memory-management/)
+feature) and your Compose file set `memswap_limit` equal to `mem_limit` to disable swap
+for the container, the converted workload may instead be able to use swap. If that
+matters, disable swap at the node or pod level.
+
 ## Kubernetes Volume Types
 
 Use per-service `x-inspect_k8s_sandbox.volumes` and `volumeMounts` for Kubernetes
@@ -205,16 +215,6 @@ services:
 
 The volume and mount objects must follow the Kubernetes API. Use this extension
 alongside ordinary Compose volume shorthand when both are needed.
-
-### Swap (`memswap_limit`)
-
-`memswap_limit` is ignored (with an info-level log) because Kubernetes has no
-Compose-equivalent per-container swap limit. On typical clusters, swap is disabled on
-nodes, so this is a no-op. However, if your cluster enables swap (via the Kubernetes
-[NodeSwap](https://kubernetes.io/docs/concepts/cluster-administration/swap-memory-management/)
-feature) and your Compose file set `memswap_limit` equal to `mem_limit` to disable swap
-for the container, the converted workload may instead be able to use swap. If that
-matters, disable swap at the node or pod level.
 
 ## Security Options
 
