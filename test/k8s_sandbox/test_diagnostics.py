@@ -15,7 +15,11 @@ from kubernetes.client import (  # type: ignore
     V1PodStatus,
 )
 
-from k8s_sandbox._diagnostics import describe_release_pods
+from k8s_sandbox._diagnostics import (
+    _MAX_EVENTS,
+    _READ_TIMEOUT,
+    describe_release_pods,
+)
 
 
 def _pod(
@@ -158,10 +162,58 @@ def test_surfaces_failed_scheduling_event_when_pod_has_no_container_statuses() -
     assert summary is not None
     assert "FailedScheduling" in summary
     assert "Insufficient cpu" in summary
-    # Warning events are filtered server-side rather than in Python.
+    # Warning events are filtered server-side rather than in Python, and bounded.
     mock_client_factory.return_value.list_namespaced_event.assert_called_once_with(
-        "default", field_selector="type=Warning"
+        "default",
+        field_selector="type=Warning",
+        limit=_MAX_EVENTS,
+        _request_timeout=_READ_TIMEOUT,
     )
+
+
+def test_surfaces_a_controller_event_when_it_cannot_create_its_pod() -> None:
+    # A missing RuntimeClass (or an admission webhook) stops the StatefulSet creating
+    # a pod at all, so there is no pod to hang the explanation on: the only record is
+    # a FailedCreate event on the controller itself.
+    pods = [_pod("rel-default", "Running", container_statuses=None)]
+    events = [
+        CoreV1Event(
+            metadata=V1ObjectMeta(name="evt-1"),
+            involved_object=V1ObjectReference(name="rel-busybox-runc"),
+            reason="FailedCreate",
+            message='pod rejected: RuntimeClass "runc" not found',
+            type="Warning",
+        )
+    ]
+
+    with _patch_client(pods, events):
+        summary = describe_release_pods(
+            None, "default", "rel", frozenset({"rel-busybox-runc"})
+        )
+
+    assert summary is not None
+    assert "FailedCreate" in summary
+    assert 'RuntimeClass "runc" not found' in summary
+
+
+def test_ignores_events_for_objects_outside_the_release() -> None:
+    pods = [_pod("rel-default", "Running", container_statuses=None)]
+    events = [
+        CoreV1Event(
+            metadata=V1ObjectMeta(name="evt-1"),
+            involved_object=V1ObjectReference(name="someone-elses-statefulset"),
+            reason="FailedCreate",
+            message="not this release's problem",
+            type="Warning",
+        )
+    ]
+
+    with _patch_client(pods, events):
+        summary = describe_release_pods(
+            None, "default", "rel", frozenset({"rel-busybox-runc"})
+        )
+
+    assert summary is None
 
 
 def test_returns_none_and_does_not_raise_when_api_call_fails() -> None:

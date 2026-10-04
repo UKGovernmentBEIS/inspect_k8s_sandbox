@@ -4,7 +4,7 @@ import re
 import shlex
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Generator, Literal, cast, overload
 
@@ -225,8 +225,21 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             sample_uuid=sample_uuid,
             extra_values=extra_values,
         )
-        await HelmReleaseManager.get_instance().install(release)
-        return reorder_default_first(await get_sandboxes(release, resolved_config))
+        manager = HelmReleaseManager.get_instance()
+        try:
+            await manager.install(release)
+            return reorder_default_first(await get_sandboxes(release, resolved_config))
+        except Exception:
+            # Inspect does not call sample_cleanup() when sample_init() raises, and
+            # uninstall_all() does not run until the whole eval ends, so nothing else
+            # removes what Helm created. Without this, each retried sample leaves a
+            # full set of sandbox pods behind.
+            # A failed uninstall must not replace the original error (which carries the
+            # pod diagnostics), and leaves the release tracked so that uninstall_all()
+            # retries it and reports it.
+            with suppress(Exception):
+                await manager.uninstall(release, quiet=True)
+            raise
 
     @classmethod
     async def sample_cleanup(
@@ -243,7 +256,20 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         sandbox: K8sSandboxEnvironment = cast(
             K8sSandboxEnvironment, next(iter(environments.values()))
         )
-        await HelmReleaseManager.get_instance().uninstall(sandbox.release, quiet=True)
+        try:
+            await HelmReleaseManager.get_instance().uninstall(
+                sandbox.release, quiet=True
+            )
+        except Exception as e:
+            # Inspect turns an exception raised here into a sample error, which would
+            # discard a sample that had otherwise succeeded. The release stays tracked
+            # for uninstall_all().
+            log_warn(
+                "Failed to uninstall Helm release during sample cleanup; it will be "
+                "retried at the end of the eval.",
+                release=sandbox.release.release_name,
+                error=e,
+            )
 
     async def exec(
         self,
@@ -429,7 +455,13 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     """The user to run commands as in the container if user is not specified."""
     restarted_container_behavior: Literal["warn", "raise"] = "warn"
     max_pod_ops: int | None = None
-    """Maximum number of concurrent pod operations. Defaults to cpu_count * 4."""
+    """Maximum number of concurrent pod operations. Defaults to cpu_count * 4.
+
+    The limit is process-wide, not per-task: whichever task initialises the
+    executor first fixes it for the process. Set the same value on every task
+    run in the process (a task with a conflicting value fails at startup), or
+    use the INSPECT_MAX_POD_OPS env var instead.
+    """
 
 
 def _key_to_pascal(key: str) -> str:

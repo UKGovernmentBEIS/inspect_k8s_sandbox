@@ -9,7 +9,16 @@ metadata:
   annotations:
     {{- toYaml $.Values.annotations | nindent 4 }}
 spec:
-  serviceName: {{ $name }}-service
+  {{- /*
+    Deliberately empty. The kubelet writes the pod's FQDN --
+    <pod>.<subdomain>.<namespace>.svc.cluster.local -- into /etc/hosts, but only when
+    the pod has a subdomain, and a StatefulSet's pods take their subdomain from
+    serviceName. Left empty, the kubelet writes a plain "<pod IP> <pod name>" and the
+    namespace stays out of the sandbox, where an agent under evaluation can read it.
+    Nothing resolved the per-pod DNS name this would create: the Services below are
+    what the coredns sidecar rewrites service names to.
+  */}}
+  serviceName: ""
   replicas: 1
   selector:
     matchLabels:
