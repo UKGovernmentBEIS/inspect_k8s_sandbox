@@ -4,8 +4,8 @@ A cancelled `await` does not stop the thread running the operation: it is
 blocked in `WSClient.update(timeout=None)`, which returns only when the socket
 has data or is closed. Left running it holds a slot in the shared pool, keeps
 the interpreter from exiting (`ThreadPoolExecutor` joins its threads at exit),
-and can still write into a destination its caller has already disposed
-(agent-c#19253, where the caller was inspect_swe's Centaur transcript drain).
+and can still write into a destination its caller has already disposed (a
+`read_file` destination, raising `ValueError: write to closed file`).
 """
 
 import asyncio
