@@ -9,13 +9,20 @@ and can still write into a destination its caller has already disposed
 """
 
 import asyncio
+import socket
 import threading
 import time
+from pathlib import Path
+from typing import Callable
+from unittest.mock import MagicMock, patch
 
 import anyio
 import pytest
+from kubernetes.stream.ws_client import WSClient  # type: ignore
+from websocket import WebSocket
 
 from k8s_sandbox._pod.executor import PodOpExecutor
+from k8s_sandbox._pod.write import WriteFileOperation
 
 
 class _FakeTransport:
@@ -155,3 +162,65 @@ async def test_cancelling_an_operation_with_no_transport_unwinds_immediately(
         await task
     assert time.monotonic() - started < 1.0, "no-transport cancel must not settle"
     release.set()
+
+
+def _start(fn: Callable[[], object]) -> tuple[threading.Thread, list[object]]:
+    """Run fn on a daemon thread, recording what it returned or raised."""
+    outcome: list[object] = []
+
+    def run() -> None:
+        try:
+            outcome.append(fn())
+        except BaseException as e:  # noqa: BLE001 - the test inspects the exception
+            outcome.append(e)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread, outcome
+
+
+@pytest.mark.parametrize(
+    "file_size",
+    [32 * 1024**2, 1],
+    ids=["worker-blocked-writing", "worker-blocked-reading"],
+)
+def test_closing_the_transport_wakes_the_worker_without_blocking_the_caller(
+    file_size: int,
+) -> None:
+    """close_transport() runs on the event loop, so it must return at once.
+
+    A cancelled write to a pod that stopped reading leaves its worker blocked in
+    a socket send, holding the WebSocket's send lock; a cancelled operation that
+    is waiting on a silent pod leaves its worker blocked in a read, with nobody
+    to answer a close handshake. Either way the cancelling caller must not wait
+    on the pod: blocking here freezes every coroutine in the process.
+    """
+    ours, pod_end = socket.socketpair()
+    ws = WebSocket()
+    ws.sock = ours
+    ws.connected = True
+    with patch("kubernetes.stream.ws_client.create_websocket", return_value=ws):
+        transport = WSClient(MagicMock(), "wss://pod", None, capture_all=False)
+    writer = WriteFileOperation(MagicMock())
+    try:
+        with (
+            patch("k8s_sandbox._pod.op.k8s_client"),
+            patch("k8s_sandbox._pod.op.stream", return_value=transport),
+        ):
+            worker, worker_outcome = _start(
+                lambda: writer.write_file(b"x" * file_size, Path("/dst"))
+            )
+            # Let the worker reach the pod and block on it.
+            time.sleep(0.3)
+            assert worker.is_alive(), "the worker should be blocked on the pod"
+
+            closer, _ = _start(writer.close_transport)
+            closer.join(1.0)
+            assert not closer.is_alive(), "close_transport() blocked on the pod"
+
+            worker.join(5.0)
+            assert not worker.is_alive(), "closing the transport did not wake it"
+            assert isinstance(worker_outcome[0], Exception)
+    finally:
+        # Releases anything still blocked on the pod, whatever the outcome.
+        pod_end.close()

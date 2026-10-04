@@ -1,5 +1,6 @@
 import json
 import logging
+import socket
 import threading
 from abc import ABC
 from dataclasses import dataclass
@@ -70,24 +71,45 @@ class PodOperation(ABC):
 
     def __init__(self, pod: PodInfo):
         self._pod = pod
-        # The operation's live transport, so a cancelling caller can close it
-        # from another thread. `update(timeout=None)` blocks until the socket
-        # has data or is closed; closing it is the only way to wake the worker.
+        # The operation's live transport, so a cancelling caller can wake the
+        # worker from another thread. `update(timeout=None)` blocks until the
+        # socket has data or is shut down, and a stdin write to a pod that has
+        # stopped reading blocks until there is room; shutting the socket down is
+        # the only way to end either wait.
         self._transport_lock = threading.Lock()
         self._transport: WSClient | None = None
 
     def close_transport(self) -> None:
-        """Close this operation's WebSocket, waking a blocked worker thread.
+        """Shut down this operation's socket, waking a blocked worker thread.
 
         Called from the event loop (not the worker) when the awaiting caller is
-        cancelled. Safe to call at any time, including before the transport
-        exists or after it has gone: the worker owns the close in its `finally`
-        either way, and `WSClient.close()` tolerates being called twice.
+        cancelled, so it must not block. That rules out `WSClient.close()`: it
+        sends a close frame under the WebSocket's send lock, which a worker
+        blocked writing stdin to a pod that stopped reading holds indefinitely,
+        and then waits up to 3s for the pod's reply. Shutting the socket down
+        takes no lock and returns at once, and it fails a blocked read or write
+        immediately, so the worker finishes and performs the full close itself in
+        its `finally`. Safe to call at any time, including before the transport
+        exists or after the worker has closed it.
         """
         with self._transport_lock:
             transport = self._transport
-        if transport is not None:
-            transport.close()
+        if transport is None:
+            return
+        # WSClient.sock is the websocket-client WebSocket; its own .sock is the
+        # underlying (TLS) socket, or None once the worker has closed it.
+        raw_socket = transport.sock.sock
+        if raw_socket is None:
+            return
+        try:
+            # The base-class call on purpose: `SSLSocket.shutdown()` first drops
+            # the TLS layer, and a frame the worker sends in that instant would go
+            # out over the plain socket, unencrypted. Shutting down the underlying
+            # socket keeps TLS in place, so later sends fail instead.
+            socket.socket.shutdown(raw_socket, socket.SHUT_RDWR)
+        except OSError:
+            # Closed by the worker since we read it: the worker is awake already.
+            logger.debug("Transport was already closed when cancelled.", exc_info=True)
 
     def _write_stdin_chunked(self, ws_client: WSClient, data: str | bytes) -> None:
         """Write ``data`` to the stdin channel in ``_STDIN_CHUNK_SIZE`` frames.
