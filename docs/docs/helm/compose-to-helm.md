@@ -216,6 +216,9 @@ services:
 The volume and mount objects must follow the Kubernetes API. Use this extension
 alongside ordinary Compose volume shorthand when both are needed.
 
+An OCI image volume also needs a cluster and container runtime that support
+[image volumes](https://kubernetes.io/docs/tasks/configure-pod-container/image-volumes/).
+
 ## Security Options
 
 A `security_opt` **seccomp** entry (`seccomp=<value>` or `seccomp:<value>`) is converted
