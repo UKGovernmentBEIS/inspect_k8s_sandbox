@@ -621,6 +621,53 @@ def test_rejects_names_that_can_inject_rendered_configuration(
     assert "values don't meet the specifications of the schema" in excinfo.value.stderr
 
 
+def test_network_policies_render_by_default(chart_dir: Path) -> None:
+    default = _run_helm_template(chart_dir)
+    explicit = _run_helm_template(chart_dir, set_str="networkPolicy.enabled=true")
+
+    assert default == explicit
+    assert _get_documents(default, "CiliumNetworkPolicy")
+
+
+def test_network_policy_disabled_renders_no_cilium_kinds(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir, set_str="networkPolicy.enabled=false")
+
+    assert not [doc for doc in documents if "cilium.io" in doc["apiVersion"]]
+    # The sandbox itself, and the CoreDNS sidecar that maps service names, remain.
+    assert _get_documents(documents, "StatefulSet")
+    assert "agent-env-my-release-coredns-configmap" in [
+        cm["metadata"]["name"] for cm in _get_documents(documents, "ConfigMap")
+    ]
+
+
+@pytest.mark.parametrize(
+    "restriction",
+    [
+        "allowDomains[0]=example.com",
+        "allowDomainsPorts[0].port=22",
+        "allowEntities[0]=world",
+        "allowCIDR[0]=10.0.0.0/8",
+        "services.default.networkIsolated=true",
+    ],
+)
+@pytest.mark.parametrize("skip_schema", [False, True])
+def test_network_policy_disabled_refuses_unenforceable_restrictions(
+    chart_dir: Path, restriction: str, skip_schema: bool
+) -> None:
+    # The schema rejects these first; the template's own check backs it up when
+    # schema validation is skipped.
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        _run_helm_template(
+            chart_dir,
+            set_str=f"networkPolicy.enabled=false,{restriction}",
+            extra_args=["--skip-schema-validation"] if skip_schema else None,
+        )
+    field = restriction.split("=")[0].split("[")[0].removeprefix("services.default.")
+    assert field in exc_info.value.stderr
+    if skip_schema:
+        assert "networkPolicy.enabled is false" in exc_info.value.stderr
+
+
 def test_default_deny_ingress_selects_every_pod(chart_dir: Path) -> None:
     documents = _run_helm_template(chart_dir)
 
@@ -886,6 +933,7 @@ def _run_helm_template(
     values_file: Path | None = None,
     set_str: str | None = None,
     set_string: str | None = None,
+    extra_args: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     cmd = [
         "helm",
@@ -900,6 +948,8 @@ def _run_helm_template(
         cmd += ["--set", set_str]
     if set_string:
         cmd += ["--set-string", set_string]
+    if extra_args:
+        cmd += extra_args
 
     # stderr is captured so that tests asserting rejection can check why helm failed.
     result = subprocess.run(

@@ -30,6 +30,13 @@ allowCIDR: []
 # allowed to access.
 # @default -- Empty list (no additional entities compared to default policies)
 allowEntities: []
+networkPolicy:
+  # -- Render the CiliumNetworkPolicies that restrict egress and ingress. Set false on a
+  # cluster without Cilium whose pod runtime enforces egress instead: the cluster or
+  # runtime is then responsible for all egress and isolation. While false, setting
+  # `allowDomains`, `allowDomainsPorts`, `allowEntities`, `allowCIDR` or a service's
+  # `networkIsolated` fails the install, since nothing in the chart would enforce them.
+  enabled: true
 # -- References to pre-existing secrets that contain registry credentials.
 imagePullSecrets: []
 # - name: "gcr-json-key"

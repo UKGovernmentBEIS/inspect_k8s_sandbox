@@ -55,6 +55,15 @@
         "type": "string"
       }
     },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "networks": {
       "type": "object",
       "propertyNames": {
@@ -284,6 +293,51 @@
     },
     "serviceAccountName": {
       "type": ["string", "null"]
+    }
+  },
+  "if": {
+    "description": "With networkPolicy.enabled false, nothing in the chart enforces an allowlist or an isolated service, so refuse them rather than drop them. templates/network-policy.yaml fails on the same set.",
+    "properties": {
+      "networkPolicy": {
+        "properties": {
+          "enabled": {
+            "const": false
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      }
+    },
+    "required": [
+      "networkPolicy"
+    ]
+  },
+  "then": {
+    "properties": {
+      "allowDomains": {
+        "maxItems": 0
+      },
+      "allowDomainsPorts": {
+        "maxItems": 0
+      },
+      "allowEntities": {
+        "maxItems": 0
+      },
+      "allowCIDR": {
+        "maxItems": 0
+      },
+      "services": {
+        "patternProperties": {
+          ".*": {
+            "properties": {
+              "networkIsolated": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
     }
   },
   "required": [

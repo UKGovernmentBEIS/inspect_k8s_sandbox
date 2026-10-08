@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- A new `networkPolicy.enabled` value (default `true`) lets the chart install on a
+  cluster without Cilium, where it failed with `no matches for kind
+  "CiliumNetworkPolicy"`. Set it to `false` only where the cluster or the pod runtime
+  enforces egress: with it off, the chart renders no network policies and the cluster
+  or runtime is responsible for all egress and isolation. `allowDomains`,
+  `allowDomainsPorts`, `allowEntities`, `allowCIDR` and `network_mode: none` are
+  rejected while it is off, since nothing would enforce them.
 - Fix the Helm version check failing with `ValueError: ... is not valid SemVer string`
   under semver 3.1.0.
 - A new `extraContainers` value adds containers, as written, to every service's pod,
