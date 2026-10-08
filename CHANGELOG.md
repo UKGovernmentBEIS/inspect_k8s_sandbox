@@ -7,9 +7,13 @@
   Allowlists, `networks` and `networkIsolated` (compose `network_mode: none`) are
   rejected while it is off.
 - `INSPECT_SANDBOX_VALUES=/path/to/values.yaml` applies a Helm values file to every
-  sandbox install, after and overriding the task's own values, for cluster-wide settings
-  such as `networkPolicy.enabled`, `corednsUpstream` and `extraContainers`. Compose
-  tasks pick it up too.
+  install of the built-in chart, after and overriding the task's own values, for
+  cluster-wide settings such as `networkPolicy.enabled`, `corednsUpstream` and
+  `extraContainers`. Compose tasks pick it up too.
+- A sandbox no longer counts as ready while its CoreDNS sidecar is failing to start,
+  so a broken DNS configuration fails the install instead of the sample's name lookups.
+  The sidecar's startup probe listens on the pod IP at `corednsReadyPort` (default
+  `18181`); change it if a service in the pod uses that port.
 - Fix `read_file()` hanging or returning a truncated file on Kata Containers' Go runtime
   shim (`kata-qemu`).
 - A new `extraContainers` value adds containers, as written, to every service's pod,

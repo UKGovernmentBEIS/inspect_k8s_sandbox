@@ -8,6 +8,8 @@ data:
     .:53 {
         log
         errors
+        # Serves the startup probe. Unlike port 53, kubelet must reach it on the pod IP.
+        ready :{{ .Values.corednsReadyPort }}
 
         # Add rewrite rules for each service which exposes ports.
 

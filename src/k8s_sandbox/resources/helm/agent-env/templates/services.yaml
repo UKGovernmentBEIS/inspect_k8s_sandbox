@@ -186,6 +186,16 @@ spec:
           - containerPort: 53
             protocol: TCP
             name: dns-tcp
+          - containerPort: {{ $.Values.corednsReadyPort }}
+            protocol: TCP
+            name: dns-ready
+        {{- /* Without it the sidecar counts as ready between crash-loop restarts. */}}
+        startupProbe:
+          httpGet:
+            path: /ready
+            port: dns-ready
+          periodSeconds: 1
+          failureThreshold: 30
         volumeMounts:
           {{- /* A directory mount, not subPath, which Kata Containers documents as unsupported. */}}
           - name: coredns-config

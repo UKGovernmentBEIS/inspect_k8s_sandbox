@@ -1,3 +1,4 @@
+import ipaddress
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -542,14 +543,72 @@ def test_coredns_upstream_defaults_to_the_kubelet_resolv_conf(chart_dir: Path) -
 
 
 @pytest.mark.parametrize(
-    # Each passes a loose [0-9a-fA-F.:]+ check; CoreDNS crash-loops on the first two.
     "upstream",
-    ["999.999.999.999", "..", ":::", "10.0.0", "1:2:3:4:5:6:7:8:9", "evil}"],
+    [
+        "10.96.0.10",
+        "fd00::a",
+        "::",
+        "fe80::1",
+        "1:2:3:4:5:6:7::",
+        "::ffff:10.0.0.1",
+        "64:ff9b::192.0.2.1",
+        # CoreDNS exits on the next two, and a sandbox would wait for it until timeout.
+        "999.999.999.999",
+        "..",
+        ":::",
+        "1:2:3:4:5:6:7::8:9",
+        "1::2::3",
+        "01.2.3.4",
+        "10.0.0",
+        "::ffff:999.0.0.1",
+        "evil}",
+    ],
 )
-def test_coredns_upstream_rejects_non_addresses(chart_dir: Path, upstream: str) -> None:
+def test_coredns_upstream_accepts_exactly_ip_addresses(
+    chart_dir: Path, upstream: str
+) -> None:
+    try:
+        ipaddress.ip_address(upstream)
+        is_address = True
+    except ValueError:
+        is_address = False
+
+    try:
+        _run_helm_template(chart_dir, set_string=f"corednsUpstream[0]={upstream}")
+        accepted = True
+    except subprocess.CalledProcessError as e:
+        assert "corednsUpstream" in e.stderr
+        accepted = False
+
+    assert accepted == is_address
+
+
+def test_coredns_startup_probe_uses_the_ready_port(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir, set_str="corednsReadyPort=19000")
+
+    containers = _get_documents(documents, "StatefulSet")[0]["spec"]["template"][
+        "spec"
+    ]["containers"]
+    coredns = next(c for c in containers if c["name"] == "coredns")
+    assert {"containerPort": 19000, "protocol": "TCP", "name": "dns-ready"} in coredns[
+        "ports"
+    ]
+    assert coredns["startupProbe"]["httpGet"] == {"path": "/ready", "port": "dns-ready"}
+    assert "readinessProbe" not in coredns
+    corefile = next(
+        cm["data"]["Corefile"]
+        for cm in _get_documents(documents, "ConfigMap")
+        if cm["metadata"]["name"] == "agent-env-my-release-coredns-configmap"
+    )
+    assert "ready :19000\n" in corefile
+    assert "bind 127.0.0.1" in corefile
+
+
+@pytest.mark.parametrize("port", ["53", "0", "70000"])
+def test_coredns_ready_port_rejects_unusable_ports(chart_dir: Path, port: str) -> None:
     with pytest.raises(subprocess.CalledProcessError) as exc_info:
-        _run_helm_template(chart_dir, set_str=f"corednsUpstream[0]={upstream}")
-    assert "corednsUpstream" in exc_info.value.stderr
+        _run_helm_template(chart_dir, set_str=f"corednsReadyPort={port}")
+    assert "corednsReadyPort" in exc_info.value.stderr
 
 
 def test_coredns_security_context_can_be_overridden(chart_dir: Path) -> None:
