@@ -593,7 +593,10 @@ def test_extra_containers_join_every_service_pod_as_written(chart_dir: Path) -> 
 def test_extra_containers_need_a_name_and_an_image(chart_dir: Path) -> None:
     with pytest.raises(subprocess.CalledProcessError) as exc_info:
         _run_helm_template(chart_dir, set_str="extraContainers[0].name=relay")
-    assert "image is required" in exc_info.value.stderr
+    # Helm's two JSON Schema libraries word this differently ("image is required" vs
+    # "missing property 'image'"), so assert only on the names.
+    assert "extraContainers" in exc_info.value.stderr
+    assert "image" in exc_info.value.stderr
 
 
 @pytest.mark.parametrize(
