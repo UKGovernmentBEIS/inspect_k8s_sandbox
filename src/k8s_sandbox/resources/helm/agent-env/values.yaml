@@ -33,7 +33,7 @@ allowEntities: []
 networkPolicy:
   # -- Render the CiliumNetworkPolicies. Set false on a cluster without Cilium; the
   # cluster or pod runtime must then enforce egress and isolation. While false, the
-  # allow* values and `networkIsolated` are rejected.
+  # allow* values, `networks` and `networkIsolated` are rejected.
   enabled: true
 # -- References to pre-existing secrets that contain registry credentials.
 imagePullSecrets: []

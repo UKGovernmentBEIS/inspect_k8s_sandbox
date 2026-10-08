@@ -1,14 +1,15 @@
 {{- if not .Values.networkPolicy.enabled }}
 {{- /* Refuse restrictions nothing would enforce, rather than silently drop them. */}}
 {{- $unenforced := list }}
-{{- range $key := list "allowDomains" "allowDomainsPorts" "allowEntities" "allowCIDR" }}
+{{- range $key := list "allowDomains" "allowDomainsPorts" "allowEntities" "allowCIDR" "networks" }}
 {{- if index $.Values $key }}{{ $unenforced = append $unenforced $key }}{{ end }}
 {{- end }}
 {{- range $svcName, $svc := .Values.services }}
 {{- if $svc.networkIsolated }}{{ $unenforced = append $unenforced (printf "services.%s.networkIsolated" $svcName) }}{{ end }}
+{{- if $svc.networks }}{{ $unenforced = append $unenforced (printf "services.%s.networks" $svcName) }}{{ end }}
 {{- end }}
 {{- if $unenforced }}
-{{- fail (printf "networkPolicy.enabled is false, so nothing would enforce %s. Unset these, or enable network policies." (join ", " $unenforced)) }}
+{{- fail (printf "networkPolicy.enabled is false (set in the task's values or the INSPECT_SANDBOX_VALUES file), so nothing would enforce %s. Unset these, or enable network policies." (join ", " $unenforced)) }}
 {{- end }}
 {{- else -}}
 apiVersion: cilium.io/v2

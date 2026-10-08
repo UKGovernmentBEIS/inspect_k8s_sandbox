@@ -21,7 +21,7 @@
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
 | imagePullSecrets | list | `[]` | References to pre-existing secrets that contain registry credentials. |
 | labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |
-| networkPolicy.enabled | bool | `true` | Render the CiliumNetworkPolicies. Set false on a cluster without Cilium; the cluster or pod runtime must then enforce egress and isolation. While false, the allow* values and `networkIsolated` are rejected. |
+| networkPolicy.enabled | bool | `true` | Render the CiliumNetworkPolicies. Set false on a cluster without Cilium; the cluster or pod runtime must then enforce egress and isolation. While false, the allow* values, `networks` and `networkIsolated` are rejected. |
 | networks | object | `{}` | Defines network names that can be attached to services in order to specify subsets of services that can communicate with one another. Names must be lower case alphanumeric with `-` or `.`, and at most 55 characters. |
 | serviceAccountCreate | bool | `false` | Whether to create the selected ServiceAccount. Keep disabled to use an externally managed ServiceAccount across concurrent sandbox releases. |
 | serviceAccountName | string | `nil` | Service account name for sandbox pods. The account must already exist unless `serviceAccountCreate` is enabled. |

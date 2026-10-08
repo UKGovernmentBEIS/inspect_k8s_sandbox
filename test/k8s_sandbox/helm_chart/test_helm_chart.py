@@ -541,9 +541,14 @@ def test_coredns_upstream_defaults_to_the_kubelet_resolv_conf(chart_dir: Path) -
     assert "forward . /etc/resolv.conf {" in corefile
 
 
-def test_coredns_upstream_rejects_non_addresses(chart_dir: Path) -> None:
+@pytest.mark.parametrize(
+    # Each passes a loose [0-9a-fA-F.:]+ check; CoreDNS crash-loops on the first two.
+    "upstream",
+    ["999.999.999.999", "..", ":::", "10.0.0", "1:2:3:4:5:6:7:8:9", "evil}"],
+)
+def test_coredns_upstream_rejects_non_addresses(chart_dir: Path, upstream: str) -> None:
     with pytest.raises(subprocess.CalledProcessError) as exc_info:
-        _run_helm_template(chart_dir, set_str="corednsUpstream[0]=evil}")
+        _run_helm_template(chart_dir, set_str=f"corednsUpstream[0]={upstream}")
     assert "corednsUpstream" in exc_info.value.stderr
 
 
@@ -637,23 +642,24 @@ def test_network_policy_disabled_renders_no_cilium_kinds(chart_dir: Path) -> Non
 
 
 @pytest.mark.parametrize(
-    "restriction",
+    ("restriction", "field"),
     [
-        "allowDomains[0]=example.com",
-        "allowDomainsPorts[0].port=22",
-        "allowEntities[0]=world",
-        "allowCIDR[0]=10.0.0.0/8",
-        "services.default.networkIsolated=true",
+        ("allowDomains[0]=example.com", "allowDomains"),
+        ("allowDomainsPorts[0].port=22", "allowDomainsPorts"),
+        ("allowEntities[0]=world", "allowEntities"),
+        ("allowCIDR[0]=10.0.0.0/8", "allowCIDR"),
+        ("networks.backend.driver=bridge", "networks"),
+        ("services.default.networks[0]=backend", "services.default.networks"),
+        ("services.default.networkIsolated=true", "services.default.networkIsolated"),
     ],
 )
 def test_network_policy_disabled_refuses_unenforceable_restrictions(
-    chart_dir: Path, restriction: str
+    chart_dir: Path, restriction: str, field: str
 ) -> None:
     with pytest.raises(subprocess.CalledProcessError) as exc_info:
         _run_helm_template(
             chart_dir, set_str=f"networkPolicy.enabled=false,{restriction}"
         )
-    field = restriction.split("=")[0].split("[")[0]
     assert "networkPolicy.enabled is false" in exc_info.value.stderr
     assert f"nothing would enforce {field}" in exc_info.value.stderr
 

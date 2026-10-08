@@ -99,7 +99,14 @@
       "description": "Interpolated into the CoreDNS Corefile, so restricted to IP addresses.",
       "items": {
         "type": "string",
-        "pattern": "^[0-9a-fA-F.:]+$"
+        "anyOf": [
+          {
+            "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"
+          },
+          {
+            "pattern": "^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){0,6})?::([0-9a-fA-F]{1,4}(:[0-9a-fA-F]{1,4}){0,6})?)$"
+          }
+        ]
       }
     },
     "imagePullSecrets": {
