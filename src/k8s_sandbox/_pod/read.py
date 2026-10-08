@@ -28,7 +28,10 @@ class ReadFileOperation(PodOperation):
         yield from self.create_websocket_client_for_exec(
             command=command,
             stderr=True,
-            stdin=False,
+            # Without stdin, kubelet closes the exec's input as soon as the stream
+            # opens, which races the stdout read in Kata Containers' Go shim and hangs
+            # or truncates the read (kata-containers/kata-containers#9071).
+            stdin=True,
             stdout=True,
             # Leave stdout (and stderr) as binary.
             binary=True,
