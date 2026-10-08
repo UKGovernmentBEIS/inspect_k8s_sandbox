@@ -40,5 +40,8 @@ def _raise(message: str) -> None:
 
 
 def _parse_version(version: str) -> Version:
-    # Typical output: "v3.15.3+g3bb50bb\n"; semver 3.1.0 rejects the newline.
-    return Version.parse(version.strip().removeprefix("v"))
+    # Typical output: "v3.15.3+g3bb50bb\n"
+    version = version.strip()
+    if version.startswith("v"):
+        return Version.parse(version[1:])
+    return Version.parse(version)

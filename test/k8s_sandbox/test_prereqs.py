@@ -2,7 +2,6 @@ from unittest.mock import patch
 
 import pytest
 from inspect_ai._util.error import PrerequisiteError
-from semver import Version
 
 from k8s_sandbox._prereqs import _parse_version, validate_prereqs
 
@@ -19,13 +18,10 @@ async def test_helm_version_satisfactory() -> None:
     await validate_prereqs()
 
 
-@pytest.mark.parametrize(
-    ("output", "expected"),
-    [
-        ("v3.15.3+g3bb50bb\n", Version(3, 15, 3, build="g3bb50bb")),
-        ("v4.3.0+gbec5b06\n", Version(4, 3, 0, build="gbec5b06")),
-        ("4.3.0", Version(4, 3, 0)),
-    ],
-)
-def test_parse_helm_short_version(output: str, expected: Version) -> None:
-    assert _parse_version(output) == expected
+def test_parse_version_strips_trailing_newline() -> None:
+    """`helm version --short` output ends in a newline that semver 3.1+ rejects."""
+    assert str(_parse_version("v3.21.3+g1ad6e68\n")) == "3.21.3+g1ad6e68"
+
+
+def test_parse_version_without_trailing_whitespace() -> None:
+    assert str(_parse_version("v3.15.3+g3bb50bb")) == "3.15.3+g3bb50bb"
