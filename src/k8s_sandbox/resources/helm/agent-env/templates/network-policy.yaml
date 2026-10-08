@@ -1,5 +1,5 @@
 {{- if not .Values.networkPolicy.enabled }}
-{{- /* With no CiliumNetworkPolicy rendered, nothing here enforces an allowlist or an isolated service, so refuse them rather than drop them. */}}
+{{- /* Refuse restrictions nothing would enforce, rather than silently drop them. */}}
 {{- $unenforced := list }}
 {{- range $key := list "allowDomains" "allowDomainsPorts" "allowEntities" "allowCIDR" }}
 {{- if index $.Values $key }}{{ $unenforced = append $unenforced $key }}{{ end }}
@@ -8,7 +8,7 @@
 {{- if $svc.networkIsolated }}{{ $unenforced = append $unenforced (printf "services.%s.networkIsolated" $svcName) }}{{ end }}
 {{- end }}
 {{- if $unenforced }}
-{{- fail (printf "networkPolicy.enabled is false, so this chart renders no CiliumNetworkPolicy and nothing would enforce %s. Remove them and enforce egress in the cluster or the pod runtime, or set networkPolicy.enabled to true." (join ", " $unenforced)) }}
+{{- fail (printf "networkPolicy.enabled is false, so nothing would enforce %s. Unset these, or enable network policies." (join ", " $unenforced)) }}
 {{- end }}
 {{- else -}}
 apiVersion: cilium.io/v2

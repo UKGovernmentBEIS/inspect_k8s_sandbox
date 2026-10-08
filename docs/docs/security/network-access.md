@@ -26,12 +26,10 @@ network access.
 
 ??? warning "Clusters without Cilium"
 
-    On a cluster without Cilium, set `networkPolicy.enabled: false` so the chart
-    renders no Cilium Network Policies. The chart then restricts nothing: the cluster or
-    the pod runtime (e.g. a microVM runtime that filters egress) is responsible for all
-    egress and isolation, including DNS exfiltration. The chart refuses to install with
-    `allowDomains`, `allowDomainsPorts`, `allowEntities`, `allowCIDR` or
-    `network_mode: none` set in that mode, because nothing would enforce them.
+    Set `networkPolicy.enabled: false` to render no Cilium Network Policies. The chart
+    then restricts nothing: the cluster or pod runtime must enforce egress and isolation,
+    including DNS exfiltration. Allowlists and `network_mode: none` are rejected in this
+    mode.
 
 Cilium has tooling to observe network requests, such as
 [Hubble](https://github.com/cilium/hubble). Though note from the

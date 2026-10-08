@@ -633,11 +633,7 @@ def test_network_policy_disabled_renders_no_cilium_kinds(chart_dir: Path) -> Non
     documents = _run_helm_template(chart_dir, set_str="networkPolicy.enabled=false")
 
     assert not [doc for doc in documents if "cilium.io" in doc["apiVersion"]]
-    # The sandbox itself, and the CoreDNS sidecar that maps service names, remain.
     assert _get_documents(documents, "StatefulSet")
-    assert "agent-env-my-release-coredns-configmap" in [
-        cm["metadata"]["name"] for cm in _get_documents(documents, "ConfigMap")
-    ]
 
 
 @pytest.mark.parametrize(

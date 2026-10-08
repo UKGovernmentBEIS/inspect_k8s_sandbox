@@ -40,6 +40,5 @@ def _raise(message: str) -> None:
 
 
 def _parse_version(version: str) -> Version:
-    # Typical output: "v3.15.3+g3bb50bb\n" (Helm 4: "v4.3.0+gbec5b06\n"). The build
-    # metadata after "+" is SemVer, which Version.parse accepts.
+    # Typical output: "v3.15.3+g3bb50bb\n"; semver 3.1.0 rejects the newline.
     return Version.parse(version.strip().removeprefix("v"))
