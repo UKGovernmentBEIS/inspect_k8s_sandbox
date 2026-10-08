@@ -40,7 +40,6 @@ def _raise(message: str) -> None:
 
 
 def _parse_version(version: str) -> Version:
-    # Typical output: "v3.15.3+g3bb50bb"
-    if version.startswith("v"):
-        return Version.parse(version[1:])
-    return Version.parse(version)
+    # Typical output: "v3.15.3+g3bb50bb\n" (Helm 4: "v4.3.0+gbec5b06\n"). The build
+    # metadata after "+" is SemVer, which Version.parse accepts.
+    return Version.parse(version.strip().removeprefix("v"))

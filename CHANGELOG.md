@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix the Helm version check failing with `ValueError: ... is not valid SemVer string`
+  under semver 3.1.0.
 - A new `extraContainers` value adds containers, as written, to every service's pod,
   for a runtime that needs a helper in the pod beside the service.
 - The CoreDNS sidecar's `Corefile` is now mounted as a directory rather than with
