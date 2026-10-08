@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import os
 from pathlib import Path
 from typing import IO, Callable, Literal, TypeVar
 
@@ -17,6 +18,15 @@ from k8s_sandbox._pod.write import WriteFileOperation
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
+
+
+def _file_op_restart_check_enabled() -> bool:
+    # Gates the pre-op `read_namespaced_pod` call inside read_file / write_file
+    # (only — exec is unaffected and always checks). At high concurrency
+    # (200+ ops) the per-op reads can overwhelm the K8s API server; exec's
+    # check is the high-signal way we learn a sandbox pod was replaced and
+    # stays unconditional, while file-op API errors are self-revealing.
+    return os.environ.get("INSPECT_POD_RESTART_CHECK", "true").lower() != "false"
 
 
 class Pod:
@@ -179,7 +189,8 @@ class Pod:
           dst (Path): The path to write the file to on the pod. Relative paths will be
             resolved relative to the pod's default working directory.
         """
-        await self.check_for_pod_restart()
+        if _file_op_restart_check_enabled():
+            await self.check_for_pod_restart()
         writer = WriteFileOperation(self._info)
         await self._run_async(lambda: writer.write_file(data, dst))
 
@@ -195,7 +206,8 @@ class Pod:
             relative to the pod's default working directory.
           dst (IO[bytes]): A file-like object to write the file to on the client system.
         """
-        await self.check_for_pod_restart()
+        if _file_op_restart_check_enabled():
+            await self.check_for_pod_restart()
         reader = ReadFileOperation(self._info)
         await self._run_async(lambda: reader.read_file(src, dst))
 
