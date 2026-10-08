@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a `priorityClassName` value, overridable per service, for the sandbox pods'
+  PriorityClass.
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
   `read_file()` / `write_file()`, for deployments where that per-op
   `read_namespaced_pod` call becomes a load problem on the Kubernetes API server at
