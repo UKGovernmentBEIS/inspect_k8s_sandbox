@@ -23,6 +23,7 @@ from k8s_sandbox._helm import (
     INSPECT_HELM_TIMEOUT,
     INSPECT_HELM_UNINSTALL_TIMEOUT,
     INSPECT_SANDBOX_COREDNS_IMAGE,
+    INSPECT_SANDBOX_VALUES,
     Release,
     StaticValuesSource,
     ValuesSource,
@@ -569,6 +570,31 @@ async def test_coredns_image_env_var(
         assert expected_set_arg in args
     else:
         assert not any(arg.startswith("--set-string=corednsImage=") for arg in args)
+
+
+@pytest.mark.parametrize("env_value", ["/etc/inspect/cluster-values.yaml", None])
+async def test_sandbox_values_env_var_wins_over_task_values(
+    monkeypatch: pytest.MonkeyPatch, env_value: str | None
+) -> None:
+    if env_value is None:
+        monkeypatch.delenv(INSPECT_SANDBOX_VALUES, raising=False)
+    else:
+        monkeypatch.setenv(INSPECT_SANDBOX_VALUES, env_value)
+
+    release = Release(
+        __file__, None, StaticValuesSource(Path("task-values.yaml")), None
+    )
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
+        await release.install()
+
+    args = mock_run.call_args[0][1]
+    values_files = [args[i + 1] for i, arg in enumerate(args) if arg == "--values"]
+    # Helm merges --values files in order, so the last one wins.
+    if env_value is None:
+        assert values_files == ["task-values.yaml"]
+    else:
+        assert values_files == ["task-values.yaml", env_value]
 
 
 def test_static_values_source_with_valid_file() -> None:

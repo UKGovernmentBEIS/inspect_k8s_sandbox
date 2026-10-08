@@ -42,6 +42,30 @@ export INSPECT_HELM_LABELS="ci-branch=my-feature,run-id=42"
 ```
 
 
+## Cluster-wide chart values { #cluster-values }
+
+Some built-in chart values describe the cluster rather than the task: whether it runs
+Cilium (`networkPolicy.enabled`), its DNS Service IP (`corednsUpstream`), and the helper
+containers its pod runtime needs (`extraContainers`). Set `INSPECT_SANDBOX_VALUES` to the
+path of a Helm values file holding them. It is passed to every install after the task's
+own values, so it wins over them, and it applies to compose tasks too.
+
+```sh
+export INSPECT_SANDBOX_VALUES=/etc/inspect/cluster-values.yaml
+```
+
+```yaml
+# cluster-values.yaml for a cluster without Cilium
+networkPolicy:
+  enabled: false
+corednsUpstream: ["10.96.0.10"]
+```
+
+With `networkPolicy.enabled: false`, a task that declares an allowlist, `networks`, or
+`network_mode: none` (`networkIsolated`) fails at install, because nothing would
+enforce it.
+
+
 ## Default namespace override { #default-namespace }
 
 By default, the namespace for sandbox pods is determined from the kubeconfig context or

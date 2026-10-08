@@ -28,8 +28,9 @@ network access.
 
     Set `networkPolicy.enabled: false` to render no Cilium Network Policies. The chart
     then restricts nothing: the cluster or pod runtime must enforce egress and isolation,
-    including DNS exfiltration. Allowlists and `network_mode: none` are rejected in this
-    mode.
+    including DNS exfiltration. Allowlists, `networks`, and `networkIsolated` (compose
+    `network_mode: none`) are rejected in this mode. To set it for every task on a
+    cluster, see [Cluster-wide chart values](../tips/configuration.md#cluster-values).
 
 Cilium has tooling to observe network requests, such as
 [Hubble](https://github.com/cilium/hubble). Though note from the

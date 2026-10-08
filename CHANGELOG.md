@@ -4,7 +4,14 @@
 
 - Add `networkPolicy.enabled` (default `true`). Set `false` to install on a cluster
   without Cilium; the cluster or pod runtime must then enforce egress and isolation.
-  Allowlists and `network_mode: none` are rejected while it is off.
+  Allowlists, `networks` and `networkIsolated` (compose `network_mode: none`) are
+  rejected while it is off.
+- `INSPECT_SANDBOX_VALUES=/path/to/values.yaml` applies a Helm values file to every
+  sandbox install, after and overriding the task's own values, for cluster-wide settings
+  such as `networkPolicy.enabled`, `corednsUpstream` and `extraContainers`. Compose
+  tasks pick it up too.
+- Fix `read_file()` hanging or returning a truncated file on Kata Containers' Go runtime
+  shim (`kata-qemu`).
 - A new `extraContainers` value adds containers, as written, to every service's pod,
   for a runtime that needs a helper in the pod beside the service.
 - The CoreDNS sidecar's `Corefile` is now mounted as a directory rather than with
