@@ -71,14 +71,25 @@ class PodSnapshot:
         return status.restart_count if status is not None else 0
 
 
-def read_pod(api: client.CoreV1Api, name: str, namespace: str) -> PodSnapshot:
-    """Read a single pod, bypassing the kubernetes client's model deserialization."""
-    # _preload_content is passed through to the generated client's **kwargs at
-    # runtime but is absent from the typed stubs, hence the call-arg ignore.
+def read_pod(
+    api: client.CoreV1Api, name: str, namespace: str, request_timeout: int
+) -> PodSnapshot:
+    """Read a single pod, bypassing the kubernetes client's model deserialization.
+
+    `request_timeout` bounds the HTTP read: the pod-restart check runs ahead of
+    every exec, so an unresponsive API path would otherwise hang the operation
+    (and its pool slot) with no transport anyone could close.
+    """
+    # _preload_content and _request_timeout are passed through to the generated
+    # client's **kwargs at runtime but are absent from the typed stubs, hence
+    # the call-arg ignore.
     response = cast(
         HTTPResponse,
         api.read_namespaced_pod(  # type: ignore[call-arg]
-            name=name, namespace=namespace, _preload_content=False
+            name=name,
+            namespace=namespace,
+            _preload_content=False,
+            _request_timeout=request_timeout,
         ),
     )
     return _parse_pod(json.loads(response.data))
