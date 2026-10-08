@@ -375,7 +375,7 @@ class Release:
             + _kubeconfig_context_args(self._context_name)
             + values_args
             # Last, so the operator's cluster values win over the task's.
-            + _sandbox_values_args(),
+            + _sandbox_values_args(self._chart_path),
             capture_output=True,
         )
         if not result.success:
@@ -735,11 +735,16 @@ def _coredns_image_args() -> list[str]:
     return [f"--set-string=corednsImage={_helm_escape(image)}"]
 
 
-def _sandbox_values_args() -> list[str]:
-    """Formats --values argument for the operator's values file, if configured."""
+def _sandbox_values_args(chart_path: Path) -> list[str]:
+    """Formats --values argument for the operator's values file, if configured.
+
+    The file holds the built-in chart's values, so a task's own chart never gets it.
+    """
     path = os.getenv(INSPECT_SANDBOX_VALUES)
-    if not path:
+    if not path or chart_path != DEFAULT_CHART:
         return []
+    if not Path(path).is_file():
+        raise ValueError(f"{INSPECT_SANDBOX_VALUES} names no file: '{path}'.")
     return ["--values", path]
 
 

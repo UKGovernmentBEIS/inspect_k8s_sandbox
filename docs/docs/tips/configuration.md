@@ -47,8 +47,9 @@ export INSPECT_HELM_LABELS="ci-branch=my-feature,run-id=42"
 Some built-in chart values describe the cluster rather than the task: whether it runs
 Cilium (`networkPolicy.enabled`), its DNS Service IP (`corednsUpstream`), and the helper
 containers its pod runtime needs (`extraContainers`). Set `INSPECT_SANDBOX_VALUES` to the
-path of a Helm values file holding them. It is passed to every install after the task's
-own values, so it wins over them, and it applies to compose tasks too.
+path of a Helm values file holding them. It is passed to every install of the built-in
+chart after the task's own values, so it wins over them, and it applies to compose tasks
+too. A task that brings its own chart does not get it.
 
 ```sh
 export INSPECT_SANDBOX_VALUES=/etc/inspect/cluster-values.yaml
