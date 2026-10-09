@@ -1075,6 +1075,24 @@ services:
     assert "apparmor=unconfined" in str(exc_info.value)
 
 
+def test_converts_bare_no_new_privileges(tmp_compose: TmpComposeFixture) -> None:
+    # Docker treats a bare flag the same as no-new-privileges:true.
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    image: my-image
+    security_opt:
+      - no-new-privileges
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert (
+        result["services"]["my-service"]["securityContext"]["allowPrivilegeEscalation"]
+        is False
+    )
+
+
 @pytest.mark.parametrize("sep", ["=", ":"])
 def test_converts_security_opt_no_new_privileges(
     sep: str, tmp_compose: TmpComposeFixture
@@ -1183,7 +1201,6 @@ services:
 @pytest.mark.parametrize(
     "value",
     [
-        "no-new-privileges",
         "no-new-privileges:",
         "no-new-privileges=",
         "no-new-privileges:TRUE",

@@ -285,7 +285,8 @@ class _ServiceConverter:
             src, "user", result, "securityContext", self._user_to_security_context
         )
         # security_opt: map seccomp and no-new-privileges into securityContext (which
-        # `user` above may also populate). Both Compose `=` and `:` forms are accepted.
+        # `user` above may also populate). Both Compose `=` and `:` forms are accepted,
+        # and a bare `no-new-privileges` is treated as true, matching Docker.
         if (security_opt := src.pop("security_opt", None)) is not None:
             # The Compose schema constrains `security_opt` to an array, so a scalar is
             # already rejected by `_validate_compose` before we get here.
@@ -303,8 +304,9 @@ class _ServiceConverter:
             if unsupported:
                 raise ComposeConverterError(
                     f"Unsupported 'security_opt' entries: {unsupported}. Only "
-                    f"'seccomp=<value>' and 'no-new-privileges=<true|false>' "
-                    f"(or the ':' forms) are supported. {self.context}"
+                    f"'seccomp=<value>' and 'no-new-privileges' "
+                    f"('true'/'false' with '=' or ':', or the bare flag) "
+                    f"are supported. {self.context}"
                 )
             if seccomp_profile is not None:
                 result.setdefault("securityContext", {})["seccompProfile"] = (
@@ -687,12 +689,16 @@ class _ServiceConverter:
         return {"type": "Localhost", "localhostProfile": value}
 
     def _no_new_privileges_enabled(self, value: str | None) -> bool:
-        if value is not None:
-            value = value.strip()
+        # Docker treats a bare `no-new-privileges` (no separator or value) the same
+        # as `no-new-privileges:true`. An empty or other value is still rejected.
+        if value is None:
+            return True
+        value = value.strip()
         if value not in ("true", "false"):
             raise ComposeConverterError(
                 f"Invalid 'no-new-privileges' value in 'security_opt': '{value}'. "
-                f"Expected 'true' or 'false'. {self.context}"
+                f"Expected 'true' or 'false', or the bare flag with no value. "
+                f"{self.context}"
             )
         return value == "true"
 

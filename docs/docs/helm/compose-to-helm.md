@@ -230,19 +230,21 @@ services:
       - seccomp=profiles/no-aslr.json
 ```
 
-A `security_opt` **no-new-privileges** entry (`no-new-privileges=true` or
-`no-new-privileges:true`) is converted to `allowPrivilegeEscalation: false` in the
-pod's `securityContext` (merged with any context derived from `user` or `seccomp`).
-Both flags control Linux `no_new_privs`.
+A `security_opt` **no-new-privileges** entry (a bare `no-new-privileges`, or
+`no-new-privileges=true` / `no-new-privileges:true`) is converted to
+`allowPrivilegeEscalation: false` in the pod's `securityContext` (merged with any
+context derived from `user` or `seccomp`). Both flags control Linux `no_new_privs`.
+Docker treats the bare flag the same as `true`.
 
 | Compose value             | Kubernetes `securityContext`        |
 | ------------------------- | ----------------------------------- |
+| `no-new-privileges`       | `{allowPrivilegeEscalation: false}` |
 | `no-new-privileges=true`  | `{allowPrivilegeEscalation: false}` |
 | `no-new-privileges=false` | field omitted                       |
 
 An explicit `false` omits the Kubernetes field rather than setting it to `true`, so
 the conversion does not override a stricter cluster policy default.
-Malformed values (missing, empty, or anything other than `true`/`false`) are rejected.
+Empty values, and anything other than `true` or `false`, are rejected.
 
 Other `security_opt` entries (e.g. `apparmor=...`) have no mapping here and are
 rejected rather than silently dropped, so a workload can't believe a security control
