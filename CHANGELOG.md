@@ -65,6 +65,8 @@
   a failed `ExecResult` rather than raised, so a caller that probes with a user and
   falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
   user that does not exist still raises.
+- Map Compose `no-new-privileges` (`security_opt`), including the bare flag, to
+  Kubernetes `allowPrivilegeEscalation: false`.
 - A sandbox waiting for cluster capacity no longer blocks other sandboxes from being
   created. Inspect's console count of in-progress installs now reflects submissions in
   flight rather than sandboxes still starting up.
