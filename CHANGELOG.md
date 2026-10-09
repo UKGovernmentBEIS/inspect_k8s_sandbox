@@ -7,6 +7,27 @@
   `read_namespaced_pod` call becomes a load problem on the Kubernetes API server at
   high concurrency. Defaults to enabled, so behaviour is unchanged unless set.
   `exec()` always performs the check regardless.
+- Add `networkPolicy.enabled` (default `true`). Set `false` to install on a cluster
+  without Cilium; the cluster or pod runtime must then enforce egress and isolation.
+  Allowlists, `networks` and `networkIsolated` (compose `network_mode: none`) are
+  rejected while it is off.
+- `INSPECT_SANDBOX_VALUES=/path/to/values.yaml` applies a Helm values file to every
+  install of the built-in chart, after and overriding the task's own values, for
+  cluster-wide settings such as `networkPolicy.enabled`, `corednsUpstream` and
+  `extraContainers`. Compose tasks pick it up too.
+- A sandbox no longer counts as ready while its CoreDNS sidecar is failing to start,
+  so a broken DNS configuration fails the install instead of the sample's name lookups.
+  The sidecar's startup probe listens on the pod IP at `corednsReadyPort` (default
+  `18181`); change it if a service in the pod uses that port.
+- Fix `read_file()` hanging or returning a truncated file on Kata Containers' Go runtime
+  shim (`kata-qemu`).
+- A new `extraContainers` value adds containers, as written, to every service's pod,
+  for a runtime that needs a helper in the pod beside the service.
+- The CoreDNS sidecar's `Corefile` is now mounted as a directory rather than with
+  `subPath`. A new `corednsUpstream` value (a list of DNS server IPs, e.g. the cluster
+  DNS Service IP) replaces the `/etc/resolv.conf` `subPath` mount with
+  `dnsPolicy: None`, for container runtimes that cannot mount a single file with
+  `subPath`. Init containers cannot resolve names in that mode.
 - `network_mode: none` isolation is now enforced by omitting any ingress allow for the
   service rather than an unconditional ingress deny. Observable behaviour is unchanged
   for a chart used on its own, but a network policy layered on top of this chart (e.g.
