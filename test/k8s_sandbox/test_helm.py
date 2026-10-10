@@ -836,14 +836,15 @@ async def test_install_error_includes_pod_diagnostics() -> None:
         stdout="",
         stderr="Error: INSTALLATION FAILED: resource Pod/default/x not ready.\n",
     )
-    diagnostics = "container 'default': last terminated OOMKilled (exit code 137)"
+    diagnostics = (
+        "container 'default': last terminated OOMKilled (exit code 137): " + "x" * 5000
+    )
 
     with patch("k8s_sandbox._helm.describe_release_pods", return_value=diagnostics):
         with pytest.raises(RuntimeError) as excinfo:
             await release._raise_install_error(result)
 
-    assert "OOMKilled" in str(excinfo.value)
-    assert "137" in str(excinfo.value)
+    assert diagnostics in str(excinfo.value)
 
 
 async def test_install_error_omits_diagnostics_when_unavailable() -> None:

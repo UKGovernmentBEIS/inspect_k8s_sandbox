@@ -399,7 +399,7 @@ class Release:
                 error=result.stderr,
             )
             raise _ResourceQuotaModifiedError(result.stderr)
-        extra = await self._pod_diagnostics()
+        diagnostics = await self._pod_diagnostics()
         if re.search(r"context deadline exceeded", result.stderr):
             _raise_runtime_error(
                 f"Helm install timed out (context deadline exceeded). The configured "
@@ -409,27 +409,26 @@ class Release:
                 f"{INSPECT_HELM_TIMEOUT} environment variable.",
                 release=self.release_name,
                 result=result,
-                **extra,
+                diagnostics=diagnostics,
             )
         _raise_runtime_error(
             "Helm install failed.",
             release=self.release_name,
             result=result,
-            **extra,
+            diagnostics=diagnostics,
         )
 
-    async def _pod_diagnostics(self) -> dict[str, Any]:
-        """The release's container states. Empty if they cannot be gathered."""
+    async def _pod_diagnostics(self) -> str | None:
+        """The release's container states. None if they cannot be gathered."""
         # Helm reports only the generic symptom, so name the concrete cause:
         # ImagePullBackOff, OOMKilled, FailedScheduling, ...
-        diagnostics = await asyncio.to_thread(
+        return await asyncio.to_thread(
             describe_release_pods,
             self._context_name,
             self._namespace,
             self.release_name,
             self._object_names,
         )
-        return {"pod_diagnostics": diagnostics} if diagnostics else {}
 
     def _list_release_pods(self, allow_stale: bool = False) -> list[PodSnapshot]:
         """The release's pods. `allow_stale` reads the API server's watch cache."""
@@ -491,7 +490,7 @@ class Release:
     async def _raise_not_ready_error(
         self, saw_a_pod: bool, poll_error: Exception | None, missing: frozenset[str]
     ) -> NoReturn:
-        extra = await self._pod_diagnostics()
+        diagnostics = await self._pod_diagnostics()
         budget = f"{_get_timeout()}s"
         if poll_error is not None and not saw_a_pod:
             # Nothing is known about what the release created, so blaming the chart
@@ -502,7 +501,7 @@ class Release:
                 f"{HELM_RELEASE_NOT_READY_URL}.",
                 release=self.release_name,
                 from_exception=poll_error,
-                **extra,
+                diagnostics=diagnostics,
             )
         if not saw_a_pod:
             _raise_runtime_error(
@@ -511,20 +510,23 @@ class Release:
                 f"Every chart must render at least one Pod, or a controller which "
                 f"creates one, carrying that label. See {HELM_RELEASE_NOT_READY_URL}.",
                 release=self.release_name,
-                **extra,
+                diagnostics=diagnostics,
             )
         # Which sandbox is absent is the first thing to establish; the full declared
         # list leaves that to be worked out from the diagnostics.
-        extra["missing_sandboxes" if missing else "declared_sandboxes"] = ", ".join(
-            sorted(missing or self._expected_services)
-        )
+        sandboxes: dict[str, Any] = {
+            "missing_sandboxes" if missing else "declared_sandboxes": ", ".join(
+                sorted(missing or self._expected_services)
+            )
+        }
         _raise_runtime_error(
             f"Helm release did not become ready within {budget}. Please see the docs "
             f"for why this might occur: {HELM_RELEASE_NOT_READY_URL}. Also consider "
             f"increasing the timeout by setting the {INSPECT_HELM_TIMEOUT} "
             f"environment variable.",
             release=self.release_name,
-            **extra,
+            diagnostics=diagnostics,
+            **sandboxes,
         )
 
 
@@ -604,9 +606,16 @@ async def get_all_release_names(namespace: str, context_name: str | None) -> lis
 
 
 def _raise_runtime_error(
-    message: str, from_exception: Exception | None = None, **kwargs: Any
+    message: str,
+    from_exception: Exception | None = None,
+    diagnostics: str | None = None,
+    **kwargs: Any,
 ) -> NoReturn:
     formatted = format_log_message(message, **kwargs)
+    # Unlike the kwargs, not truncated: the kubelet caps each termination message, and
+    # _MAX_EVENTS the number of events.
+    if diagnostics:
+        formatted += f"\nPod diagnostics:\n{diagnostics}"
     logger.error(formatted)
     if from_exception:
         raise RuntimeError(formatted) from from_exception
