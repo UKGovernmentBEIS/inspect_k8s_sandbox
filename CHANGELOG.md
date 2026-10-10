@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- When a Helm release fails or never becomes ready, the error now shows each failed
+  container's termination message (its log tail under
+  `terminationMessagePolicy: FallbackToLogsOnError`) without cutting it off, and no
+  longer lists init containers that completed.
+
 ## 2026-10-09 0.14.0
 
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside

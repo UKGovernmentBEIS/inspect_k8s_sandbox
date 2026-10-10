@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import textwrap
 
 from kubernetes.client import CoreV1Api, V1ContainerStatus  # type: ignore
 
@@ -123,15 +124,18 @@ def _describe_container(
     last_terminated = last_state.terminated if last_state else None
 
     parts: list[str] = []
+    tail: str | None = None
     if waiting is not None:
         detail = waiting.reason or "Waiting"
         if waiting.message:
             detail += f": {waiting.message}"
         parts.append(f"waiting ({detail})")
-    if terminated is not None:
+    # An init container that ran to completion is healthy, so it is not listed.
+    if terminated is not None and not (is_init and terminated.exit_code == 0):
         parts.append(
             f"terminated {terminated.reason} (exit code {terminated.exit_code})"
         )
+        tail = terminated.message
     if terminated is None and last_terminated is not None:
         # A crash-looping container is currently "waiting"; the reason it keeps dying
         # (e.g. OOMKilled, exit 137) lives in its previous termination.
@@ -139,6 +143,7 @@ def _describe_container(
             f"last terminated {last_terminated.reason} "
             f"(exit code {last_terminated.exit_code})"
         )
+        tail = last_terminated.message
 
     if not parts:
         return None
@@ -149,4 +154,7 @@ def _describe_container(
         line += f", restarted {container.restart_count} time(s)"
     if container.image:
         line += f" [image: {container.image}]"
+    # Under terminationMessagePolicy: FallbackToLogsOnError, this is the log's tail.
+    if tail and tail.strip():
+        line += "\n" + textwrap.indent(tail.strip(), "    ")
     return line
