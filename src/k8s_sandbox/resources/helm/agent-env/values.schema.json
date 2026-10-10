@@ -154,6 +154,9 @@
             "runtimeClassName": {
               "type": "string"
             },
+            "priorityClassName": {
+              "type": ["string", "null"]
+            },
             "image": {
               "type": "string"
             },
@@ -307,6 +310,9 @@
       "type": "boolean"
     },
     "serviceAccountName": {
+      "type": ["string", "null"]
+    },
+    "priorityClassName": {
       "type": ["string", "null"]
     }
   },

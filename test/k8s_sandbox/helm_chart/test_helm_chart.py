@@ -435,6 +435,33 @@ def test_cluster_default_magic_string(
 
 
 @pytest.mark.parametrize(
+    ("set_str", "expected"),
+    [
+        ("", {"default": None, "nginx": None}),
+        ("priorityClassName=low", {"default": "low", "nginx": "low"}),
+        (
+            "priorityClassName=low,services.nginx.priorityClassName=high",
+            {"default": "low", "nginx": "high"},
+        ),
+    ],
+)
+def test_priority_class_name(
+    chart_dir: Path, set_str: str, expected: dict[str, str | None]
+) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        set_str=",".join(filter(None, ["services.nginx.image=nginx", set_str])),
+    )
+
+    assert {
+        ss["metadata"]["name"].removeprefix("agent-env-my-release-"): ss["spec"][
+            "template"
+        ]["spec"].get("priorityClassName")
+        for ss in _get_documents(documents, "StatefulSet")
+    } == expected
+
+
+@pytest.mark.parametrize(
     ("overrides", "expected_coredns_image", "expected_coredns_command"),
     [
         (

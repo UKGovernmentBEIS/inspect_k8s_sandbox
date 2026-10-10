@@ -24,6 +24,7 @@
 | labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |
 | networkPolicy.enabled | bool | `true` | Render the CiliumNetworkPolicies. Set false on a cluster without Cilium; the cluster or pod runtime must then enforce egress and isolation. While false, the allow* values, `networks` and `networkIsolated` are rejected. |
 | networks | object | `{}` | Defines network names that can be attached to services in order to specify subsets of services that can communicate with one another. Names must be lower case alphanumeric with `-` or `.`, and at most 55 characters. |
+| priorityClassName | string | `nil` | PriorityClass for every service's pod. Unset, pods get the cluster default. |
 | serviceAccountCreate | bool | `false` | Whether to create the selected ServiceAccount. Keep disabled to use an externally managed ServiceAccount across concurrent sandbox releases. |
 | serviceAccountName | string | `nil` | Service account name for sandbox pods. The account must already exist unless `serviceAccountCreate` is enabled. |
 | services | object | see [values.yaml](./values.yaml) | A collection of services to deploy within the agent environment. A service can connect to another service using DNS, e.g. `http://nginx:80`. |
@@ -39,6 +40,7 @@
 | services.default.livenessProbe | object | `{}` | A probe which is used to determine when to restart a container. |
 | services.default.nodeSelector | object | `{}` | Node selector settings for the Pod. |
 | services.default.ports | list | `[]` | Deprecated. All ports of services with a DNS record are accessible (though not necessarily open) to other services within the agent environment. If one or more ports are provided, `dnsRecord` is automatically set to true. |
+| services.default.priorityClassName | string | `nil` | PriorityClass for this service's pod. Overrides the top-level one. |
 | services.default.readinessProbe | object | `{}` | A probe which is used to determine when the container is ready to accept. traffic. |
 | services.default.resources | object | see [templates/services.yaml](./templates/services.yaml) | Resource requests and limits for the container. |
 | services.default.runtimeClassName | string | `"gvisor"` | The container runtime e.g. gvisor or runc. The default is gvisor if not specified or set to `null`. |

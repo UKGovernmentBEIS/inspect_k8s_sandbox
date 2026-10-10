@@ -84,6 +84,8 @@ corednsSecurityContext:
   runAsUser: 65532
   seccompProfile:
     type: RuntimeDefault
+# -- PriorityClass for every service's pod. Unset, pods get the cluster default.
+priorityClassName: null
 # -- A collection of services to deploy within the agent environment. A service can
 # connect to another service using DNS, e.g. `http://nginx:80`.
 # @default -- see [values.yaml](./values.yaml)
@@ -94,6 +96,8 @@ services:
     # -- The container runtime e.g. gvisor or runc. The default is gvisor if not
     # specified or set to `null`.
     runtimeClassName: gvisor
+    # -- PriorityClass for this service's pod. Overrides the top-level one.
+    priorityClassName: null
     # -- The container's image name.
     image: "python:3.12-bookworm"
     # -- The container's entrypoint command.
