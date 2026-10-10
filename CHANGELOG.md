@@ -2,6 +2,9 @@
 
 ## 2026-10-09 0.14.0
 
+- Add per-service `x-inspect_k8s_sandbox.volumes` and `volumeMounts` compose
+  extensions for Kubernetes volume types, including OCI image volumes, that Compose
+  shorthand cannot express.
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
   `read_file()` / `write_file()`, for deployments where that per-op
   `read_namespaced_pod` call becomes a load problem on the Kubernetes API server at

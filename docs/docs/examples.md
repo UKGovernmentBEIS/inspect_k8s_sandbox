@@ -79,3 +79,28 @@ services:
       tcpSocket:
         port: 80
 ```
+
+## OCI image volume
+
+Use the per-service Compose extension when an agent needs a Kubernetes volume type that
+Compose shorthand cannot express:
+
+```yaml
+services:
+  default:
+    image: python:3.12
+    x-inspect_k8s_sandbox:
+      volumes:
+        - name: agent-cli-claude
+          image:
+            reference: example.com/agent-clis:claude-2.1.205
+            pullPolicy: IfNotPresent
+      volumeMounts:
+        - name: agent-cli-claude
+          mountPath: /opt/agent-cli/claude
+          readOnly: true
+```
+
+The extension entries are appended after ordinary Compose `volumes` entries. See
+[Compose to Helm](helm/compose-to-helm.md#kubernetes-volume-types) for the Kubernetes
+API requirements.

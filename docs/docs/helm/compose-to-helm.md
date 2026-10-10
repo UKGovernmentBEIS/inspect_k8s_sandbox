@@ -188,6 +188,37 @@ feature) and your Compose file set `memswap_limit` equal to `mem_limit` to disab
 for the container, the converted workload may instead be able to use swap. If that
 matters, disable swap at the node or pod level.
 
+## Kubernetes Volume Types
+
+Use per-service `x-inspect_k8s_sandbox.volumes` and `volumeMounts` for Kubernetes
+volume types that Compose shorthand cannot express. Both values are lists passed to
+the Helm chart verbatim. They are appended after any volumes converted from the
+service's ordinary Compose `volumes` entries.
+
+For example, an OCI image volume can provide a packaged agent CLI:
+
+```yaml
+services:
+  default:
+    image: python:3.12
+    x-inspect_k8s_sandbox:
+      volumes:
+        - name: agent-cli-claude
+          image:
+            reference: example.com/agent-clis:claude-2.1.205
+            pullPolicy: IfNotPresent
+      volumeMounts:
+        - name: agent-cli-claude
+          mountPath: /opt/agent-cli/claude
+          readOnly: true
+```
+
+The volume and mount objects must follow the Kubernetes API. Use this extension
+alongside ordinary Compose volume shorthand when both are needed.
+
+An OCI image volume also needs a cluster and container runtime that support
+[image volumes](https://kubernetes.io/docs/tasks/configure-pod-container/image-volumes/).
+
 ## Security Options
 
 A `security_opt` **seccomp** entry (`seccomp=<value>` or `seccomp:<value>`) is converted
