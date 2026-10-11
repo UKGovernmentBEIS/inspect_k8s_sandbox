@@ -12,6 +12,9 @@ services:
   app:
     image: "nicolaka/netshoot:v0.13"
     command: ["tail", "-f", "/dev/null"]
+    volumes:
+      - name: shared
+        emptyDir: {}
     initContainers:
       - name: init-with-all-fields
         image: busybox:1.36
@@ -23,6 +26,12 @@ services:
         args:
           - "--verbose"
         workingDir: /tmp
+        env:
+          - name: GREETING
+            value: hello
+        volumeMounts:
+          - name: shared
+            mountPath: /shared
         resources:
           limits:
             memory: "64Mi"

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Init containers take `env` and `volumeMounts`, so one can write a file into a volume
+  the service's container then reads.
+
 ## 2026-10-09 0.14.0
 
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside

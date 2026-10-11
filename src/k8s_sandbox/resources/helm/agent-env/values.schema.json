@@ -249,6 +249,8 @@
                   "args": { "type": "array", "items": { "type": "string" } },
                   "imagePullPolicy": {"type": "string"},
                   "workingDir": {"type": "string"},
+                  "env": {"type": "array"},
+                  "volumeMounts": {"type": "array"},
                   "resources": {"type": "object"},
                   "securityContext": {"type": "object"}
                 },
