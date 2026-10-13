@@ -24,6 +24,14 @@ domains that your containers can access. Use this with care.
 The built-in Helm chart uses [Cilium](https://cilium.io/) Network Policies to restrict
 network access.
 
+??? warning "Clusters without Cilium"
+
+    Set `networkPolicy.enabled: false` to render no Cilium Network Policies. The chart
+    then restricts nothing: the cluster or pod runtime must enforce egress and isolation,
+    including DNS exfiltration. Allowlists, `networks`, and `networkIsolated` (compose
+    `network_mode: none`) are rejected in this mode. To set it for every task on a
+    cluster, see [Cluster-wide chart values](../tips/configuration.md#cluster-values).
+
 Cilium has tooling to observe network requests, such as
 [Hubble](https://github.com/cilium/hubble). Though note from the
 [limitations](../design/limitations.md) section that domain names will not be shown when

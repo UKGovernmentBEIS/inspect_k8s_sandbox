@@ -52,6 +52,13 @@ spec:
       {{- /* Do not leak info on services via env vars */}}
       enableServiceLinks: false
       terminationGracePeriodSeconds: 0
+      {{- if $.Values.corednsUpstream }}
+      {{- /* Replaces the resolv.conf subPath mount, which Kata Containers documents as unsupported. */}}
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 127.0.0.1
+      {{- end }}
 
       {{- if $service.initContainers }}
       initContainers:
@@ -150,9 +157,11 @@ spec:
             name: {{ template "agentEnv.fullname" $ -}}-{{ $volumeName }}
           {{- end }}
         {{- end }}
+        {{- if not $.Values.corednsUpstream }}
           - name: resolv-conf
             mountPath: /etc/resolv.conf
             subPath: resolv.conf
+        {{- end }}
         {{- with $service.securityContext }}
         securityContext:
           {{- toYaml . | nindent 10 }}
@@ -177,11 +186,24 @@ spec:
           - containerPort: 53
             protocol: TCP
             name: dns-tcp
+          - containerPort: {{ $.Values.corednsReadyPort }}
+            protocol: TCP
+            name: dns-ready
+        {{- /* Without it the sidecar counts as ready between crash-loop restarts. */}}
+        startupProbe:
+          httpGet:
+            path: /ready
+            port: dns-ready
+          periodSeconds: 1
+          failureThreshold: 30
         volumeMounts:
+          {{- /* A directory mount, not subPath, which Kata Containers documents as unsupported. */}}
           - name: coredns-config
-            mountPath: /etc/coredns/Corefile
-            subPath: Corefile
+            mountPath: /etc/coredns
             readOnly: true
+      {{- with $.Values.extraContainers }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
       {{- with $service.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
@@ -194,9 +216,11 @@ spec:
         - name: coredns-config
           configMap:
             name: {{ template "agentEnv.fullname" $ -}}-coredns-configmap
+      {{- if not $.Values.corednsUpstream }}
         - name: resolv-conf
           configMap:
             name: {{ template "agentEnv.fullname" $ -}}-resolv-conf
+      {{- end }}
       {{- range $key, $value := $service.volumes }}
         {{- if kindIs "string" $value }}
           {{- $parts := split ":" $value }}

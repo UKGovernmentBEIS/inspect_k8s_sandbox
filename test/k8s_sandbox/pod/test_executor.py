@@ -66,8 +66,15 @@ def test_parameter_conflicting_with_existing_executor_raises(
     with patch("os.cpu_count", return_value=4):
         PodOpExecutor.get_instance()
 
-    with pytest.raises(ValueError, match="already initialized with max_pod_ops=16"):
+    with pytest.raises(ValueError) as exc_info:
         PodOpExecutor.get_instance(max_pod_ops=64)
+
+    # The message names the source of the existing limit so that users can tell
+    # a default from an explicitly-configured value.
+    assert (
+        "already initialized with max_pod_ops=16 (from default (cpu_count=4 * 4))"
+        in str(exc_info.value)
+    )
 
 
 async def test_queue_operation(monkeypatch: MonkeyPatch) -> None:

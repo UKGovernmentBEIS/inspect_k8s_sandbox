@@ -1,3 +1,4 @@
+import ipaddress
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -502,12 +503,112 @@ def test_coredns_container(
     }
     assert corends_container["volumeMounts"] == [
         {
-            "mountPath": "/etc/coredns/Corefile",
+            "mountPath": "/etc/coredns",
             "name": "coredns-config",
             "readOnly": True,
-            "subPath": "Corefile",
         }
     ]
+
+
+def test_coredns_upstream_replaces_the_resolv_conf_file_mount(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir, set_str="corednsUpstream[0]=10.96.0.10,corednsUpstream[1]=fd00::a"
+    )
+
+    pod_spec = _get_documents(documents, "StatefulSet")[0]["spec"]["template"]["spec"]
+    assert pod_spec["dnsPolicy"] == "None"
+    assert pod_spec["dnsConfig"] == {"nameservers": ["127.0.0.1"]}
+    mounts = [m for c in pod_spec["containers"] for m in c.get("volumeMounts") or []]
+    assert all("subPath" not in m for m in mounts)
+    assert "resolv-conf" not in [v["name"] for v in pod_spec["volumes"]]
+    config_maps = {
+        cm["metadata"]["name"]: cm for cm in _get_documents(documents, "ConfigMap")
+    }
+    assert "agent-env-my-release-resolv-conf" not in config_maps
+    corefile = config_maps["agent-env-my-release-coredns-configmap"]["data"]["Corefile"]
+    assert "forward . 10.96.0.10 fd00::a {" in corefile
+
+
+def test_coredns_upstream_defaults_to_the_kubelet_resolv_conf(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir)
+
+    pod_spec = _get_documents(documents, "StatefulSet")[0]["spec"]["template"]["spec"]
+    assert "dnsPolicy" not in pod_spec
+    corefile = next(
+        cm["data"]["Corefile"]
+        for cm in _get_documents(documents, "ConfigMap")
+        if cm["metadata"]["name"] == "agent-env-my-release-coredns-configmap"
+    )
+    assert "forward . /etc/resolv.conf {" in corefile
+
+
+@pytest.mark.parametrize(
+    "upstream",
+    [
+        "10.96.0.10",
+        "fd00::a",
+        "::",
+        "fe80::1",
+        "1:2:3:4:5:6:7::",
+        "::ffff:10.0.0.1",
+        "64:ff9b::192.0.2.1",
+        # CoreDNS exits on the next two, and a sandbox would wait for it until timeout.
+        "999.999.999.999",
+        "..",
+        ":::",
+        "1:2:3:4:5:6:7::8:9",
+        "1::2::3",
+        "01.2.3.4",
+        "10.0.0",
+        "::ffff:999.0.0.1",
+        "evil}",
+    ],
+)
+def test_coredns_upstream_accepts_exactly_ip_addresses(
+    chart_dir: Path, upstream: str
+) -> None:
+    try:
+        ipaddress.ip_address(upstream)
+        is_address = True
+    except ValueError:
+        is_address = False
+
+    try:
+        _run_helm_template(chart_dir, set_string=f"corednsUpstream[0]={upstream}")
+        accepted = True
+    except subprocess.CalledProcessError as e:
+        assert "corednsUpstream" in e.stderr
+        accepted = False
+
+    assert accepted == is_address
+
+
+def test_coredns_startup_probe_uses_the_ready_port(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir, set_str="corednsReadyPort=19000")
+
+    containers = _get_documents(documents, "StatefulSet")[0]["spec"]["template"][
+        "spec"
+    ]["containers"]
+    coredns = next(c for c in containers if c["name"] == "coredns")
+    assert {"containerPort": 19000, "protocol": "TCP", "name": "dns-ready"} in coredns[
+        "ports"
+    ]
+    assert coredns["startupProbe"]["httpGet"] == {"path": "/ready", "port": "dns-ready"}
+    assert "readinessProbe" not in coredns
+    corefile = next(
+        cm["data"]["Corefile"]
+        for cm in _get_documents(documents, "ConfigMap")
+        if cm["metadata"]["name"] == "agent-env-my-release-coredns-configmap"
+    )
+    assert "ready :19000\n" in corefile
+    assert "bind 127.0.0.1" in corefile
+
+
+@pytest.mark.parametrize("port", ["53", "0", "70000"])
+def test_coredns_ready_port_rejects_unusable_ports(chart_dir: Path, port: str) -> None:
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        _run_helm_template(chart_dir, set_str=f"corednsReadyPort={port}")
+    assert "corednsReadyPort" in exc_info.value.stderr
 
 
 def test_coredns_security_context_can_be_overridden(chart_dir: Path) -> None:
@@ -535,6 +636,33 @@ def test_coredns_security_context_can_be_overridden(chart_dir: Path) -> None:
     }
 
 
+def test_extra_containers_join_every_service_pod_as_written(chart_dir: Path) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        set_str="extraContainers[0].name=relay,extraContainers[0].image=relay:1,"
+        "extraContainers[0].securityContext.runAsUser=65534",
+    )
+
+    containers = _get_documents(documents, "StatefulSet")[0]["spec"]["template"][
+        "spec"
+    ]["containers"]
+    assert [c["name"] for c in containers] == ["default", "coredns", "relay"]
+    assert containers[-1] == {
+        "name": "relay",
+        "image": "relay:1",
+        "securityContext": {"runAsUser": 65534},
+    }
+
+
+def test_extra_containers_need_a_name_and_an_image(chart_dir: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        _run_helm_template(chart_dir, set_str="extraContainers[0].name=relay")
+    # Helm's two JSON Schema libraries word this differently ("image is required" vs
+    # "missing property 'image'"), so assert only on the names.
+    assert "extraContainers" in exc_info.value.stderr
+    assert "image" in exc_info.value.stderr
+
+
 @pytest.mark.parametrize(
     "values_file",
     [
@@ -555,6 +683,44 @@ def test_rejects_names_that_can_inject_rendered_configuration(
     # switched JSON Schema libraries mid-3.x and the newer one reports propertyNames
     # violations against an empty path.
     assert "values don't meet the specifications of the schema" in excinfo.value.stderr
+
+
+def test_network_policies_render_by_default(chart_dir: Path) -> None:
+    default = _run_helm_template(chart_dir)
+    explicit = _run_helm_template(chart_dir, set_str="networkPolicy.enabled=true")
+
+    assert default == explicit
+    assert _get_documents(default, "CiliumNetworkPolicy")
+
+
+def test_network_policy_disabled_renders_no_cilium_kinds(chart_dir: Path) -> None:
+    documents = _run_helm_template(chart_dir, set_str="networkPolicy.enabled=false")
+
+    assert not [doc for doc in documents if "cilium.io" in doc["apiVersion"]]
+    assert _get_documents(documents, "StatefulSet")
+
+
+@pytest.mark.parametrize(
+    ("restriction", "field"),
+    [
+        ("allowDomains[0]=example.com", "allowDomains"),
+        ("allowDomainsPorts[0].port=22", "allowDomainsPorts"),
+        ("allowEntities[0]=world", "allowEntities"),
+        ("allowCIDR[0]=10.0.0.0/8", "allowCIDR"),
+        ("networks.backend.driver=bridge", "networks"),
+        ("services.default.networks[0]=backend", "services.default.networks"),
+        ("services.default.networkIsolated=true", "services.default.networkIsolated"),
+    ],
+)
+def test_network_policy_disabled_refuses_unenforceable_restrictions(
+    chart_dir: Path, restriction: str, field: str
+) -> None:
+    with pytest.raises(subprocess.CalledProcessError) as exc_info:
+        _run_helm_template(
+            chart_dir, set_str=f"networkPolicy.enabled=false,{restriction}"
+        )
+    assert "networkPolicy.enabled is false" in exc_info.value.stderr
+    assert f"nothing would enforce {field}" in exc_info.value.stderr
 
 
 def test_default_deny_ingress_selects_every_pod(chart_dir: Path) -> None:

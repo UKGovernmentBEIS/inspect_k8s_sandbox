@@ -2,11 +2,44 @@
 
 ## Unreleased
 
+- An `exec` whose pod stops answering now fails with `TimeoutError` once its
+  `timeout` plus a 30s grace has passed, and a `read_file` that receives no data
+  for 60s fails with `PodError`, instead of waiting forever. Previously a pod
+  that died mid-command left the operation, and any eval waiting on it, hung
+  until the process was killed.
+- Cancelling a sandbox operation (e.g. an eval timing out or being interrupted) can
+  now take up to 30s longer to unwind. Previously a cancelled operation could stop
+  later sandbox operations from starting, keep the process from exiting, and raise
+  `ValueError: write to closed file` after a cancelled `read_file`.
+
+## 2026-10-09 0.14.0
+
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
   `read_file()` / `write_file()`, for deployments where that per-op
   `read_namespaced_pod` call becomes a load problem on the Kubernetes API server at
   high concurrency. Defaults to enabled, so behaviour is unchanged unless set.
   `exec()` always performs the check regardless.
+- Add `networkPolicy.enabled` (default `true`). Set `false` to install on a cluster
+  without Cilium; the cluster or pod runtime must then enforce egress and isolation.
+  Allowlists, `networks` and `networkIsolated` (compose `network_mode: none`) are
+  rejected while it is off.
+- `INSPECT_SANDBOX_VALUES=/path/to/values.yaml` applies a Helm values file to every
+  install of the built-in chart, after and overriding the task's own values, for
+  cluster-wide settings such as `networkPolicy.enabled`, `corednsUpstream` and
+  `extraContainers`. Compose tasks pick it up too.
+- A sandbox no longer counts as ready while its CoreDNS sidecar is failing to start,
+  so a broken DNS configuration fails the install instead of the sample's name lookups.
+  The sidecar's startup probe listens on the pod IP at `corednsReadyPort` (default
+  `18181`); change it if a service in the pod uses that port.
+- Fix `read_file()` hanging or returning a truncated file on Kata Containers' Go runtime
+  shim (`kata-qemu`).
+- A new `extraContainers` value adds containers, as written, to every service's pod,
+  for a runtime that needs a helper in the pod beside the service.
+- The CoreDNS sidecar's `Corefile` is now mounted as a directory rather than with
+  `subPath`. A new `corednsUpstream` value (a list of DNS server IPs, e.g. the cluster
+  DNS Service IP) replaces the `/etc/resolv.conf` `subPath` mount with
+  `dnsPolicy: None`, for container runtimes that cannot mount a single file with
+  `subPath`. Init containers cannot resolve names in that mode.
 - `network_mode: none` isolation is now enforced by omitting any ingress allow for the
   service rather than an unconditional ingress deny. Observable behaviour is unchanged
   for a chart used on its own, but a network policy layered on top of this chart (e.g.
@@ -20,15 +53,6 @@
   nothing in this chart used it, but a deployment that created its own governing
   Service to reach individual pods by name must now use the pod IP.
 
-- An `exec` whose pod stops answering now fails with `TimeoutError` once its
-  `timeout` plus a 30s grace has passed, and a `read_file` that receives no data
-  for 60s fails with `PodError`, instead of waiting forever. Previously a pod
-  that died mid-command left the operation, and any eval waiting on it, hung
-  until the process was killed.
-- Cancelling a sandbox operation (e.g. an eval timing out or being interrupted) can
-  now take up to 30s longer to unwind. Previously a cancelled operation could stop
-  later sandbox operations from starting, keep the process from exiting, and raise
-  `ValueError: write to closed file` after a cancelled `read_file`.
 - **BREAKING CHANGE**: The CoreDNS sidecar now runs as UID/GID 65532 on a read-only root
   filesystem with only `NET_BIND_SERVICE`. A custom `corednsImage` must run under that
   context; set the new `corednsSecurityContext` if it cannot. The default image moves
@@ -53,6 +77,8 @@
   a failed `ExecResult` rather than raised, so a caller that probes with a user and
   falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
   user that does not exist still raises.
+- Map Compose `no-new-privileges` (`security_opt`), including the bare flag, to
+  Kubernetes `allowPrivilegeEscalation: false`.
 - A sandbox waiting for cluster capacity no longer blocks other sandboxes from being
   created. Inspect's console count of in-progress installs now reflects submissions in
   flight rather than sandboxes still starting up.
@@ -83,6 +109,7 @@
   pods, none of which were removed until the eval ended. A chart with fixed-name
   `additionalResources` no longer fails the retry with `exists and cannot be imported
   into the current release`.
+- Fix startup failing with `... is not valid SemVer string`.
 
 ## 2026-08-12 0.13.0
 

@@ -48,6 +48,8 @@ services:
         else
           exit 1
         fi
+        # Stay up: a container that exits is restarted, so its pod never stays ready.
+        exec tail -f /dev/null
     resources:
       limits:
         memory: "128Mi"
