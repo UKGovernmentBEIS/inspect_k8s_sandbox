@@ -10,7 +10,7 @@ from kubernetes.stream import stream  # type: ignore
 from kubernetes.stream.ws_client import RESIZE_CHANNEL, WSClient  # type: ignore
 
 from k8s_sandbox._kubernetes_api import k8s_client
-from k8s_sandbox._pod.error import ContainerRestartedError, PodReplacedError
+from k8s_sandbox._pod.error import ContainerRestartedError, PodError, PodReplacedError
 from k8s_sandbox._pod.snapshot import read_pod
 
 # The duration to wait for an initial response from the k8s API server.
@@ -78,6 +78,10 @@ class PodOperation(ABC):
         # the only way to end either wait.
         self._transport_lock = threading.Lock()
         self._transport: WSClient | None = None
+        # Set by close_transport() under the same lock, so a worker that is still
+        # connecting when its caller gives up sees it once its connection attaches,
+        # instead of running the operation with nobody waiting for the result.
+        self._cancelled = False
 
     def close_transport(self) -> None:
         """Shut down this operation's socket, waking a blocked worker thread.
@@ -89,10 +93,13 @@ class PodOperation(ABC):
         and then waits up to 3s for the pod's reply. Shutting the socket down
         takes no lock and returns at once, and it fails a blocked read or write
         immediately, so the worker finishes and performs the full close itself in
-        its `finally`. Safe to call at any time, including before the transport
-        exists or after the worker has closed it.
+        its `finally`. Safe to call at any time, including after the worker has
+        closed the transport. Called before the worker has connected, it records
+        the cancellation instead, and the worker closes its connection as soon as
+        it attaches, without running the operation.
         """
         with self._transport_lock:
+            self._cancelled = True
             transport = self._transport
         if transport is None:
             return
@@ -124,6 +131,8 @@ class PodOperation(ABC):
     def create_websocket_client_for_exec(
         self, **kwargs
     ) -> Generator[WSClient, None, None]:
+        if self._cancelled:
+            raise self._cancelled_before_start()
         client = k8s_client(self._pod.context_name)
         # Note: ApiException is intentionally not caught; it should fail the eval.
         ws_client: WSClient = stream(
@@ -144,7 +153,15 @@ class PodOperation(ABC):
             name="ws-keepalive",
         )
         with self._transport_lock:
-            self._transport = ws_client
+            cancelled = self._cancelled
+            if not cancelled:
+                self._transport = ws_client
+        if cancelled:
+            # The caller was cancelled while this worker was connecting, so
+            # close_transport() found nothing to shut down. Close the connection
+            # before anything is sent on it or read from it.
+            ws_client.close()
+            raise self._cancelled_before_start()
         try:
             self._discard_duplicate_channel(ws_client)
             keepalive.start()
@@ -154,6 +171,11 @@ class PodOperation(ABC):
                 self._transport = None
             stop_keepalive.set()
             ws_client.close()
+
+    def _cancelled_before_start(self) -> PodError:
+        return PodError(
+            "Pod operation was cancelled before it started.", pod=self._pod.name
+        )
 
     def _discard_duplicate_channel(self, ws_client: WSClient) -> None:
         # Avoid issuing a warning multiple times.

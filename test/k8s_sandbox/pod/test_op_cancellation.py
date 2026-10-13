@@ -9,19 +9,24 @@ and can still write into a destination its caller has already disposed (a
 """
 
 import asyncio
+import io
 import socket
 import threading
 import time
 from pathlib import Path
 from typing import Callable
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import anyio
 import pytest
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 from websocket import WebSocket
 
+from k8s_sandbox._pod.error import PodError
+from k8s_sandbox._pod.execute import ExecuteOperation
 from k8s_sandbox._pod.executor import PodOpExecutor
+from k8s_sandbox._pod.op import PodOperation
+from k8s_sandbox._pod.read import ReadFileOperation
 from k8s_sandbox._pod.write import WriteFileOperation
 
 
@@ -162,6 +167,99 @@ async def test_cancelling_an_operation_with_no_transport_unwinds_immediately(
         await task
     assert time.monotonic() - started < 1.0, "no-transport cancel must not settle"
     release.set()
+
+
+def _exec() -> tuple[PodOperation, Callable[[], object]]:
+    op = ExecuteOperation(MagicMock())
+    return op, lambda: op.exec(["true"], None, None, {}, None, 10)
+
+
+def _read_file() -> tuple[PodOperation, Callable[[], object]]:
+    op = ReadFileOperation(MagicMock())
+    return op, lambda: op.read_file(Path("/src"), io.BytesIO())
+
+
+def _write_file() -> tuple[PodOperation, Callable[[], object]]:
+    op = WriteFileOperation(MagicMock())
+    return op, lambda: op.write_file(b"data", Path("/dst"))
+
+
+_OPERATIONS = pytest.mark.parametrize(
+    "make_operation",
+    [_exec, _read_file, _write_file],
+    ids=["exec", "read_file", "write_file"],
+)
+
+
+@_OPERATIONS
+async def test_an_operation_cancelled_while_connecting_does_not_run(
+    one_worker_executor: PodOpExecutor,
+    make_operation: Callable[[], tuple[PodOperation, Callable[[], object]]],
+) -> None:
+    """A cancel that lands before the connection exists still stops the operation.
+
+    There is no transport to shut down yet, so the cancellation has to be left
+    where the worker will find it once its connection attaches; otherwise the
+    worker connects after its caller has gone and runs the operation anyway.
+    """
+    op, operation = make_operation()
+    connecting = threading.Event()
+    connected = threading.Event()
+    transport = MagicMock(spec=WSClient)
+    transport._all = io.BytesIO()
+    # A pod that finished at once with no status: an operation that does run ends
+    # promptly (with GetReturncodeError) instead of waiting on the fake.
+    transport.is_open.return_value = False
+    transport.read_channel.return_value = ""
+
+    def stream(*args: object, **kwargs: object) -> WSClient:
+        connecting.set()
+        connected.wait(timeout=5)
+        return transport
+
+    cancel_recorded = threading.Event()
+
+    def on_cancel() -> None:
+        op.close_transport()
+        cancel_recorded.set()
+
+    with (
+        patch("k8s_sandbox._pod.op.k8s_client"),
+        patch("k8s_sandbox._pod.op.stream", side_effect=stream),
+    ):
+        task = asyncio.create_task(
+            one_worker_executor.queue_operation(operation, on_cancel=on_cancel)
+        )
+        assert await asyncio.to_thread(connecting.wait, 5)
+        task.cancel()
+        assert await asyncio.to_thread(cancel_recorded.wait, 5)
+        connected.set()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, timeout=10)
+
+    assert transport.method_calls == [call.close()], (
+        "the worker used a connection whose caller had already been cancelled"
+    )
+
+
+@_OPERATIONS
+def test_an_operation_cancelled_before_it_starts_never_connects(
+    make_operation: Callable[[], tuple[PodOperation, Callable[[], object]]],
+) -> None:
+    op, operation = make_operation()
+    op.close_transport()
+
+    with (
+        patch("k8s_sandbox._pod.op.k8s_client"),
+        patch(
+            "k8s_sandbox._pod.op.stream",
+            side_effect=AssertionError("connected after it was cancelled"),
+        ) as stream,
+    ):
+        with pytest.raises(PodError, match="cancelled before it started"):
+            operation()
+
+    stream.assert_not_called()
 
 
 def _start(fn: Callable[[], object]) -> tuple[threading.Thread, list[object]]:
