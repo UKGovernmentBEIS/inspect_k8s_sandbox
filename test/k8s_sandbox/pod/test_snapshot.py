@@ -114,11 +114,14 @@ def test_read_pod_requests_raw_json_and_parses():
     api.read_namespaced_pod.return_value = _raw_response(_pod_body(uid="uid-42"))
 
     # Act
-    snapshot = read_pod(api, name="pod", namespace="ns")
+    snapshot = read_pod(api, name="pod", namespace="ns", request_timeout=60)
 
     # Assert
+    # _request_timeout is what keeps the pre-exec restart check from hanging an
+    # operation (which holds a pool slot and has no transport to close) when the
+    # API path is unresponsive; dropping it is a regression, not a cleanup.
     api.read_namespaced_pod.assert_called_once_with(
-        name="pod", namespace="ns", _preload_content=False
+        name="pod", namespace="ns", _preload_content=False, _request_timeout=60
     )
     assert snapshot.uid == "uid-42"
 

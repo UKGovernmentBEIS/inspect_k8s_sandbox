@@ -1,16 +1,24 @@
 import shlex
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 
 from kubernetes.stream.ws_client import WSClient  # type: ignore[import-untyped]
 
+import k8s_sandbox._pod.op as op_module
 from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.get_returncode import get_returncode
 from k8s_sandbox._pod.op import (
     PodOperation,
     raise_for_known_read_write_errors,
 )
+
+# Once the whole file has been sent, `head -c <size>` exits as soon as it has read
+# it, and the pod closes the connection. Only the data still in flight is left to
+# write, so a pod that has not finished this long after the last byte was sent has
+# stopped answering. Sending is bounded separately (`TRANSPORT_STALL_SECONDS`).
+WRITE_COMPLETION_SECONDS = 60
 
 
 class WriteFileOperation(PodOperation):
@@ -52,7 +60,17 @@ class WriteFileOperation(PodOperation):
     def _handle_stream_output(self, ws_client: WSClient) -> None:
         # Wait until the websocket connection is closed. All stderr will be stored by us
         # in memory anyway so there is no value in streaming it.
-        ws_client.run_forever()
+        deadline = time.monotonic() + WRITE_COMPLETION_SECONDS
+        while ws_client.is_open():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise PodError(
+                    f"Writing file to pod stalled: the write did not finish within "
+                    f"{WRITE_COMPLETION_SECONDS}s of sending the last of the file; "
+                    f"the pod is not answering.",
+                    pod=self._pod.name,
+                )
+            ws_client.update(timeout=min(remaining, op_module.TRANSPORT_POLL_SECONDS))
         returncode = get_returncode(ws_client)
         if returncode != 0:
             stderr = ws_client.read_stderr()

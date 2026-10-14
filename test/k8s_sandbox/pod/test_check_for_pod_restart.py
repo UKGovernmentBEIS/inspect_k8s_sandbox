@@ -175,7 +175,7 @@ def test_env_var_skips_file_op_check_but_not_exec(monkeypatch):
     ) as mock_get_instance:
         executor = MagicMock()
 
-        async def queue(callable):
+        async def queue(callable, on_cancel=None):
             return callable()
 
         executor.queue_operation = queue
@@ -215,7 +215,7 @@ def test_env_var_default_keeps_file_op_check(monkeypatch):
     ) as mock_get_instance:
         executor = MagicMock()
 
-        async def queue(callable):
+        async def queue(callable, on_cancel=None):
             return callable()
 
         executor.queue_operation = queue

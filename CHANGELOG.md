@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- An `exec` whose pod stops answering now fails with `TimeoutError` once its
+  `timeout` plus a 30s grace has passed, a `read_file` that receives no data
+  for 60s fails with `PodError`, and a `write_file` that has not finished 60s
+  after sending the last of the file fails with `PodError`, instead of waiting
+  forever. An `exec` or `write_file` whose pod stops accepting its input also
+  fails with `PodError`. Previously a pod that died mid-command left the
+  operation, and any eval waiting on it, hung until the process was killed.
+- Cancelling a sandbox operation (e.g. an eval timing out or being interrupted) can
+  now take up to 30s longer to unwind. Previously a cancelled operation could stop
+  later sandbox operations from starting, keep the process from exiting, and raise
+  `ValueError: write to closed file` after a cancelled `read_file`.
+
 ## 2026-10-09 0.14.0
 
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside

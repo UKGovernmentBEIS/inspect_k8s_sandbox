@@ -1,12 +1,15 @@
 import shlex
+import threading
+import time
 from contextlib import contextmanager
-from typing import Generator
+from typing import Callable, Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
 from inspect_ai.util import ExecResult
 from kubernetes.stream.ws_client import WSClient  # type: ignore
 
+import k8s_sandbox._pod.execute as execute_module
 import k8s_sandbox._pod.op as op_module
 from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.execute import ExecuteOperation, _shell_command
@@ -392,3 +395,91 @@ class TestRunuserErrorMessages:
         executor = ExecuteOperation(MagicMock())
 
         executor._check_for_runuser_error(stderr, "agent")  # does not raise
+
+
+def _silent_ws_client() -> WSClient:
+    """A WSClient whose pod never answers: open forever, every poll times out empty."""
+    ws = MagicMock(spec=WSClient)
+    ws.is_open.return_value = True
+
+    def update(timeout: float | None = None) -> None:
+        # The real update() returns after `timeout` seconds with nothing to read.
+        # None would block forever; cap it so a regression cannot wedge the suite.
+        time.sleep(min(timeout if timeout is not None else 60.0, 60.0))
+
+    ws.update.side_effect = update
+    ws.peek_stdout.return_value = False
+    ws.peek_stderr.return_value = False
+    return ws
+
+
+def _finish_within(seconds: float, fn: Callable[[], object]) -> object:
+    """Run fn on a worker thread; fail if it is still waiting after `seconds`."""
+    outcome: list[object] = []
+
+    def run() -> None:
+        try:
+            outcome.append(fn())
+        except BaseException as e:  # noqa: BLE001 - the test inspects the exception
+            outcome.append(e)
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(seconds)
+    if worker.is_alive():
+        pytest.fail(f"still waiting on a pod that will never answer after {seconds}s")
+    return outcome[0]
+
+
+class TestPodStopsAnswering:
+    """A pod that never reports completion must not hold the worker forever.
+
+    The in-pod `timeout -k 5s Ns` wrapper only fires on a live pod. When the pod is
+    gone the client is the only thing that can end the wait; without its own deadline
+    the worker parks in update(timeout=None) for as long as the process lives.
+    """
+
+    def test_exec_with_timeout_raises_when_the_pod_never_reports_completion(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(execute_module, "EXEC_COMPLETION_GRACE_SECONDS", 0.2)
+        monkeypatch.setattr(op_module, "TRANSPORT_POLL_SECONDS", 0.05)
+        executor = ExecuteOperation(MagicMock())
+
+        outcome = _finish_within(
+            5.0,
+            lambda: executor._handle_shell_output(
+                _silent_ws_client(), user=None, timeout=1
+            ),
+        )
+
+        assert isinstance(outcome, TimeoutError)
+        assert "did not report completion" in str(outcome)
+
+    def test_exec_without_timeout_keeps_waiting_past_the_grace_period(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No timeout means the caller asked for an unbounded wait.
+
+        The loop must not invent a deadline of its own.
+        """
+        monkeypatch.setattr(execute_module, "EXEC_COMPLETION_GRACE_SECONDS", 0.1)
+        ws = MagicMock(spec=WSClient)
+        frames = [b"late<completed-sentinel-value-0>"]
+        ws.is_open.side_effect = lambda: bool(frames)
+
+        def update(timeout: float | None = None) -> None:
+            # Silent for longer than the grace period, then the pod answers.
+            time.sleep(0.3)
+
+        ws.update.side_effect = update
+        ws.peek_stderr.return_value = False
+        ws.peek_stdout.side_effect = lambda: bool(frames)
+        ws.read_stdout.side_effect = lambda: frames.pop(0)
+        executor = ExecuteOperation(MagicMock())
+
+        result = executor._handle_shell_output(ws, user=None, timeout=None)
+
+        assert isinstance(result, ExecResult)
+        assert result.returncode == 0
+        assert result.stdout == "late"

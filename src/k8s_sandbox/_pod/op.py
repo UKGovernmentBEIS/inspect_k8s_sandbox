@@ -1,15 +1,17 @@
 import json
 import logging
+import socket
 import threading
 from abc import ABC
 from dataclasses import dataclass
 from typing import Generator, Literal
 
+import websocket
 from kubernetes.stream import stream  # type: ignore
 from kubernetes.stream.ws_client import RESIZE_CHANNEL, WSClient  # type: ignore
 
 from k8s_sandbox._kubernetes_api import k8s_client
-from k8s_sandbox._pod.error import ContainerRestartedError, PodReplacedError
+from k8s_sandbox._pod.error import ContainerRestartedError, PodError, PodReplacedError
 from k8s_sandbox._pod.snapshot import read_pod
 
 # The duration to wait for an initial response from the k8s API server.
@@ -31,6 +33,19 @@ _KEEPALIVE_INTERVAL_SECONDS = 30
 # MiB) make the kubelet/API-server/TLS layer reset the connection
 # (ConnectionResetError / ssl.SSLEOFError), so stdin is written in chunks.
 _STDIN_CHUNK_SIZE = 1024**2  # 1 MiB
+# How long a worker blocks in one `WSClient.update()` poll while it is enforcing a
+# deadline. Between polls it checks the deadline; the poll itself is still woken
+# early by data or by `close_transport()`, so this only bounds how late a deadline
+# can be noticed, not how long a live stream waits.
+TRANSPORT_POLL_SECONDS = 1.0
+# How long one send or receive call on an operation's connection may block. Over
+# TLS a send is a whole stdin frame (at most `_STDIN_CHUNK_SIZE`) and must finish
+# within this time, so a pod taking its input slower than 1 MiB a minute fails
+# too; a receive must get more of the frame it is reading within this time. A
+# live pod is far faster than either, so failing them means the pod has stopped
+# answering. Waiting for the next frame to start is not bounded here: each
+# operation bounds that itself (or, for an exec with no timeout, does not).
+TRANSPORT_STALL_SECONDS = 60
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +80,38 @@ class PodOperation(ABC):
 
     def __init__(self, pod: PodInfo):
         self._pod = pod
+        # The operation's live transport, so a cancelling caller can wake the
+        # worker from another thread. `update(timeout=None)` blocks until the
+        # socket has data or is shut down, and a stdin write to a pod that has
+        # stopped reading blocks until there is room; shutting the socket down is
+        # the only way to end either wait.
+        self._transport_lock = threading.Lock()
+        self._transport: WSClient | None = None
+        # Set by close_transport() under the same lock, so a worker that is still
+        # connecting when its caller gives up sees it once its connection attaches,
+        # instead of running the operation with nobody waiting for the result.
+        self._cancelled = False
+
+    def close_transport(self) -> None:
+        """Shut down this operation's socket, waking a blocked worker thread.
+
+        Called from the event loop (not the worker) when the awaiting caller is
+        cancelled, so it must not block. That rules out `WSClient.close()`: it
+        sends a close frame under the WebSocket's send lock, which a worker
+        blocked writing stdin to a pod that stopped reading holds indefinitely,
+        and then waits up to 3s for the pod's reply. Shutting the socket down
+        takes no lock and returns at once, and it fails a blocked read or write
+        immediately, so the worker finishes and performs the full close itself in
+        its `finally`. Safe to call at any time, including after the worker has
+        closed the transport. Called before the worker has connected, it records
+        the cancellation instead, and the worker closes its connection as soon as
+        it attaches, without running the operation.
+        """
+        with self._transport_lock:
+            self._cancelled = True
+            transport = self._transport
+        if transport is not None:
+            _shutdown_socket(transport)
 
     def _write_stdin_chunked(self, ws_client: WSClient, data: str | bytes) -> None:
         """Write ``data`` to the stdin channel in ``_STDIN_CHUNK_SIZE`` frames.
@@ -73,12 +120,21 @@ class PodOperation(ABC):
         chunk). The slice type is preserved: ``str`` -> text frames, ``bytes``
         -> binary frames.
         """
-        for i in range(0, len(data), _STDIN_CHUNK_SIZE):
-            ws_client.write_stdin(data[i : i + _STDIN_CHUNK_SIZE])
+        try:
+            for i in range(0, len(data), _STDIN_CHUNK_SIZE):
+                ws_client.write_stdin(data[i : i + _STDIN_CHUNK_SIZE])
+        except websocket.WebSocketTimeoutException as e:
+            raise PodError(
+                f"Sending to pod stalled: a write did not complete within "
+                f"{TRANSPORT_STALL_SECONDS}s; the pod is not answering.",
+                pod=self._pod.name,
+            ) from e
 
     def create_websocket_client_for_exec(
         self, **kwargs
     ) -> Generator[WSClient, None, None]:
+        if self._cancelled:
+            raise self._cancelled_before_start()
         client = k8s_client(self._pod.context_name)
         # Note: ApiException is intentionally not caught; it should fail the eval.
         ws_client: WSClient = stream(
@@ -98,13 +154,43 @@ class PodOperation(ABC):
             daemon=True,
             name="ws-keepalive",
         )
+        with self._transport_lock:
+            cancelled = self._cancelled
+            if not cancelled:
+                self._transport = ws_client
+        if cancelled:
+            # The caller was cancelled while this worker was connecting, so
+            # close_transport() found nothing to shut down. Close the connection
+            # before anything is sent on it or read from it.
+            ws_client.close()
+            raise self._cancelled_before_start()
         try:
+            # Bound each send and receive on the socket. Without it a stdin write
+            # to a pod that has stopped reading blocks for as long as the process
+            # lives, and so does a frame that stops arriving partway.
+            ws_client.sock.settimeout(TRANSPORT_STALL_SECONDS)
             self._discard_duplicate_channel(ws_client)
             keepalive.start()
             yield ws_client
+        except BaseException:
+            # The operation failed (a deadline, a stalled send, a lost connection)
+            # or was cancelled, so nothing more needs to reach the pod. Shut the
+            # socket down before the close below: a pod that has stopped reading
+            # leaves the send buffer full, and the close frame would then wait
+            # `TRANSPORT_STALL_SECONDS` for room, and up to 3s more for the pod's
+            # reply, before the error could reach the caller.
+            _shutdown_socket(ws_client)
+            raise
         finally:
+            with self._transport_lock:
+                self._transport = None
             stop_keepalive.set()
             ws_client.close()
+
+    def _cancelled_before_start(self) -> PodError:
+        return PodError(
+            "Pod operation was cancelled before it started.", pod=self._pod.name
+        )
 
     def _discard_duplicate_channel(self, ws_client: WSClient) -> None:
         # Avoid issuing a warning multiple times.
@@ -151,7 +237,9 @@ def check_for_pod_restart(pod: PodInfo) -> None:
             (treated as a permanent misconfiguration).
     """
     api = k8s_client(pod.context_name)
-    snapshot = read_pod(api, name=pod.name, namespace=pod.namespace)
+    snapshot = read_pod(
+        api, name=pod.name, namespace=pod.namespace, request_timeout=API_TIMEOUT
+    )
     if snapshot.uid != pod.uid:
         # Capture the new pod's restart count for the default container so the
         # caller can refresh its full cached identity atomically.
@@ -179,6 +267,28 @@ def check_for_pod_restart(pod: PodInfo) -> None:
             restart_count=status.restart_count,
             last_reason=status.last_terminated_reason or "unknown",
         )
+
+
+def _shutdown_socket(ws_client: WSClient) -> None:
+    """Shut down a connection's socket, failing any send or receive blocked on it.
+
+    Takes no lock, sends nothing and returns at once, so it never waits on the pod
+    or on another thread holding the WebSocket's send lock.
+    """
+    # WSClient.sock is the websocket-client WebSocket; its own .sock is the
+    # underlying (TLS) socket, or None once the connection has been closed.
+    raw_socket = ws_client.sock.sock
+    if raw_socket is None:
+        return
+    try:
+        # The base-class call on purpose: `SSLSocket.shutdown()` first drops the TLS
+        # layer, and a frame another thread sends in that instant would go out over
+        # the plain socket, unencrypted. Shutting down the underlying socket keeps
+        # TLS in place, so later sends fail instead.
+        socket.socket.shutdown(raw_socket, socket.SHUT_RDWR)
+    except OSError:
+        # Already closed, so nothing is left blocked on it.
+        logger.debug("Transport was already closed.", exc_info=True)
 
 
 def _send_keepalive(ws_client: WSClient, stop: threading.Event) -> None:
