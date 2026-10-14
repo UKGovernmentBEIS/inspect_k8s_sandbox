@@ -124,11 +124,6 @@ class PodOperation(ABC):
             for i in range(0, len(data), _STDIN_CHUNK_SIZE):
                 ws_client.write_stdin(data[i : i + _STDIN_CHUNK_SIZE])
         except websocket.WebSocketTimeoutException as e:
-            # The send gave up partway through a frame, so nothing more can be sent
-            # on this connection, a close frame included. Shut it down rather than
-            # let the close in `create_websocket_client_for_exec` wait on the same
-            # full buffer.
-            _shutdown_socket(ws_client)
             raise PodError(
                 f"Sending to pod stalled: a write did not complete within "
                 f"{TRANSPORT_STALL_SECONDS}s; the pod is not answering.",
@@ -177,6 +172,15 @@ class PodOperation(ABC):
             self._discard_duplicate_channel(ws_client)
             keepalive.start()
             yield ws_client
+        except BaseException:
+            # The operation failed (a deadline, a stalled send, a lost connection)
+            # or was cancelled, so nothing more needs to reach the pod. Shut the
+            # socket down before the close below: a pod that has stopped reading
+            # leaves the send buffer full, and the close frame would then wait
+            # `TRANSPORT_STALL_SECONDS` for room, and up to 3s more for the pod's
+            # reply, before the error could reach the caller.
+            _shutdown_socket(ws_client)
+            raise
         finally:
             with self._transport_lock:
                 self._transport = None

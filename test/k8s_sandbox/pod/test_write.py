@@ -2,7 +2,9 @@ import json
 import socket
 import struct
 import threading
+import time
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 from typing import Callable, Generator
 from unittest.mock import MagicMock, patch
@@ -11,6 +13,7 @@ import pytest
 from kubernetes.stream.ws_client import WSClient  # type: ignore[import-untyped]
 from websocket import ABNF, WebSocket
 
+import k8s_sandbox._pod.execute as execute_module
 import k8s_sandbox._pod.op as op_module
 import k8s_sandbox._pod.write as write_module
 from k8s_sandbox._pod.error import PodError
@@ -52,6 +55,7 @@ class _FakePod:
 
     def __init__(self) -> None:
         ours, self._end = socket.socketpair()
+        self._ours = ours
         client_socket = WebSocket()
         client_socket.sock = ours
         client_socket.connected = True
@@ -70,6 +74,24 @@ class _FakePod:
             frame = self._frames.recv_frame()
             if frame.data[:1] == b"\x00":
                 received += len(frame.data) - 1
+
+    def stop_reading_with_input_queued(self) -> None:
+        """Leave the operation's send buffer full, as a pod that stops reading does.
+
+        Fills it directly rather than through the operation, so how much the
+        kernel buffers does not decide whether the operation's sends return.
+        """
+        filler = self._ours.dup()
+        try:
+            filler.setblocking(False)
+            for size in (4096, 1):
+                try:
+                    while True:
+                        filler.send(b"\x00" * size)
+                except BlockingIOError:
+                    pass
+        finally:
+            filler.close()
 
     def report_success(self) -> None:
         """Report success on the status channel and close, as the API server does."""
@@ -171,3 +193,41 @@ class TestPodStopsAnswering:
 
         assert isinstance(outcome, PodError)
         assert "did not finish" in str(outcome)
+
+    @pytest.mark.parametrize(
+        "operation", ["write_file", "exec"], ids=["write_file", "exec"]
+    )
+    def test_a_deadline_fails_on_time_when_the_pod_stopped_reading(
+        self,
+        fake_pod: _FakePod,
+        monkeypatch: pytest.MonkeyPatch,
+        operation: str,
+    ) -> None:
+        """The error arrives at the deadline, not after a close the pod never reads."""
+        monkeypatch.setattr(op_module, "TRANSPORT_STALL_SECONDS", 3.0)
+        monkeypatch.setattr(op_module, "TRANSPORT_POLL_SECONDS", 0.05)
+        monkeypatch.setattr(write_module, "WRITE_COMPLETION_SECONDS", 0.5)
+        monkeypatch.setattr(execute_module, "EXEC_COMPLETION_GRACE_SECONDS", 0.0)
+        if operation == "write_file":
+            data = b"x" * 1024
+            run = _write_file(data)
+            bound = 0.5
+        else:
+            exec_op = ExecuteOperation(MagicMock())
+            data = exec_op._build_shell_script(["true"], None, None, {}, 1).encode()
+            run = partial(exec_op.exec, ["true"], None, None, {}, None, 1)
+            bound = 1.0
+
+        def pod() -> None:
+            fake_pod.read_stdin(len(data))
+            fake_pod.stop_reading_with_input_queued()
+
+        threading.Thread(target=pod, daemon=True).start()
+        started = time.monotonic()
+
+        outcome = _finish_within(10.0, run)
+
+        elapsed = time.monotonic() - started
+        assert isinstance(outcome, (PodError, TimeoutError)), outcome
+        assert "not answering" in str(outcome)
+        assert elapsed < bound + 1.5, f"failed after {elapsed:.1f}s"
