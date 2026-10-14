@@ -10,13 +10,19 @@ done
 
 if [ "$CLUSTER" = true ]; then
   # One minikube profile per checkout, so several devcontainers on one host don't fight
-  # over the default "minikube" cluster. Profile names allow only [A-Za-z0-9-].
+  # over the default "minikube" cluster. The name is also the node container's hostname
+  # (64-byte limit) and must satisfy minikube's profile regex: alphanumerics and dashes,
+  # starting and ending with an alphanumeric.
+  MINIKUBE_PROFILE=$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9-\n' '-' \
+    | sed -E 's/^-+//; s/^(.{63}).*/\1/; s/-+$//')
   export MINIKUBE_PROFILE
-  MINIKUBE_PROFILE=$(basename "$PWD" | tr -c 'A-Za-z0-9-\n' '-')
   echo "Setting up Minikube profile '${MINIKUBE_PROFILE}'..."
   minikube delete
   # github actions runner has 2 cpus, 8G memory
   minikube start --cni bridge --container-runtime=containerd --memory=4g
+  # Record it as the active profile in this checkout's MINIKUBE_HOME, so post-start.sh
+  # and bare `minikube` commands need no -p.
+  minikube profile "$MINIKUBE_PROFILE"
 
   # gVisor is installed by hand rather than with the minikube addon. The addon downloads
   # runsc from a URL that now 404s and re-appends its containerd config every time the

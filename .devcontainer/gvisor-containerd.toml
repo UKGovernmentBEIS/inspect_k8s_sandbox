@@ -1,4 +1,6 @@
 
+# Appended by post-create.sh to /etc/containerd/config.toml on the minikube node. The
+# blank first line keeps this from being glued onto config.toml's last line.
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
   runtime_type = "io.containerd.runsc.v1"
   pod_annotations = [ "dev.gvisor.*" ]
