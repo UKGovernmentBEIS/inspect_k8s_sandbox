@@ -10,11 +10,15 @@ done
 
 if [ "$CLUSTER" = true ]; then
   # One minikube profile per checkout, so several devcontainers on one host don't fight
-  # over the default "minikube" cluster. The name is also the node container's hostname
-  # (64-byte limit) and must satisfy minikube's profile regex: alphanumerics and dashes,
-  # starting and ending with an alphanumeric.
-  MINIKUBE_PROFILE=$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9-\n' '-' \
-    | sed -E 's/^-+//; s/^(.{63}).*/\1/; s/-+$//')
+  # over the default "minikube" cluster. The name is also the node container's hostname,
+  # the kube context and, through that, Cilium's cluster name (lower case, 32 characters
+  # max), and must satisfy minikube's profile regex (alphanumerics and dashes, starting
+  # and ending with an alphanumeric). Long names keep a prefix plus a hash of the whole
+  # name, so two long checkouts can't collide.
+  MINIKUBE_PROFILE=$(basename "$PWD" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9-\n' '-' | sed -E 's/^-+//; s/-+$//')
+  if [ ${#MINIKUBE_PROFILE} -gt 32 ]; then
+    MINIKUBE_PROFILE="${MINIKUBE_PROFILE:0:24}-$(printf %s "$MINIKUBE_PROFILE" | sha256sum | cut -c1-7)"
+  fi
   export MINIKUBE_PROFILE
   echo "Setting up Minikube profile '${MINIKUBE_PROFILE}'..."
   minikube delete
