@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
+
 ## 2026-10-09 0.14.0
 
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
