@@ -30,7 +30,7 @@
 | services.default | object | see [values.yaml](./values.yaml) | The default service, this is required for the agent environment to function. |
 | services.default.additionalDnsRecords | list | `[]` | A list of additional domains which will resolve to this service from within the agent environment (e.g. example.com). If one or more records are provided, `dnsRecord` is automatically set to true. Records may contain letters, digits and `_ - .`; whitespace and other characters are rejected at install time because these are interpolated into the CoreDNS Corefile. |
 | services.default.args | list | `[]` | The container's entrypoint arguments. |
-| services.default.command | list | `["tail","-f","/dev/null"]` | The container's entrypoint command. |
+| services.default.command | list | `["sh","-c","trap '' HUP INT QUIT TERM; while true; do sleep 3600 & wait; done"]` | The container's entrypoint command. The default idle loop reaps orphaned processes and requires sh and sleep in the image. |
 | services.default.dnsRecord | bool | false | Whether to create a DNS record which will resolve to this service from within the agent environment, using the service name as the domain (e.g. default). |
 | services.default.env | list | `[]` | Environment variables that will be set in the container. |
 | services.default.image | string | `"python:3.12-bookworm"` | The container's image name. |

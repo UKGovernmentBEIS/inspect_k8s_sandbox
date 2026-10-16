@@ -19,6 +19,13 @@ familiar with them.
 In addition to the info below, see `agent-env/README.md` and `agent-env/values.yaml` for
 a full list of configurable options.
 
+## Default entrypoint
+
+The `default` service runs an idle loop that reaps orphaned processes. It requires
+`sh` and `sleep` in the image. Setting `services.default.command` overrides it;
+custom entrypoints must handle orphaned processes themselves. See
+[Init Process](compose-to-helm.md#init-process) for Compose configuration.
+
 ## Container runtime class (gVisor)
 
 The default container runtime class name for every service is `gvisor` which, (depending
@@ -29,7 +36,6 @@ should map to the `runsc` runtime handler. You can override this if required.
 services:
   default:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
     runtimeClassName: runc
 ```
 
@@ -48,7 +54,6 @@ limitations on using gVisor versus `runc`.
     services:
       default:
         image: ubuntu:24.04
-        command: ["tail", "-f", "/dev/null"]
         runtimeClassName: CLUSTER_DEFAULT
     ```
 
@@ -142,7 +147,6 @@ from a variety of sources:
 services:
   default:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
 allowDomains: # TCP on ports 80/443 allowed on all domains
   - "pypi.org"
   - "files.pythonhosted.org"
@@ -224,7 +228,6 @@ Additionally, you can specify a list of domains that resolve to a given service 
 services:
   default:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
   nginx:
     image: nginx:1.27.2
     dnsRecord: true
@@ -316,8 +319,8 @@ services:
       periodSeconds: 5
 ```
 
-You do not need to specify a `readinessProbe` on containers which have a trivial
-entrypoint (e.g. `sleep infinity` or `tail -f /dev/null`).
+You do not need to specify a `readinessProbe` on idle containers, such as the default
+service using the chart's idle loop.
 
 ## Init containers
 
@@ -377,7 +380,6 @@ These can optionally be overridden for each service.
 services:
   default:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
     resources:
       limits:
         memory: "1Gi"
@@ -400,12 +402,14 @@ volume which is mounted in both containers.
 services:
   default:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
     volumes:
       - "my-volume:/my-volume-mount-path"
   worker:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
+    command:
+      - sh
+      - -c
+      - "trap '' HUP INT QUIT TERM; while true; do sleep 3600 & wait; done"
     volumes:
       - "my-volume:/my-volume-mount-path"
 volumes:
@@ -446,19 +450,24 @@ your eval.
 services:
   default:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
     networks:
       - a
   intermediate:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
+    command:
+      - sh
+      - -c
+      - "trap '' HUP INT QUIT TERM; while true; do sleep 3600 & wait; done"
     dnsRecord: true
     networks:
       - a
       - b
   target:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
+    command:
+      - sh
+      - -c
+      - "trap '' HUP INT QUIT TERM; while true; do sleep 3600 & wait; done"
     dnsRecord: true
     networks:
       - b

@@ -618,22 +618,23 @@ async def _wait_for_restart(sandbox: K8sSandboxEnvironment, timeout=30):
 
 
 async def test_exec_after_container_restart_warns(
-    sandbox: K8sSandboxEnvironment,
     log_warning: LogCaptureFixture,
 ) -> None:
-    await sandbox.exec(["kill", "1"])
-    await _wait_for_restart(sandbox)
+    async with install_sandbox_environments(__file__, "restart-values.yaml") as envs:
+        sandbox = envs["default"]
+        await sandbox.exec(["kill", "1"])
+        await _wait_for_restart(sandbox)
 
-    await sandbox.exec(["ls"])
+        await sandbox.exec(["ls"])
 
-    assert "has restarted" in log_warning.records[0].message
+        assert "has restarted" in log_warning.records[0].message
 
 
 async def test_exec_after_container_restart_raises(
     log_err: LogCaptureFixture,
 ) -> None:
     async with install_sandbox_environments(
-        __file__, "values.yaml", restarted_container_behavior="raise"
+        __file__, "restart-values.yaml", restarted_container_behavior="raise"
     ) as envs:
         sandbox = envs["default"]
         await sandbox.exec(["kill", "1"])

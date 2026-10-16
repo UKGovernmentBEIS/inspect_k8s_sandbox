@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Fix orphaned processes exhausting PID slots in sandboxes using the default
+  entrypoint. The default entrypoint requires `sh` and `sleep`. Services explicitly
+  configured to run `tail -f /dev/null` still accumulate zombies; they must use the
+  reaping loop instead to benefit from this fix. See
+  [Init Process](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/#init-process).
+- A warning is logged when Compose `init: true` is ignored on non-default services
+  or on the default service with an explicit `command` or `entrypoint`.
+
 ## 2026-10-09 0.14.0
 
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
