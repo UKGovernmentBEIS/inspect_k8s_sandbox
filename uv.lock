@@ -882,6 +882,7 @@ dependencies = [
     { name = "kubernetes" },
     { name = "semver" },
     { name = "tenacity" },
+    { name = "websocket-client" },
 ]
 
 [package.optional-dependencies]
@@ -915,6 +916,7 @@ requires-dist = [
     { name = "tenacity", specifier = ">=8.0.0" },
     { name = "types-jsonschema", marker = "extra == 'dev'", specifier = ">=4.23.0.20241208" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12" },
+    { name = "websocket-client", specifier = ">=1.0.0" },
 ]
 provides-extras = ["dev"]
 

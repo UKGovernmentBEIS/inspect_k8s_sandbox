@@ -3,6 +3,12 @@
 ## Unreleased
 
 - Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
+- Fix `read_file()` returning a truncated file, with no error, on `kubernetes` 37,
+  where a 100 MiB read also took ~80s rather than ~1s. `read_file()` and `exec()`
+  now read the exec stream's frames off the socket themselves.
+- `read_file()` raises if the file it received was incomplete, instead of returning
+  the truncated contents. It detects this with an end-of-data marker, so it now
+  requires `/bin/sh` in the container (as `exec()` already did).
 
 ## 2026-10-09 0.14.0
 

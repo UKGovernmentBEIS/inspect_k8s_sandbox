@@ -11,6 +11,9 @@ dependencies = [
   "jsonschema>=4.23.0",
   "semver>=3.0.0",
   "tenacity>=8.0.0",
+  # A transitive dependency of kubernetes, but we read exec stream frames with
+  # it directly (see _pod/stream.py).
+  "websocket-client>=1.0.0",
 ]
 
 [project.optional-dependencies]
