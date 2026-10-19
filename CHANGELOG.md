@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix sandbox ingress isolation: connections from outside a sandbox and to
+  `networkIsolated` services are blocked unless explicitly allowed by another policy.
+
 ## 2026-10-09 0.14.0
 
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside

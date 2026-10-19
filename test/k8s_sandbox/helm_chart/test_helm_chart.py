@@ -723,8 +723,20 @@ def test_network_policy_disabled_refuses_unenforceable_restrictions(
     assert f"nothing would enforce {field}" in exc_info.value.stderr
 
 
-def test_default_deny_ingress_selects_every_pod(chart_dir: Path) -> None:
-    documents = _run_helm_template(chart_dir)
+@pytest.mark.parametrize(
+    "values_filename",
+    [
+        None,
+        "network-isolated-values.yaml",
+        "network-isolated-with-global-network-values.yaml",
+    ],
+)
+def test_default_deny_ingress_selects_every_pod(
+    chart_dir: Path, test_resources_dir: Path, values_filename: str | None
+) -> None:
+    documents = _run_helm_template(
+        chart_dir, test_resources_dir / values_filename if values_filename else None
+    )
 
     cnps = _get_documents(documents, "CiliumNetworkPolicy")
     default_deny = next(
@@ -738,9 +750,11 @@ def test_default_deny_ingress_selects_every_pod(chart_dir: Path) -> None:
     match_labels = default_deny["spec"]["endpointSelector"]["matchLabels"]
     assert "inspect/service" not in match_labels
 
-    # An empty ingress rule enables default-deny while allowing nothing -- this is
-    # the shape the whole subtractive-isolation model rests on.
-    assert default_deny["spec"]["ingress"] == [{}]
+    # Cilium needs a nonempty ingress rule to enable default-deny. "none" selects
+    # no source, so explicit ingress allows in other policies can still take effect.
+    # [{}] would allow every source; [] would not enable ingress enforcement.
+    assert default_deny["spec"]["ingress"] == [{"fromEntities": ["none"]}]
+    assert "ingressDeny" not in default_deny["spec"]
 
 
 def test_network_isolated_service(chart_dir: Path, test_resources_dir: Path) -> None:
