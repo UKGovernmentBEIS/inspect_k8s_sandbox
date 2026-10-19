@@ -23,8 +23,9 @@ class ReadFileOperation(PodOperation):
     @contextmanager
     def _start_read_command(self, src: Path) -> Generator[WSClient, None, None]:
         # Limit number of bytes read (-c) to 1 byte over the limit (to detect if the
-        # file is too large).
-        command = ["head", "-c", limits.MAX_READ_FILE_SIZE + 1, src.as_posix()]
+        # file is too large). str() because kubernetes>=37 validates each element as a
+        # string and rejects the call before sending it.
+        command = ["head", "-c", str(limits.MAX_READ_FILE_SIZE + 1), src.as_posix()]
         yield from self.create_websocket_client_for_exec(
             command=command,
             stderr=True,
