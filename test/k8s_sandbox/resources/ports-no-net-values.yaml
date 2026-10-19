@@ -24,7 +24,7 @@ additionalResources:
     spec:
       endpointSelector:
         matchLabels:
-          {{- include "agentEnv.selectorLabels" $ | nindent 10 }}
+          {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
           inspect/service: ports-not-specified
       ingress:
         - fromEndpoints:

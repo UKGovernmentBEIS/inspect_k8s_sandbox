@@ -727,6 +727,7 @@ def test_network_policy_disabled_refuses_unenforceable_restrictions(
     "values_filename",
     [
         None,
+        "../../resources/ports-no-net-values.yaml",
         "network-isolated-values.yaml",
         "network-isolated-with-global-network-values.yaml",
     ],
