@@ -110,6 +110,16 @@ async def test_cross_sandbox_ingress_requires_explicit_allow(
         ],
     }
     values_path = tmp_path / "cross-sandbox-values.yaml"
+    # The receiver permits this label on 9090, but this source has no egress
+    # grant to the other release. Its denied connection isolates sender egress.
+    values_path.write_text(
+        yaml.safe_dump({key: values[key] for key in ("services", "labels")})
+    )
+    async with install_sandbox_environments(__file__, str(values_path)) as source_envs:
+        await assert_proper_ports_are_open(
+            source_envs["default"],
+            {"host": target_ip, "open_ports": [], "closed_ports": ["9090"]},
+        )
     values_path.write_text(yaml.safe_dump(values))
     async with install_sandbox_environments(__file__, str(values_path)) as source_envs:
         # Both ports are listening and source egress allows this target. The extra
