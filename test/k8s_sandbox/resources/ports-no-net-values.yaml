@@ -15,3 +15,22 @@ services:
     image: python:3.12-slim
     # Start TCP listner on both ports so checks in the test can recognise an available service
     command: ["sh","-c","python3 -m http.server \"8080\" --bind 0.0.0.0 & python3 -m http.server \"9090\" --bind 0.0.0.0 & wait"]
+additionalResources:
+  - |
+    apiVersion: cilium.io/v2
+    kind: CiliumNetworkPolicy
+    metadata:
+      name: {{ .Release.Name }}-test-cross-sandbox-ingress
+    spec:
+      endpointSelector:
+        matchLabels:
+          {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
+          inspect/service: ports-not-specified
+      ingress:
+        - fromEndpoints:
+            - matchLabels:
+                inspect/test-ingress-source: {{ .Release.Name }}
+          toPorts:
+            - ports:
+                - port: "9090"
+                  protocol: TCP

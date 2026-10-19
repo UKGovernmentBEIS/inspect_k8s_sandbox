@@ -149,7 +149,10 @@ spec:
       io.kubernetes.pod.namespace: {{ .Release.Namespace }}
       {{- include "agentEnv.selectorLabels" $ | nindent 6 }}
   ingress:
-    - {}
+    # A nonempty rule enables default-deny; the "none" entity never matches a source.
+    # An empty rule would allow all ingress, while an empty list has no effect.
+    - fromEntities:
+        - none
 {{- if .Values.networks }}
   {{- range $svcName, $svc := .Values.services }}
     {{- if and $svc.networks (not $svc.networkIsolated) }}
