@@ -1,0 +1,7 @@
+# Minimal values for the two-cluster-config diagnostic.
+# Uses runc instead of gvisor to avoid needing the gVisor addon.
+services:
+  default:
+    runtimeClassName: runc
+    image: "python:3.12-bookworm"
+    command: ["tail", "-f", "/dev/null"]
