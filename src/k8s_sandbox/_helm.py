@@ -129,7 +129,7 @@ def validate_no_null_values(values: dict[str, Any], source_description: str) -> 
     error with instructions to replace them with empty objects.
 
     An exception is `services.<name>.command: null`, which is Helm's documented
-    way to delete the chart-default entrypoint (`tail -f /dev/null` on the
+    way to delete the chart-default entrypoint (the idle loop on the
     `default` service) so the image ENTRYPOINT is used.
 
     Args:

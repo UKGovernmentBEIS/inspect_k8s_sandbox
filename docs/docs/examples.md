@@ -49,7 +49,6 @@ Assuming you're using the built-in Helm chart, a suitable `values.yaml` file is:
 services:
   default:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
 ```
 
 ## Additional infrastructure
@@ -69,7 +68,6 @@ Sample(
 services:
   default:
     image: ubuntu:24.04
-    command: ["tail", "-f", "/dev/null"]
   server:
     image: nginx:1.27.0
     dnsRecord: true
