@@ -4,6 +4,14 @@
 
 - Init containers take `env` and `volumeMounts`, so one can write a file into a volume
   the service's container then reads.
+- Fix orphaned processes exhausting PID slots in sandboxes using the default
+  entrypoint. The default entrypoint requires `sh` and `sleep`. Services explicitly
+  configured to run `tail -f /dev/null` still accumulate zombies; they must use the
+  reaping loop instead to benefit from this fix. See
+  [Init Process](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/#init-process).
+- A warning is logged when Compose `init: true` is ignored on non-default services
+  or on the default service with an explicit `command` or `entrypoint`.
+- Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
 
 ## 2026-10-09 0.14.0
 

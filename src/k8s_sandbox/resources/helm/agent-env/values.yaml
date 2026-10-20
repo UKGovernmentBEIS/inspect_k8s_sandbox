@@ -96,8 +96,12 @@ services:
     runtimeClassName: gvisor
     # -- The container's image name.
     image: "python:3.12-bookworm"
-    # -- The container's entrypoint command.
-    command: ["tail", "-f", "/dev/null"]
+    # -- The container's entrypoint command. The default idle loop reaps orphaned
+    # processes and requires sh and sleep in the image.
+    command:
+      - sh
+      - -c
+      - "trap '' HUP INT QUIT TERM; while true; do sleep 3600 & wait; done"
     # -- The container's entrypoint arguments.
     args: []
     # -- The container's working directory.

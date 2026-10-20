@@ -1,0 +1,4 @@
+services:
+  default:
+    # The restart tests need an entrypoint that exits on SIGTERM.
+    command: ["tail", "-f", "/dev/null"]

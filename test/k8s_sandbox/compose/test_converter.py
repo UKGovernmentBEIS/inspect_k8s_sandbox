@@ -209,7 +209,7 @@ services:
 def test_command_without_entrypoint_unsets_chart_default_command(
     tmp_compose: TmpComposeFixture,
 ) -> None:
-    # Chart values.yaml sets services.default.command to ["tail", "-f", "/dev/null"].
+    # Chart values.yaml sets services.default.command to an idle loop.
     # A null deletes that key so the image ENTRYPOINT is used (compose semantics).
     compose_path = tmp_compose("""
 services:
@@ -1324,17 +1324,42 @@ services:
     )
 
 
-def test_ignores_init_true(tmp_compose: TmpComposeFixture) -> None:
-    compose_path = tmp_compose("""
+@pytest.mark.parametrize(
+    ("service_name", "command_key", "expected_warning"),
+    [
+        ("default", None, False),
+        ("default", "entrypoint", True),
+        ("default", "command", True),
+        ("web", None, True),
+    ],
+)
+def test_ignores_init_true(
+    tmp_compose: TmpComposeFixture,
+    caplog: pytest.LogCaptureFixture,
+    service_name: str,
+    command_key: str | None,
+    expected_warning: bool,
+) -> None:
+    compose = f"""
 services:
-  my-service:
+  {service_name}:
     image: my-image
     init: true
-""")
+"""
+    if command_key:
+        compose += f'    {command_key}: ["tail", "-f", "/dev/null"]\n'
+    if service_name != "default":
+        compose += "  default:\n    image: my-image\n"
+    compose_path = tmp_compose(compose)
 
-    result = convert_compose_to_helm_values(compose_path)
+    with caplog.at_level(logging.WARNING):
+        result = convert_compose_to_helm_values(compose_path)
 
-    assert "my-service" in result["services"]
+    assert "init" not in result["services"][service_name]
+    assert (
+        any("Ignoring 'init: true'" in record.message for record in caplog.records)
+        == expected_warning
+    )
 
 
 def test_ignores_expose_key(tmp_compose: TmpComposeFixture) -> None:
