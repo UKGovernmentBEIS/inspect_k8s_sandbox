@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Init containers take `env` and `volumeMounts`, so one can write a file into a volume
+  the service's container then reads.
 - Fix orphaned processes exhausting PID slots in sandboxes using the default
   entrypoint. The default entrypoint requires `sh` and `sleep`. Services explicitly
   configured to run `tail -f /dev/null` still accumulate zombies; they must use the
