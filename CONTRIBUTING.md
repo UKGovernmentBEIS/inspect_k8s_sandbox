@@ -6,7 +6,35 @@ in our [Inspect
 Community](https://join.slack.com/t/inspectcommunity/shared_invite/zt-2w9eaeusj-4Hu~IBHx2aORsKz~njuz4g)
 Slack workspace.
 
-## Development
+## Before you open a PR
+
+This provider is a thin layer over infrastructure we don't control — Kubernetes, Helm
+and Cilium. Most bugs in it are claims about what that infrastructure does at runtime,
+and those are cheap to get wrong from reading documentation or upstream source.
+
+If your change asserts a runtime behaviour, we need the observation, not the derivation.
+
+- **Run it against a real cluster and paste what you saw.** minikube is fine (see
+  below); the `req_k8s` marker identifies the tests that need a cluster. A test without
+  that marker is not evidence about runtime behaviour, however green it is.
+- **Show the negative control.** Give the result with your change and without it. If you
+  can't produce a run that fails on `main` and passes on your branch, say so and explain
+  why.
+- **If you can't run it, open an issue rather than a PR.** Reasoning, upstream source
+  links and a proposed patch are all welcome in an issue. A confidently argued wrong
+  premise costs more than no PR at all, because it has to be disproved before it can be
+  declined.
+
+The trap specific to this repo is the Helm render tests. They assert what YAML we emit,
+not what the cluster enforces: two manifests that render differently can enforce
+identically, and two that look equivalent can behave differently. A render test can't
+settle an enforcement question in either direction.
+
+A sufficient experiment looks like: baseline without the change, the behaviour with it,
+then baseline again to show the effect went away — several attempts per phase, plus a
+positive control proving the test could have observed a difference if there were one.
+
+## Getting started
 
 This project uses [uv](https://github.com/astral-sh/uv) for Python packaging.
 
@@ -16,13 +44,13 @@ Run this beforehand:
 uv sync --extra dev
 ```
 
-You then can either source the venv with
+The commands below are written as `uv run --extra dev ...`, which works whether or not
+the venv is activated (`--extra dev` is needed because the dev tools are an optional
+extra here). Drop the prefix if you'd rather activate the venv:
 
 ```
 source .venv/bin/activate
 ```
-
-or prefix your pytest (etc.) commands with `uv run ...`
 
 If you don't have access to a K8s cluster, you can develop using
 [minikube](https://minikube.sigs.k8s.io/). If you're using VS Code, the devcontainer
@@ -33,7 +61,7 @@ If you don't have access to a K8s cluster, you can develop using
 This project uses [pytest](https://docs.pytest.org/en/stable/). To run all tests:
 
 ```bash
-pytest
+uv run --extra dev pytest
 ```
 
 (AISI users: first `unset INSPECT_TELEMETRY INSPECT_API_KEY_OVERRIDE INSPECT_REQUIRED_HOOKS`)
@@ -42,7 +70,7 @@ These tests are automatically run as part of CI. Some tests require a K8s cluste
 available. To skip these tests:
 
 ```bash
-pytest -m "not req_k8s"
+uv run --extra dev pytest -m "not req_k8s"
 ```
 
 ### Test Timeouts
@@ -54,7 +82,7 @@ that isn't overloaded, this should be adequate.
 Override if needed:
 
 ```bash
-INSPECT_HELM_TIMEOUT=300 pytest
+INSPECT_HELM_TIMEOUT=300 uv run --extra dev pytest
 ```
 
 ## Linting & Formatting
@@ -63,8 +91,8 @@ INSPECT_HELM_TIMEOUT=300 pytest
 checks manually:
 
 ```bash
-ruff check .
-ruff format .
+uv run --extra dev ruff check .
+uv run --extra dev ruff format .
 ```
 
 These checks are automatically run as part of CI and pre-commit hooks.
@@ -75,7 +103,7 @@ These checks are automatically run as part of CI and pre-commit hooks.
 manually:
 
 ```bash
-mypy .
+uv run --extra dev mypy .
 ```
 
 ## Pre-commit Hooks and Continuous Integration
@@ -86,7 +114,7 @@ and code quality.
 Installing the pre-commit hooks locally is not mandatory, but it is recommended.
 
 ```bash
-pre-commit install
+uv run --extra dev pre-commit install
 ```
 
 So long as the checks pass, feel free to use alternative tooling locally.
@@ -94,7 +122,7 @@ So long as the checks pass, feel free to use alternative tooling locally.
 To run these checks manually:
 
 ```bash
-pre-commit run --all-files
+uv run --extra dev pre-commit run --all-files
 ```
 
 These hooks are automatically run as part of CI. When run in CI, no changes are made to
