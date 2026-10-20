@@ -13,6 +13,7 @@ import pytest_asyncio
 from inspect_ai.util import OutputLimitExceededError, SandboxEnvironmentLimits
 from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
+from websocket import WebSocket  # type: ignore
 
 from k8s_sandbox._kubernetes_api import get_current_context_name, k8s_client
 from k8s_sandbox._sandbox_environment import K8sError, K8sSandboxEnvironment
@@ -472,8 +473,9 @@ async def test_exec_stderr_truncation(sandbox: K8sSandboxEnvironment) -> None:
 async def test_exec_api_error(
     sandbox: K8sSandboxEnvironment, log_err: LogCaptureFixture
 ) -> None:
+    # exec() reads the stream's frames itself, so inject the error there.
     with patch.object(
-        WSClient, "read_channel", side_effect=ApiException(reason="my-reason")
+        WebSocket, "recv_data_frame", side_effect=ApiException(reason="my-reason")
     ):
         with pytest.raises(K8sError) as excinfo:
             await sandbox.exec(["true"])
@@ -890,8 +892,9 @@ async def test_read_file_limit_exceeded(
 async def test_read_file_api_error(
     sandbox: K8sSandboxEnvironment, log_err: LogCaptureFixture
 ) -> None:
+    # read_file() reads the stream's frames itself, so inject the error there.
     with patch.object(
-        WSClient, "read_channel", side_effect=ApiException(reason="my-reason")
+        WebSocket, "recv_data_frame", side_effect=ApiException(reason="my-reason")
     ):
         with pytest.raises(K8sError) as excinfo:
             await sandbox.read_file("/etc/hosts")

@@ -16,11 +16,21 @@ def get_returncode(ws_client: WSClient) -> int:
     """
     assert not ws_client.is_open(), "ws_client must be closed to get return code."
     # Note: ERROR_CHANNEL is not the same as stderr. Aka status channel.
-    channel_value = ws_client.read_channel(ERROR_CHANNEL)
+    return parse_returncode(ws_client.read_channel(ERROR_CHANNEL))
+
+
+def parse_returncode(channel_value: str | bytes | None) -> int:
+    """Extracts the returncode from the value of the error (aka status) channel.
+
+    For callers which read the channel themselves rather than letting the
+    `WSClient` buffer it.
+    """
     if not channel_value:
         raise GetReturncodeError(
             "Failed to get returncode from k8s error channel because it was empty."
         )
+    if isinstance(channel_value, bytes):
+        channel_value = channel_value.decode("utf-8", errors="replace")
     loaded = yaml.safe_load(channel_value)
     if "status" not in loaded:
         raise GetReturncodeError(

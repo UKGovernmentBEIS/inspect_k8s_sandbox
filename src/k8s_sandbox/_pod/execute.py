@@ -7,12 +7,18 @@ from typing import Generator
 
 from inspect_ai.util import ExecResult, OutputLimitExceededError
 from inspect_ai.util import SandboxEnvironmentLimits as limits
-from kubernetes.stream.ws_client import WSClient  # type: ignore[import-untyped]
+from kubernetes.stream.ws_client import (  # type: ignore[import-untyped]
+    ERROR_CHANNEL,
+    STDERR_CHANNEL,
+    STDOUT_CHANNEL,
+    WSClient,
+)
 
 from k8s_sandbox._pod.buffer import LimitedBuffer
 from k8s_sandbox._pod.error import PodError
-from k8s_sandbox._pod.get_returncode import get_returncode
+from k8s_sandbox._pod.get_returncode import parse_returncode
 from k8s_sandbox._pod.op import PodOperation
+from k8s_sandbox._pod.stream import iter_channel_frames
 
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
@@ -154,41 +160,37 @@ class ExecuteOperation(PodOperation):
             stdout = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
             stderr = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
             returncode: int | None = None
-            while ws_client.is_open():
-                try:
-                    # `timeout=None` means `update` will block
-                    # indefinitely until there is data to read.
-                    ws_client.update(timeout=None)
-                    # Note: `peek_*()` and `read_*()` may call `update(timeout=0)`.
-                    if ws_client.peek_stderr():
-                        stderr.append(ws_client.read_stderr())
-                    # Handle stdout _after_ stderr to guarantee that, if buffered, the
-                    # sentinel is actioned before the blocking `ws_client.update(None)`.
-                    if ws_client.peek_stdout():
-                        frame = ws_client.read_stdout()
-                        # Assumption: The sentinel value is written to
-                        # stdout in a single frame, not split across frames.
+            status = b""
+            try:
+                for channel, payload in iter_channel_frames(ws_client):
+                    if channel == STDERR_CHANNEL:
+                        stderr.append(payload)
+                    elif channel == STDOUT_CHANNEL:
+                        # Assumption: The sentinel value is written to stdout in a
+                        # single frame, not split across frames.
                         filtered, returncode = self._filter_sentinel_and_returncode(
-                            frame
+                            payload
                         )
                         stdout.append(filtered)
-                        if returncode is not None:
-                            ws_client.close()
+                    elif channel == ERROR_CHANNEL:
+                        status += payload
                     self._verify_output_limit(stdout, stderr)
-                except (BrokenPipeError, ConnectionResetError) as e:
                     if returncode is not None:
-                        # Sentinel already received — we have the result.
-                        # This commonly happens after ws_client.close() when
-                        # the next update() hits the closed socket.
+                        # The command is done; the shell's stdout may still be held
+                        # open by a background process, so stop reading.
+                        ws_client.close()
                         break
+            except (BrokenPipeError, ConnectionResetError) as e:
+                if returncode is None:
                     raise PodError(
                         "WebSocket connection lost during exec",
                         pod=self._pod.name,
                     ) from e
+                # Sentinel already received — we have the result.
             saw_completed_sentinel = returncode is not None
             # returncode won't be set if setup commands e.g. `cd` failed.
             if returncode is None:
-                returncode = get_returncode(ws_client)
+                returncode = parse_returncode(status)
             return (
                 ExecResult(
                     success=returncode == 0,
