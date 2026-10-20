@@ -9,6 +9,7 @@
   [Init Process](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/#init-process).
 - A warning is logged when Compose `init: true` is ignored on non-default services
   or on the default service with an explicit `command` or `entrypoint`.
+- Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
 
 ## 2026-10-09 0.14.0
 
