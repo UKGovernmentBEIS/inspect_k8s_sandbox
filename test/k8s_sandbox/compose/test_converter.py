@@ -190,6 +190,18 @@ services:
     assert result["services"]["my-service"]["command"] is None
 
 
+def test_converts_command_with_quoted_argument(tmp_compose: TmpComposeFixture) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    command: sh -c "echo a b"
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["args"] == ["sh", "-c", "echo a b"]
+
+
 def test_converts_command_list(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:

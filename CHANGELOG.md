@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix a compose string `command:` or `entrypoint:` splitting a quoted argument, e.g.
+  `sh -c "echo a b"`, into separate words.
 - Fix orphaned processes exhausting PID slots in sandboxes using the default
   entrypoint. The default entrypoint requires `sh` and `sleep`. Services explicitly
   configured to run `tail -f /dev/null` still accumulate zombies; they must use the

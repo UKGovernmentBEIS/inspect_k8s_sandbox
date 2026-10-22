@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import shlex
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable
@@ -776,6 +777,6 @@ def _transform(
 
 def _str_to_list(value: str | list[str]) -> list[str]:
     if isinstance(value, str):
-        # Split on whitespace.
-        return value.split()
+        # Compose splits a string command shell-style, honouring quotes.
+        return shlex.split(value)
     return value
