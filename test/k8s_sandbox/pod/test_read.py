@@ -26,3 +26,21 @@ def test_read_file_opens_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert exec_kwargs["stdin"] is True
     assert exec_kwargs["command"][-1] == "/tmp/src"
+
+
+def test_read_file_command_is_all_strings(monkeypatch: pytest.MonkeyPatch) -> None:
+    # kubernetes>=37 validates each element and rejects the call before sending it.
+    op = ReadFileOperation(MagicMock())
+    exec_kwargs: dict[str, Any] = {}
+
+    def fake_exec(**kwargs: Any) -> Generator[MagicMock, None, None]:
+        exec_kwargs.update(kwargs)
+        yield MagicMock(spec=WSClient)
+
+    monkeypatch.setattr(op, "create_websocket_client_for_exec", fake_exec)
+    monkeypatch.setattr(op, "_handle_stream_output", lambda ws_client, dst: None)
+
+    op.read_file(Path("/tmp/src"), io.BytesIO())
+
+    command = exec_kwargs["command"]
+    assert all(isinstance(arg, str) for arg in command), command

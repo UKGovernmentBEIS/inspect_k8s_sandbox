@@ -70,8 +70,34 @@ Compose `command:` maps to Helm `args` (the container args, i.e. the image CMD).
 
 If you set `command:` without `entrypoint:`, the image's ENTRYPOINT is used.
 The converter emits `command: null` so Helm deletes the chart default
-(`tail -f /dev/null` on the `default` service) rather than appending your command
+(the idle loop on the `default` service) rather than appending your command
 to it.
+
+## Init Process
+
+`init: true` is ignored; no init process is added. The default service's idle loop
+reaps orphaned processes regardless of this setting. A warning is logged for other
+services and when an explicit `command` or `entrypoint` overrides the default loop.
+
+For Kubernetes-only configurations, removing an explicit idle command such as
+`tail -f /dev/null` lets the default service use the chart's loop. In Docker, removing
+it instead uses the image's own entrypoint and command, which may exit immediately.
+For files shared with Docker, set the loop explicitly to avoid relying on the image's
+defaults (requires `sh` and `sleep`):
+
+```yaml
+services:
+  default:
+    image: ubuntu:24.04
+    entrypoint:
+      - sh
+      - -c
+      - "trap '' HUP INT QUIT TERM; while true; do sleep 3600 & wait; done"
+```
+
+This loop is only for idle containers. Services that run an application need to retain
+their application entrypoint and handle orphaned processes themselves, or run the
+application under an init process such as `tini` installed in the image.
 
 ## Internet Access
 

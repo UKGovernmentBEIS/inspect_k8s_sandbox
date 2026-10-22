@@ -89,10 +89,15 @@ def _convert_services(src: dict[str, Any], compose_file: Path) -> dict[str, Any]
     service_to_rename = _determine_default_service(src)
 
     for service_name, service_value in src.items():
-        service_converter = _ServiceConverter(service_name, service_value, compose_file)
         # Rename the service to "default" if needed
         output_service_name = (
             "default" if service_name == service_to_rename else service_name
+        )
+        service_converter = _ServiceConverter(
+            service_name,
+            service_value,
+            compose_file,
+            is_default=output_service_name == "default",
         )
         result[output_service_name] = service_converter.convert()
     return result
@@ -237,10 +242,18 @@ class _ServiceConverter:
     The src_service dict will be mutated during conversion.
     """
 
-    def __init__(self, name: str, src_service: dict[str, Any], compose_file: Path):
+    def __init__(
+        self,
+        name: str,
+        src_service: dict[str, Any],
+        compose_file: Path,
+        *,
+        is_default: bool,
+    ):
         self._name = name
         self._src_service = src_service
         self._compose_file = compose_file
+        self._is_default = is_default
 
     def convert(self) -> dict[str, Any]:
         return self._convert_service(self._src_service)
@@ -258,7 +271,7 @@ class _ServiceConverter:
         # Compose `command:` maps to Helm `args` (image CMD). Compose
         # `entrypoint:` maps to Helm `command` (image ENTRYPOINT). If the user
         # sets `command:` without `entrypoint:`, emit `command: null` so Helm
-        # deletes the chart default (`tail -f /dev/null` on `services.default`)
+        # deletes the chart's default idle loop on `services.default`
         # and the image ENTRYPOINT is used - matching Docker Compose.
         has_entrypoint = src.get("entrypoint") is not None
         has_command = src.get("command") is not None
@@ -361,12 +374,15 @@ class _ServiceConverter:
                 "Ignoring 'expose' key: all ports are open in K8s; and the expose key "
                 f"only serves as documentation in Docker Compose. {self.context}"
             )
-        if src.pop("init", None) is not None:
-            # The fact that `init: true` is unsupported could materially affect the
-            # service, so may be worthy of a warning, but on the other hand, this
-            # is almost always used in Compose and we don't have an alternative
-            # suggestion to offer to users.
-            logger.info(f"Ignoring 'init' key: not supported in K8s. {self.context}")
+        if src.pop("init", None) is True and (
+            not self._is_default or has_command or has_entrypoint
+        ):
+            logger.warning(
+                "Ignoring 'init: true': no init process is added in K8s. "
+                "The service's entrypoint must handle orphaned processes "
+                f"themselves. {self.context} See "
+                "https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/#init-process"
+            )
 
         has_x_local = src.pop("x-local", None) == "true"
         has_build = src.pop("build", None) is not None
