@@ -2,13 +2,45 @@
 
 ## Unreleased
 
+- Fix orphaned processes exhausting PID slots in sandboxes using the default
+  entrypoint. The default entrypoint requires `sh` and `sleep`. Services explicitly
+  configured to run `tail -f /dev/null` still accumulate zombies; they must use the
+  reaping loop instead to benefit from this fix. See
+  [Init Process](https://k8s-sandbox.aisi.org.uk/helm/compose-to-helm/#init-process).
+- A warning is logged when Compose `init: true` is ignored on non-default services
+  or on the default service with an explicit `command` or `entrypoint`.
+- Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
 - Add a `priorityClassName` value, overridable per service, for the sandbox pods'
   PriorityClass.
+
+## 2026-10-09 0.14.0
+
 - `INSPECT_POD_RESTART_CHECK=false` skips the pre-operation pod read inside
   `read_file()` / `write_file()`, for deployments where that per-op
   `read_namespaced_pod` call becomes a load problem on the Kubernetes API server at
   high concurrency. Defaults to enabled, so behaviour is unchanged unless set.
   `exec()` always performs the check regardless.
+- Add `networkPolicy.enabled` (default `true`). Set `false` to install on a cluster
+  without Cilium; the cluster or pod runtime must then enforce egress and isolation.
+  Allowlists, `networks` and `networkIsolated` (compose `network_mode: none`) are
+  rejected while it is off.
+- `INSPECT_SANDBOX_VALUES=/path/to/values.yaml` applies a Helm values file to every
+  install of the built-in chart, after and overriding the task's own values, for
+  cluster-wide settings such as `networkPolicy.enabled`, `corednsUpstream` and
+  `extraContainers`. Compose tasks pick it up too.
+- A sandbox no longer counts as ready while its CoreDNS sidecar is failing to start,
+  so a broken DNS configuration fails the install instead of the sample's name lookups.
+  The sidecar's startup probe listens on the pod IP at `corednsReadyPort` (default
+  `18181`); change it if a service in the pod uses that port.
+- Fix `read_file()` hanging or returning a truncated file on Kata Containers' Go runtime
+  shim (`kata-qemu`).
+- A new `extraContainers` value adds containers, as written, to every service's pod,
+  for a runtime that needs a helper in the pod beside the service.
+- The CoreDNS sidecar's `Corefile` is now mounted as a directory rather than with
+  `subPath`. A new `corednsUpstream` value (a list of DNS server IPs, e.g. the cluster
+  DNS Service IP) replaces the `/etc/resolv.conf` `subPath` mount with
+  `dnsPolicy: None`, for container runtimes that cannot mount a single file with
+  `subPath`. Init containers cannot resolve names in that mode.
 - `network_mode: none` isolation is now enforced by omitting any ingress allow for the
   service rather than an unconditional ingress deny. Observable behaviour is unchanged
   for a chart used on its own, but a network policy layered on top of this chart (e.g.
@@ -46,6 +78,8 @@
   a failed `ExecResult` rather than raised, so a caller that probes with a user and
   falls back (as inspect-ai does when injecting its sandbox tools) can do so. Naming a
   user that does not exist still raises.
+- Map Compose `no-new-privileges` (`security_opt`), including the bare flag, to
+  Kubernetes `allowPrivilegeEscalation: false`.
 - A sandbox waiting for cluster capacity no longer blocks other sandboxes from being
   created. Inspect's console count of in-progress installs now reflects submissions in
   flight rather than sandboxes still starting up.
@@ -76,6 +110,7 @@
   pods, none of which were removed until the eval ended. A chart with fixed-name
   `additionalResources` no longer fails the retry with `exists and cannot be imported
   into the current release`.
+- Fix startup failing with `... is not valid SemVer string`.
 
 ## 2026-08-12 0.13.0
 

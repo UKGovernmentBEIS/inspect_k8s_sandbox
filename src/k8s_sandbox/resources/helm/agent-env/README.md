@@ -15,10 +15,14 @@
 | automountServiceAccountToken | bool | `false` | Whether to mount the selected ServiceAccount's Kubernetes API token in sandbox pods. Keep disabled for cloud workload identity such as IRSA, which injects a provider-specific token separately. |
 | corednsCommand | list | `["/coredns","-conf","/etc/coredns/Corefile"]` | The command to use for the coredns container. |
 | corednsImage | string | `"coredns/coredns:1.14.6@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea"` | The image to use for the coredns container. Pinned by digest; the tag is recorded alongside it for readability and the two must be updated together. An override must run under `corednsSecurityContext` below, or that must be overridden too. |
+| corednsReadyPort | int | `18181` | Port, on the pod IP, of the CoreDNS sidecar's startup probe endpoint. Change it if a service in the pod listens on this port. |
 | corednsSecurityContext | object | Non-root 65532, read-only root filesystem, RuntimeDefault seccomp, no privilege escalation, and no capability other than `NET_BIND_SERVICE` | Security context for the coredns container. Override only if a custom `corednsImage` cannot run under the hardened default. |
+| corednsUpstream | list | Empty list (forward to the node's cluster DNS via the kubelet's resolv.conf) | DNS servers (IP addresses) the CoreDNS sidecar forwards to, e.g. the cluster DNS Service IP. Set it for a runtime that cannot mount a single file over `/etc/resolv.conf` with `subPath`: the pod then uses `dnsPolicy: None` with the sidecar as its only nameserver. Init containers run before the sidecar starts, so in that mode they cannot resolve names. |
+| extraContainers | list | `[]` | Containers added, as written, to every service's pod beside the service and CoreDNS containers, e.g. a relay a runtime needs in the pod. Each carries its own `securityContext`: none of the service's hardening applies to it. |
 | global | object | set by inspect | The name of the agent environment, only overwrite in cases where e.g. name lengths are causing failures. |
 | imagePullSecrets | list | `[]` | References to pre-existing secrets that contain registry credentials. |
 | labels | object | `{}` | A dict of labels to apply to resources within the agent environment. |
+| networkPolicy.enabled | bool | `true` | Render the CiliumNetworkPolicies. Set false on a cluster without Cilium; the cluster or pod runtime must then enforce egress and isolation. While false, the allow* values, `networks` and `networkIsolated` are rejected. |
 | networks | object | `{}` | Defines network names that can be attached to services in order to specify subsets of services that can communicate with one another. Names must be lower case alphanumeric with `-` or `.`, and at most 55 characters. |
 | priorityClassName | string | `nil` | PriorityClass for every service's pod. Unset, pods get the cluster default. |
 | serviceAccountCreate | bool | `false` | Whether to create the selected ServiceAccount. Keep disabled to use an externally managed ServiceAccount across concurrent sandbox releases. |
@@ -27,7 +31,7 @@
 | services.default | object | see [values.yaml](./values.yaml) | The default service, this is required for the agent environment to function. |
 | services.default.additionalDnsRecords | list | `[]` | A list of additional domains which will resolve to this service from within the agent environment (e.g. example.com). If one or more records are provided, `dnsRecord` is automatically set to true. Records may contain letters, digits and `_ - .`; whitespace and other characters are rejected at install time because these are interpolated into the CoreDNS Corefile. |
 | services.default.args | list | `[]` | The container's entrypoint arguments. |
-| services.default.command | list | `["tail","-f","/dev/null"]` | The container's entrypoint command. |
+| services.default.command | list | `["sh","-c","trap '' HUP INT QUIT TERM; while true; do sleep 3600 & wait; done"]` | The container's entrypoint command. The default idle loop reaps orphaned processes and requires sh and sleep in the image. |
 | services.default.dnsRecord | bool | false | Whether to create a DNS record which will resolve to this service from within the agent environment, using the service name as the domain (e.g. default). |
 | services.default.env | list | `[]` | Environment variables that will be set in the container. |
 | services.default.image | string | `"python:3.12-bookworm"` | The container's image name. |

@@ -70,8 +70,34 @@ Compose `command:` maps to Helm `args` (the container args, i.e. the image CMD).
 
 If you set `command:` without `entrypoint:`, the image's ENTRYPOINT is used.
 The converter emits `command: null` so Helm deletes the chart default
-(`tail -f /dev/null` on the `default` service) rather than appending your command
+(the idle loop on the `default` service) rather than appending your command
 to it.
+
+## Init Process
+
+`init: true` is ignored; no init process is added. The default service's idle loop
+reaps orphaned processes regardless of this setting. A warning is logged for other
+services and when an explicit `command` or `entrypoint` overrides the default loop.
+
+For Kubernetes-only configurations, removing an explicit idle command such as
+`tail -f /dev/null` lets the default service use the chart's loop. In Docker, removing
+it instead uses the image's own entrypoint and command, which may exit immediately.
+For files shared with Docker, set the loop explicitly to avoid relying on the image's
+defaults (requires `sh` and `sleep`):
+
+```yaml
+services:
+  default:
+    image: ubuntu:24.04
+    entrypoint:
+      - sh
+      - -c
+      - "trap '' HUP INT QUIT TERM; while true; do sleep 3600 & wait; done"
+```
+
+This loop is only for idle containers. Services that run an application need to retain
+their application entrypoint and handle orphaned processes themselves, or run the
+application under an init process such as `tini` installed in the image.
 
 ## Internet Access
 
@@ -192,7 +218,8 @@ matters, disable swap at the node or pod level.
 
 A `security_opt` **seccomp** entry (`seccomp=<value>` or `seccomp:<value>`) is converted
 to a `seccompProfile` in the pod's `securityContext` (merged with any context derived
-from `user`). Docker's special values map to Kubernetes profile types:
+from `user` or `no-new-privileges`). Docker's special values map to Kubernetes profile
+types:
 
 | Compose value                  | Kubernetes `seccompProfile`                                 |
 | ------------------------------ | ----------------------------------------------------------- |
@@ -212,9 +239,6 @@ Notes:
   (default `/var/lib/kubelet/seccomp/<path>`).** This is not verified at conversion time;
   a missing profile fails only when the pod is launched. The converter logs an info-level
   reminder.
-- Non-seccomp entries (e.g. `apparmor=...`, `no-new-privileges`) have no mapping here and
-  are rejected rather than silently dropped, so a workload can't believe a security
-  control is applied when it isn't.
 - **Runtime caveat (gVisor).** A seccomp profile only changes which syscalls the kernel
   *allows*; it can't add syscalls the runtime doesn't implement. The chart defaults to the
   `gvisor` runtime, whose `personality()` does not support `ADDR_NO_RANDOMIZE`. So a
@@ -231,3 +255,23 @@ services:
     security_opt:
       - seccomp=profiles/no-aslr.json
 ```
+
+A `security_opt` **no-new-privileges** entry (a bare `no-new-privileges`, or
+`no-new-privileges=true` / `no-new-privileges:true`) is converted to
+`allowPrivilegeEscalation: false` in the pod's `securityContext` (merged with any
+context derived from `user` or `seccomp`). Both flags control Linux `no_new_privs`.
+Docker treats the bare flag the same as `true`.
+
+| Compose value             | Kubernetes `securityContext`        |
+| ------------------------- | ----------------------------------- |
+| `no-new-privileges`       | `{allowPrivilegeEscalation: false}` |
+| `no-new-privileges=true`  | `{allowPrivilegeEscalation: false}` |
+| `no-new-privileges=false` | field omitted                       |
+
+An explicit `false` omits the Kubernetes field rather than setting it to `true`, so
+the conversion does not override a stricter cluster policy default.
+Empty values, and anything other than `true` or `false`, are rejected.
+
+Other `security_opt` entries (e.g. `apparmor=...`) have no mapping here and are
+rejected rather than silently dropped, so a workload can't believe a security control
+is applied when it isn't.

@@ -23,6 +23,7 @@ from k8s_sandbox._helm import (
     INSPECT_HELM_TIMEOUT,
     INSPECT_HELM_UNINSTALL_TIMEOUT,
     INSPECT_SANDBOX_COREDNS_IMAGE,
+    INSPECT_SANDBOX_VALUES,
     Release,
     StaticValuesSource,
     ValuesSource,
@@ -569,6 +570,63 @@ async def test_coredns_image_env_var(
         assert expected_set_arg in args
     else:
         assert not any(arg.startswith("--set-string=corednsImage=") for arg in args)
+
+
+async def _install_args(chart_path: Path | None) -> list[str]:
+    release = Release(
+        __file__, chart_path, StaticValuesSource(Path("task-values.yaml")), None
+    )
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
+        await release.install()
+    return mock_run.call_args[0][1]
+
+
+def _values_files(args: list[str]) -> list[str]:
+    return [args[i + 1] for i, arg in enumerate(args) if arg == "--values"]
+
+
+async def test_sandbox_values_env_var_wins_over_task_values(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cluster_values = tmp_path / "cluster-values.yaml"
+    cluster_values.write_text("networkPolicy:\n  enabled: false\n")
+    monkeypatch.setenv(INSPECT_SANDBOX_VALUES, str(cluster_values))
+
+    # Helm merges --values files in order, so the last one wins.
+    assert _values_files(await _install_args(None)) == [
+        "task-values.yaml",
+        str(cluster_values),
+    ]
+
+
+async def test_sandbox_values_env_var_unset_adds_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(INSPECT_SANDBOX_VALUES, raising=False)
+
+    assert _values_files(await _install_args(None)) == ["task-values.yaml"]
+
+
+async def test_sandbox_values_env_var_skips_a_task_chart(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cluster_values = tmp_path / "cluster-values.yaml"
+    cluster_values.write_text("networkPolicy:\n  enabled: false\n")
+    monkeypatch.setenv(INSPECT_SANDBOX_VALUES, str(cluster_values))
+
+    assert _values_files(await _install_args(tmp_path / "my-chart")) == [
+        "task-values.yaml"
+    ]
+
+
+async def test_sandbox_values_env_var_names_a_missing_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv(INSPECT_SANDBOX_VALUES, str(tmp_path / "missing.yaml"))
+
+    with pytest.raises(ValueError, match=INSPECT_SANDBOX_VALUES):
+        await _install_args(None)
 
 
 def test_static_values_source_with_valid_file() -> None:

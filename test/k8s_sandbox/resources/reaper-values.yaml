@@ -1,0 +1,3 @@
+# Reaping does not require Cilium. Inherit the chart's default image and command.
+networkPolicy:
+  enabled: false
