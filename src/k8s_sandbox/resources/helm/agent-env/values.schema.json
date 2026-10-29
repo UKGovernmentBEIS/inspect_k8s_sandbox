@@ -154,9 +154,6 @@
             "runtimeClassName": {
               "type": "string"
             },
-            "priorityClassName": {
-              "type": ["string", "null"]
-            },
             "image": {
               "type": "string"
             },

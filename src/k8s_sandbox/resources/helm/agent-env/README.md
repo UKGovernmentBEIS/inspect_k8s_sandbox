@@ -40,7 +40,6 @@
 | services.default.livenessProbe | object | `{}` | A probe which is used to determine when to restart a container. |
 | services.default.nodeSelector | object | `{}` | Node selector settings for the Pod. |
 | services.default.ports | list | `[]` | Deprecated. All ports of services with a DNS record are accessible (though not necessarily open) to other services within the agent environment. If one or more ports are provided, `dnsRecord` is automatically set to true. |
-| services.default.priorityClassName | string | `nil` | PriorityClass for this service's pod. Overrides the top-level one. |
 | services.default.readinessProbe | object | `{}` | A probe which is used to determine when the container is ready to accept. traffic. |
 | services.default.resources | object | see [templates/services.yaml](./templates/services.yaml) | Resource requests and limits for the container. |
 | services.default.runtimeClassName | string | `"gvisor"` | The container runtime e.g. gvisor or runc. The default is gvisor if not specified or set to `null`. |

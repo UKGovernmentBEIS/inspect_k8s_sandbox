@@ -443,10 +443,6 @@ def test_cluster_default_magic_string(
     [
         ("", {"default": None, "nginx": None}),
         ("priorityClassName=low", {"default": "low", "nginx": "low"}),
-        (
-            "priorityClassName=low,services.nginx.priorityClassName=high",
-            {"default": "low", "nginx": "high"},
-        ),
     ],
 )
 def test_priority_class_name(
@@ -463,6 +459,14 @@ def test_priority_class_name(
         ]["spec"].get("priorityClassName")
         for ss in _get_documents(documents, "StatefulSet")
     } == expected
+
+
+def test_priority_class_name_is_not_per_service(chart_dir: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(
+            chart_dir,
+            set_str="services.nginx.image=nginx,services.nginx.priorityClassName=high",
+        )
 
 
 @pytest.mark.parametrize(

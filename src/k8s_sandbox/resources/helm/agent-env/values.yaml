@@ -96,8 +96,6 @@ services:
     # -- The container runtime e.g. gvisor or runc. The default is gvisor if not
     # specified or set to `null`.
     runtimeClassName: gvisor
-    # -- PriorityClass for this service's pod. Overrides the top-level one.
-    priorityClassName: null
     # -- The container's image name.
     image: "python:3.12-bookworm"
     # -- The container's entrypoint command. The default idle loop reaps orphaned
