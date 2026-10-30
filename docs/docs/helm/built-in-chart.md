@@ -336,8 +336,10 @@ service using the chart's idle loop.
 ## Init containers
 
 Init containers run before the main container starts. Use them to wait for dependencies
-or perform setup tasks. They support `resources`, `securityContext`, `imagePullPolicy`,
-and `workingDir` fields. The `$AGENT_ENV` environment variable is automatically injected.
+or perform setup tasks. They support `command`, `args`, `imagePullPolicy`, `workingDir`,
+`env`, `volumeMounts`, `resources` and `securityContext` fields. The `$AGENT_ENV`
+environment variable is automatically injected. `env` takes `name`/`value` pairs
+in addition to `$AGENT_ENV`. `volumeMounts` can mount any of the service's `volumes`.
 
 ```yaml
 services:
@@ -359,14 +361,38 @@ services:
             cpu: "50m"
 ```
 
+An init container can write to a volume that the service's container then reads:
+
+```yaml
+services:
+  app:
+    image: myapp:latest
+    volumes:
+      - name: shared
+        emptyDir: {}
+    volumeMounts:
+      - name: shared
+        mountPath: /shared
+    initContainers:
+      - name: write-config
+        image: busybox:1.36
+        command: ["sh", "-c", "echo $GREETING > /shared/greeting.txt"]
+        env:
+          - name: GREETING
+            value: hello
+        volumeMounts:
+          - name: shared
+            mountPath: /shared
+```
+
 !!! warning "Init containers cannot access external domains from `allowDomains`"
 
     The CoreDNS sidecar (which handles `allowDomains`) starts after init containers
     complete. Use `$AGENT_ENV-servicename` for internal services or `allowCIDR` with IP
     addresses for external access.
 
-**Limitations:** Init containers cannot currently access `volumes` or custom `env` vars
-from the service definition. See the [Kubernetes init container
+**Limitations:** Init containers do not inherit the service's `env` or `volumeMounts`.
+Set them on the init container itself. See the [Kubernetes init container
 docs](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) for details.
 
 ## Resource requests and limits

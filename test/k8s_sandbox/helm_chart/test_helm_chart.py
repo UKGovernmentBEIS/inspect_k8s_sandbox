@@ -369,6 +369,13 @@ def test_init_containers_with_all_fields(
     )
     assert agent_env_var is not None
     assert "agent-env-my-release" in agent_env_var["value"]
+    assert {"name": "GREETING", "value": "hello"} in init_container["env"]
+
+    # Test volumeMounts, onto a volume the service declares
+    assert init_container["volumeMounts"] == [
+        {"name": "shared", "mountPath": "/shared"}
+    ]
+    assert {"name": "shared", "emptyDir": {}} in app_spec["volumes"]
 
 
 def test_resource_requests_and_limits(

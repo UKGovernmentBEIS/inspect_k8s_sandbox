@@ -89,6 +89,14 @@ spec:
           env:
             - name: AGENT_ENV
               value: "{{ template "agentEnv.fullname" $ }}"
+          {{- range .env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+          {{- end }}
+          {{- with .volumeMounts }}
+          volumeMounts:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
           {{- if .resources }}
           resources:
 {{ toYaml .resources | nindent 12 }}
