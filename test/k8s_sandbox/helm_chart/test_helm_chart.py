@@ -446,6 +446,37 @@ def test_cluster_default_magic_string(
 
 
 @pytest.mark.parametrize(
+    ("set_str", "expected"),
+    [
+        ("", {"default": None, "nginx": None}),
+        ("priorityClassName=low", {"default": "low", "nginx": "low"}),
+    ],
+)
+def test_priority_class_name(
+    chart_dir: Path, set_str: str, expected: dict[str, str | None]
+) -> None:
+    documents = _run_helm_template(
+        chart_dir,
+        set_str=",".join(filter(None, ["services.nginx.image=nginx", set_str])),
+    )
+
+    assert {
+        ss["metadata"]["name"].removeprefix("agent-env-my-release-"): ss["spec"][
+            "template"
+        ]["spec"].get("priorityClassName")
+        for ss in _get_documents(documents, "StatefulSet")
+    } == expected
+
+
+def test_priority_class_name_is_not_per_service(chart_dir: Path) -> None:
+    with pytest.raises(subprocess.CalledProcessError):
+        _run_helm_template(
+            chart_dir,
+            set_str="services.nginx.image=nginx,services.nginx.priorityClassName=high",
+        )
+
+
+@pytest.mark.parametrize(
     ("overrides", "expected_coredns_image", "expected_coredns_command"),
     [
         (

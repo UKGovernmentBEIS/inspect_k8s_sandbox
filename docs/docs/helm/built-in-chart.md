@@ -88,6 +88,17 @@ limitations on using gVisor versus `runc`.
     about the "lower level" OCI runtimes (like `runc` or `runsc`) which are used to
     actually run the container processes.
 
+## Pod priority
+
+Set `priorityClassName` to run every service's pod under an existing `PriorityClass`.
+Unset, pods get the cluster default. This is a cluster setting, so put it in the
+[`INSPECT_SANDBOX_VALUES`](../tips/configuration.md#cluster-values) file rather than in
+a task's values.
+
+```yaml
+priorityClassName: sandbox-low
+```
+
 ## Service accounts and Kubernetes API access
 
 Sandbox pods do not mount a Kubernetes service-account API token by default. You can

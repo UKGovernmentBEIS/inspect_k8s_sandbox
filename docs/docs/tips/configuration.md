@@ -45,8 +45,9 @@ export INSPECT_HELM_LABELS="ci-branch=my-feature,run-id=42"
 ## Cluster-wide chart values { #cluster-values }
 
 Some built-in chart values describe the cluster rather than the task: whether it runs
-Cilium (`networkPolicy.enabled`), its DNS Service IP (`corednsUpstream`), and the helper
-containers its pod runtime needs (`extraContainers`). Set `INSPECT_SANDBOX_VALUES` to the
+Cilium (`networkPolicy.enabled`), its DNS Service IP (`corednsUpstream`), the helper
+containers its pod runtime needs (`extraContainers`), and the PriorityClass its sandbox
+pods run under (`priorityClassName`). Set `INSPECT_SANDBOX_VALUES` to the
 path of a Helm values file holding them. It is passed to every install of the built-in
 chart after the task's own values, so it wins over them, and it applies to compose tasks
 too. A task that brings its own chart does not get it.
@@ -60,6 +61,7 @@ export INSPECT_SANDBOX_VALUES=/etc/inspect/cluster-values.yaml
 networkPolicy:
   enabled: false
 corednsUpstream: ["10.96.0.10"]
+priorityClassName: sandbox-low
 ```
 
 With `networkPolicy.enabled: false`, a task that declares an allowlist, `networks`, or

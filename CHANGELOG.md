@@ -12,6 +12,8 @@
 - A warning is logged when Compose `init: true` is ignored on non-default services
   or on the default service with an explicit `command` or `entrypoint`.
 - Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
+- Add a `priorityClassName` value for the sandbox pods' PriorityClass. It is a cluster
+  setting, so set it in the `INSPECT_SANDBOX_VALUES` file.
 
 ## 2026-10-09 0.14.0
 

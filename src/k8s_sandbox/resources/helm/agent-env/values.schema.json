@@ -310,6 +310,9 @@
     },
     "serviceAccountName": {
       "type": ["string", "null"]
+    },
+    "priorityClassName": {
+      "type": ["string", "null"]
     }
   },
   "required": [
