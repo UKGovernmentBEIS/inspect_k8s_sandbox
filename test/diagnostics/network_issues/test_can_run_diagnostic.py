@@ -1,5 +1,6 @@
 import pytest
-from run import run_diagnostic_eval
+
+from .run import run_diagnostic_eval
 
 
 @pytest.mark.req_k8s
