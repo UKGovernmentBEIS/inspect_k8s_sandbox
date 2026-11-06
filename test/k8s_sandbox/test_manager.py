@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import cast
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from inspect_ai.util import ExecResult, SandboxEnvironment
@@ -192,15 +192,30 @@ async def test_cleanup_all_uninstalls_nothing_when_not_confirmed(
     assert "Cancelled." in capsys.readouterr().out
 
 
+class _FakePod:
+    def __init__(self, oom_kills: int | None) -> None:
+        self.info = MagicMock()
+        self.info.name = "agent-env-abc-default-0"
+        self._oom_kills = oom_kills
+
+    async def read_oom_kill_count(self) -> int | None:
+        return self._oom_kills
+
+
 class _FakeSandbox:
-    """Stands in for a K8sSandboxEnvironment; sample_cleanup only reads .release."""
+    """Stands in for a K8sSandboxEnvironment in sample_cleanup."""
 
-    def __init__(self, release: _FakeRelease) -> None:
+    def __init__(self, release: _FakeRelease, oom_kills: int | None = None) -> None:
         self.release = release
+        self._pod = _FakePod(oom_kills)
 
 
-async def _sample_cleanup(manager: HelmReleaseManager, release: _FakeRelease) -> None:
-    environments = {"default": cast(SandboxEnvironment, _FakeSandbox(release))}
+async def _sample_cleanup(
+    manager: HelmReleaseManager, release: _FakeRelease, oom_kills: int | None = None
+) -> None:
+    environments = {
+        "default": cast(SandboxEnvironment, _FakeSandbox(release, oom_kills))
+    }
     with patch.object(HelmReleaseManager, "get_instance", return_value=manager):
         await K8sSandboxEnvironment.sample_cleanup(
             "my-task", None, environments, interrupted=False
@@ -233,6 +248,21 @@ async def test_sample_cleanup_does_not_fail_the_sample_when_uninstall_fails(
     assert "bbbbbbbb" in caplog.text
     # Still tracked, so that uninstall_all() retries it at the end of the eval.
     assert manager._installed_releases == [failing]
+
+
+async def test_sample_cleanup_warns_about_oom_kills_in_the_sandbox(
+    caplog: LogCaptureFixture,
+) -> None:
+    manager = HelmReleaseManager()
+    release = _FakeRelease("cccccccc")
+    await _install(manager, release)
+
+    with caplog.at_level(logging.WARNING):
+        await _sample_cleanup(manager, release, oom_kills=2)
+
+    assert "killed for exceeding its memory limit" in caplog.text
+    assert "oom_kills" in caplog.text
+    assert release.uninstall_attempted
 
 
 _MANIFEST = json.dumps(

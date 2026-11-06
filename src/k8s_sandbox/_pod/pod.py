@@ -178,6 +178,29 @@ class Pod:
         if restart is not None:
             raise restart
 
+    async def read_oom_kill_count(self) -> int | None:
+        """
+        Read the container's cgroup v2 ``oom_kill`` count.
+
+        Counts processes the kernel killed for exceeding the container's memory
+        limit, including ones that never stopped the container. Skips the restart
+        check, so that a restart is still raised by the next exec. Returns None if
+        the count can't be read (e.g. cgroup v1).
+        """
+        executor = ExecuteOperation(self._info)
+        result = await self._run_async(
+            lambda: executor.exec(
+                ["cat", "/sys/fs/cgroup/memory.events"], None, None, {}, None, None
+            )
+        )
+        if not result.success:
+            return None
+        for line in result.stdout.splitlines():
+            key, _, value = line.partition(" ")
+            if key == "oom_kill":
+                return int(value)
+        return None
+
     async def write_file(self, data: bytes, dst: Path) -> None:
         """
         Write ``data`` from the client to a path on the pod (dst).

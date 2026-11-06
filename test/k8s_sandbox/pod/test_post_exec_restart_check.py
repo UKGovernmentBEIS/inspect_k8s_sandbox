@@ -166,3 +166,24 @@ async def test_recheck_api_failure_does_not_mask_exec_result(
     assert not result.success
     assert result.returncode == 127
     assert any("re-check failed" in r.message for r in caplog.records)
+
+
+async def test_read_oom_kill_count_leaves_a_restart_for_the_next_exec():
+    pod = _make_pod()
+    memory_events = ExecResult(
+        success=True,
+        returncode=0,
+        stdout="low 0\nhigh 0\nmax 4\noom 2\noom_kill 2\noom_group_kill 0\n",
+        stderr="",
+    )
+
+    with (
+        patch("k8s_sandbox._pod.op.k8s_client") as mock_client,
+        patch("k8s_sandbox._pod.pod.ExecuteOperation") as mock_exec_cls,
+    ):
+        mock_exec_cls.return_value.exec.return_value = memory_events
+
+        assert await pod.read_oom_kill_count() == 2
+
+    mock_client.return_value.read_namespaced_pod.assert_not_called()
+    assert pod.info.initial_restart_count == 0
