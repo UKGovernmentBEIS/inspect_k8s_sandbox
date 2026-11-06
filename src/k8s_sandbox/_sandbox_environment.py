@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import shlex
 import sys
@@ -253,9 +254,11 @@ class K8sSandboxEnvironment(SandboxEnvironment):
         # enables us to show output for the cleanup operation).
         if interrupted:
             return
-        sandbox: K8sSandboxEnvironment = cast(
-            K8sSandboxEnvironment, next(iter(environments.values()))
+        sandboxes = cast(dict[str, K8sSandboxEnvironment], environments)
+        await asyncio.gather(
+            *(_warn_on_oom_kills(name, env) for name, env in sandboxes.items())
         )
+        sandbox = next(iter(sandboxes.values()))
         try:
             await HelmReleaseManager.get_instance().uninstall(
                 sandbox.release, quiet=True
@@ -462,6 +465,21 @@ class K8sSandboxEnvironmentConfig(BaseModel, frozen=True):
     run in the process (a task with a conflicting value fails at startup), or
     use the INSPECT_MAX_POD_OPS env var instead.
     """
+
+
+async def _warn_on_oom_kills(name: str, sandbox: K8sSandboxEnvironment) -> None:
+    try:
+        count = await sandbox._pod.read_oom_kill_count()
+    except Exception as e:
+        log_trace("Could not read the sandbox's OOM kill count.", error=e)
+        return
+    if count:
+        log_warn(
+            "Processes in a sandbox were killed for exceeding its memory limit.",
+            sandbox=name,
+            pod=sandbox._pod.info.name,
+            oom_kills=count,
+        )
 
 
 def _key_to_pascal(key: str) -> str:

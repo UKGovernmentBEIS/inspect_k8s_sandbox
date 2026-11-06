@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A warning is logged at sample cleanup when processes in a sandbox were killed for
+  exceeding its memory limit, including ones that didn't stop the container.
 - Init containers take `env` and `volumeMounts`, so one can write a file into a volume
   the service's container then reads.
 - Fix orphaned processes exhausting PID slots in sandboxes using the default
