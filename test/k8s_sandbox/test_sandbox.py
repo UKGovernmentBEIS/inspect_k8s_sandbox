@@ -104,6 +104,25 @@ async def test_exec_with_success(
     assert result.stderr == ""
 
 
+@pytest.mark.parametrize(
+    ("cmd", "returncode"),
+    [
+        (["cat"], 0),
+        (["bash", "--login", "-c", "bash"], 0),
+        (["sh", "-c", "read value"], 1),
+    ],
+)
+async def test_exec_without_input_reaches_eof(
+    sandbox: K8sSandboxEnvironment, cmd: list[str], returncode: int
+) -> None:
+    result = await sandbox.exec(cmd, timeout=5)
+
+    assert result.returncode == returncode
+    assert result.success == (returncode == 0)
+    assert result.stdout == ""
+    assert result.stderr == ""
+
+
 async def test_exec_with_error(sandbox: K8sSandboxEnvironment) -> None:
     # sudo is not installed in the container.
     result = await sandbox.exec(["sudo"])
