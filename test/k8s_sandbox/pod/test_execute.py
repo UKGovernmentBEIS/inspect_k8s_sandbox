@@ -1,4 +1,8 @@
+import os
 import shlex
+import shutil
+import signal
+import subprocess
 from contextlib import contextmanager
 from typing import Generator
 from unittest.mock import MagicMock, patch
@@ -392,3 +396,69 @@ class TestRunuserErrorMessages:
         executor = ExecuteOperation(MagicMock())
 
         executor._check_for_runuser_error(stderr, "agent")  # does not raise
+
+
+class TestCommandStdin:
+    @pytest.mark.parametrize("timeout", [None, 30])
+    @pytest.mark.parametrize("stdin", [None, "", b"", "hello"])
+    def test_only_missing_input_is_redirected(
+        self, stdin: str | bytes | None, timeout: int | None
+    ) -> None:
+        executor = ExecuteOperation(MagicMock())
+
+        script = executor._build_shell_script(["cat"], stdin, None, {}, timeout)
+
+        assert ("</dev/null" in script) == (stdin is None)
+        assert ("base64 -d | " in script) == (stdin is not None)
+        if timeout is not None:
+            assert "timeout -k 5s 30s cat" in script
+
+    @pytest.mark.skipif(os.name != "posix", reason="Requires a POSIX shell")
+    @pytest.mark.parametrize(
+        ("command", "stdin", "expected", "returncode"),
+        [
+            (["cat"], None, b"", 0),
+            (["/bin/sh"], None, b"", 0),
+            (["/bin/sh", "-c", "read value"], None, b"", 1),
+            (["cat"], "", b"", 0),
+            (["cat"], b"", b"", 0),
+            (["cat"], "hello 'world'\n\u03bb", "hello 'world'\n\u03bb".encode(), 0),
+            (["cat"], b"\x00\xff\n", b"\x00\xff\n", 0),
+        ],
+    )
+    def test_commands_finish_while_transport_stdin_remains_open(
+        self,
+        command: list[str],
+        stdin: str | bytes | None,
+        expected: bytes,
+        returncode: int,
+    ) -> None:
+        bash = shutil.which("bash")
+        if bash is None:
+            pytest.skip("Bash is needed for the generated script's echo -n protocol")
+        executor = ExecuteOperation(MagicMock())
+        script = executor._build_shell_script(command, stdin, None, {}, None)
+
+        # Keep the parent pipe open, as with the v4 Kubernetes exec WebSocket.
+        # The generated script, not closing the transport, must supply EOF.
+        with subprocess.Popen(
+            [bash, "--noprofile", "--norc", "-c", script],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        ) as process:
+            try:
+                process.wait(timeout=10)
+                assert process.stdout is not None
+                assert process.stderr is not None
+                stdout = process.stdout.read()
+                stderr = process.stderr.read()
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait(timeout=5)
+
+        assert process.returncode == returncode
+        assert stdout == expected + f"<completed-sentinel-value-{returncode}>".encode()
+        assert stderr == b""

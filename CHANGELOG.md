@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Commands run with `exec()` and no input now receive end-of-input instead of
+  waiting until the timeout when they read stdin.
 - Init containers take `env` and `volumeMounts`, so one can write a file into a volume
   the service's container then reads.
 - Fix orphaned processes exhausting PID slots in sandboxes using the default

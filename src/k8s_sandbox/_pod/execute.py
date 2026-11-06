@@ -110,7 +110,11 @@ class ExecuteOperation(PodOperation):
                 yield f"export {shlex.quote(key)}={shlex.quote(value)}\n"
             if stdin is not None:
                 yield self._pipe_user_input(stdin)
-            yield f"{self._prefix_timeout(timeout)}{shlex.join(command)}\n"
+            # The WebSocket stays open; only the user command should see EOF.
+            input_redirect = " </dev/null" if stdin is None else ""
+            yield (
+                f"{self._prefix_timeout(timeout)}{shlex.join(command)}{input_redirect}\n"
+            )
             # Store the returncode so that the `echo` below doesn't overwrite it.
             yield "returncode=$?\n"
             # Ensure stdout and stderr are flushed before writing the sentinel value.
