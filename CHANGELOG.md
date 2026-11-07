@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Avoid repeated user-switch warnings on rootless containers; the failed command
+  result is unchanged and diagnostic details remain available at debug log level.
+
 - Init containers take `env` and `volumeMounts`, so one can write a file into a volume
   the service's container then reads.
 - Fix orphaned processes exhausting PID slots in sandboxes using the default

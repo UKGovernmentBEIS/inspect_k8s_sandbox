@@ -223,13 +223,13 @@ class ExecuteOperation(PodOperation):
         # The three arms below describe an environment that cannot perform the
         # switch, not a caller asking for something that does not exist. Callers
         # are entitled to handle that: inspect-ai probes with `user="root"` and
-        # falls back to the default user when it fails, which is how a rootless
-        # sandbox is meant to work. Raising here made that fallback unreachable
-        # and turned a supported configuration into a fatal error, so warn and
-        # let the failed ExecResult through. Only an unknown user still raises,
-        # because no fallback makes a name that isn't there work.
+        # falls back to the default user when it fails. Preserve the failed
+        # ExecResult for that fallback and for direct callers. Rootless probes
+        # are expected and can occur for every sample, so keep their diagnostics
+        # at DEBUG rather than emitting a warning each time. Unknown users still
+        # raise because no fallback makes a name that isn't there work.
         if "runuser: may not be used by non-root users" in stderr.casefold():
-            logger.warning(
+            logger.debug(
                 "exec(user=%r) failed: the container is not running as root, so "
                 "runuser cannot switch users. Docs: %s\n%s",
                 user,

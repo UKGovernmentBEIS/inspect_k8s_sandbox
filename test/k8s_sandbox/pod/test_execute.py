@@ -1,3 +1,4 @@
+import logging
 import shlex
 from contextlib import contextmanager
 from typing import Generator
@@ -366,13 +367,12 @@ class TestRunuserErrorMessages:
             "/bin/sh: 1: exec: runuser: not found",
         ],
     )
-    def test_environment_failures_warn_rather_than_raise(self, stderr: str) -> None:
+    def test_environment_failures_return_to_the_caller(self, stderr: str) -> None:
         """inspect-ai probes with user="root" and falls back when it fails.
 
         All three describe an environment that cannot switch users, rather than a
-        caller naming something that does not exist. Raising made the fallback
-        unreachable, so a sandbox that is merely unable to switch could not run
-        any task using the injected tools.
+        caller naming something that does not exist. Preserve the failed-result
+        contract so callers can fall back to the container's default user.
         """
         executor = ExecuteOperation(MagicMock())
 
@@ -392,3 +392,81 @@ class TestRunuserErrorMessages:
         executor = ExecuteOperation(MagicMock())
 
         executor._check_for_runuser_error(stderr, "agent")  # does not raise
+
+
+class TestRootlessProbeLogging:
+    @pytest.mark.parametrize("user", ["root", "0", "agent"])
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "runuser: may not be used by non-root users",
+            "RUNUSER: MAY NOT BE USED BY NON-ROOT USERS",
+        ],
+    )
+    def test_repeated_rootless_probes_keep_failed_results_without_warnings(
+        self, user: str, stderr: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        logger_name = "k8s_sandbox._pod.execute"
+        caplog.set_level(logging.DEBUG, logger=logger_name)
+        results = []
+
+        for _ in range(3):
+            # Each sample creates a fresh operation. The wrapper fails before
+            # emitting a completion sentinel, so its actual stderr is inspected.
+            ws = MagicMock(spec=WSClient)
+            ws.is_open.side_effect = [True, False]
+            ws.peek_stderr.return_value = stderr.encode()
+            ws.read_stderr.return_value = stderr.encode()
+            ws.peek_stdout.return_value = b""
+            executor = ExecuteOperation(MagicMock())
+            with patch("k8s_sandbox._pod.execute.get_returncode", return_value=1):
+                results.append(
+                    executor._handle_shell_output(ws, user=user, timeout=None)
+                )
+
+        assert all(not result.success and result.returncode == 1 for result in results)
+        assert all(
+            result.stderr == stderr and result.stdout == "" for result in results
+        )
+        records = [record for record in caplog.records if record.name == logger_name]
+        assert len(records) == 3
+        assert all(record.levelno == logging.DEBUG for record in records)
+        assert all(stderr in record.getMessage() for record in records)
+        assert all(repr(user) in record.getMessage() for record in records)
+
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "runuser: cannot set groups: Operation not permitted",
+            "/bin/sh: 1: exec: runuser: not found",
+        ],
+    )
+    def test_other_environment_diagnostics_still_warn(
+        self, stderr: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.WARNING, logger="k8s_sandbox._pod.execute")
+        executor = ExecuteOperation(MagicMock())
+
+        executor._check_for_runuser_error(stderr, "root")
+
+        assert len(caplog.records) == 1
+        assert caplog.records[0].levelno == logging.WARNING
+        assert stderr in caplog.records[0].getMessage()
+
+    def test_user_command_stderr_is_not_reclassified(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        stderr = "runuser: may not be used by non-root users"
+        caplog.set_level(logging.DEBUG, logger="k8s_sandbox._pod.execute")
+        ws = _make_ws_client(
+            stdout_frames=[b"<completed-sentinel-value-1>"],
+            stderr_frames=[stderr.encode()],
+        )
+        executor = ExecuteOperation(MagicMock())
+
+        result = executor._handle_shell_output(ws, user="root", timeout=None)
+
+        assert not result.success
+        assert result.returncode == 1
+        assert result.stderr == stderr
+        assert not [r for r in caplog.records if r.name == "k8s_sandbox._pod.execute"]
