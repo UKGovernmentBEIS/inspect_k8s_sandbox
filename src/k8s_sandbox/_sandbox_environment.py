@@ -487,7 +487,7 @@ def _key_to_pascal(key: str) -> str:
 
 
 def _metadata_to_extra_values(
-    metadata: dict[str, str],
+    metadata: dict[str, Any],
     chart_path: Path | None,
     values_path: Path | None,
 ) -> dict[str, str]:
@@ -529,7 +529,9 @@ def _metadata_to_extra_values(
             )
             continue
         if helm_key in config_text:
-            extra_values[helm_key] = value
+            # Inspect also passes non-string values (e.g. an int __sample_id__).
+            # Stringify them like the Docker sandbox does.
+            extra_values[helm_key] = str(value)
     return extra_values
 
 

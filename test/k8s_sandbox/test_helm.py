@@ -366,6 +366,44 @@ def test_metadata_to_extra_values_checks_subcharts(tmp_path: Path) -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("metadata", "template_content", "expected"),
+    [
+        # Inspect adds the sample id, which is an int for auto-numbered datasets.
+        (
+            {"__sample_id__": 1},
+            "{{ .Values.sampleMetadataSampleId }}",
+            {"sampleMetadataSampleId": "1"},
+        ),
+        (
+            {"difficulty": 2.5},
+            "{{ .Values.sampleMetadataDifficulty }}",
+            {"sampleMetadataDifficulty": "2.5"},
+        ),
+    ],
+)
+async def test_helm_install_non_string_metadata_values(
+    metadata: dict[str, Any],
+    template_content: str,
+    expected: dict[str, str],
+    tmp_path: Path,
+) -> None:
+    templates_dir = tmp_path / "templates"
+    templates_dir.mkdir()
+    (templates_dir / "test.yaml").write_text(template_content)
+
+    with patch("k8s_sandbox._helm._run_subprocess", autospec=True) as mock_run:
+        _helm_installed(mock_run)
+        extra = _metadata_to_extra_values(metadata, tmp_path, None)
+        release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
+        await release.install()
+
+    assert extra == expected
+    args = mock_run.call_args[0][1]
+    for key, value in expected.items():
+        assert f"--set-string={key}={_helm_escape(value)}" in args
+
+
 async def test_helm_install_extra_values() -> None:
     extra = {"sampleMetadataTestName": "abc", "sampleMetadataTest": "5"}
     release = Release(__file__, None, ValuesSource.none(), None, extra_values=extra)
