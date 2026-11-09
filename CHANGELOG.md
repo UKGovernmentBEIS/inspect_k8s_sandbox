@@ -14,6 +14,8 @@
 - Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
 - Add a `priorityClassName` value for the sandbox pods' PriorityClass. It is a cluster
   setting, so set it in the `INSPECT_SANDBOX_VALUES` file.
+- Fix Compose `healthcheck.test` given as a string (e.g. `test: curl -f localhost`)
+  being rejected; it is now treated as `["CMD-SHELL", ...]`, as in Docker Compose.
 
 ## 2026-10-09 0.14.0
 

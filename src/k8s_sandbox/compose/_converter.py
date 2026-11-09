@@ -483,7 +483,12 @@ class _ServiceConverter:
             )
         return result
 
-    def _convert_healthcheck_test_to_exec(self, test: list[str]) -> dict[str, Any]:
+    def _convert_healthcheck_test_to_exec(
+        self, test: str | list[str]
+    ) -> dict[str, Any]:
+        # Compose treats a string test as shorthand for ["CMD-SHELL", test].
+        if isinstance(test, str):
+            return {"command": ["sh", "-c", test]}
         if test[0] == "CMD":
             return {"command": test[1:]}
         if test[0] == "CMD-SHELL":

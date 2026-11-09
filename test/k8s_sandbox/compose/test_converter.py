@@ -442,6 +442,23 @@ services:
     }
 
 
+def test_converts_healthcheck_string_test_as_cmd_shell(
+    tmp_compose: TmpComposeFixture,
+) -> None:
+    compose_path = tmp_compose("""
+services:
+  my-service:
+    healthcheck:
+      test: curl -f http://localhost || exit 1
+""")
+
+    result = convert_compose_to_helm_values(compose_path)
+
+    assert result["services"]["my-service"]["readinessProbe"] == {
+        "exec": {"command": ["sh", "-c", "curl -f http://localhost || exit 1"]},
+    }
+
+
 def test_rejects_unsupported_healthcheck_test(tmp_compose: TmpComposeFixture) -> None:
     compose_path = tmp_compose("""
 services:
