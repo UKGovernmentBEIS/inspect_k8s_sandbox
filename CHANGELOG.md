@@ -14,6 +14,9 @@
 - Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
 - Add a `priorityClassName` value for the sandbox pods' PriorityClass. It is a cluster
   setting, so set it in the `INSPECT_SANDBOX_VALUES` file.
+- Fix sample initialisation failing with an `AttributeError` when a chart references
+  a non-string sample metadata value, e.g. an integer sample id via
+  `sampleMetadataSampleId`.
 
 ## 2026-10-09 0.14.0
 
