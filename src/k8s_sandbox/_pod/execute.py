@@ -211,9 +211,8 @@ class ExecuteOperation(PodOperation):
             )
 
         result, saw_completed_sentinel = stream_output()
-        # 124 is what `timeout` exits with when it kills the command, but the command
-        # can also exit 124 itself (e.g. from its own `timeout`). Our `timeout` can
-        # only have killed it once the time limit has passed.
+        # A command can exit 124 itself (e.g. from its own `timeout`); ours can only
+        # have killed it once the time limit has passed.
         if (
             timeout is not None
             and result.returncode == 124
