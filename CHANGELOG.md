@@ -14,6 +14,9 @@
 - Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
 - Add a `priorityClassName` value for the sandbox pods' PriorityClass. It is a cluster
   setting, so set it in the `INSPECT_SANDBOX_VALUES` file.
+- Fix `exec()` with a `timeout` raising `TimeoutError` when the command exits 124
+  before the time limit (e.g. because it ran its own `timeout`). It now returns the
+  result with `returncode` 124.
 
 ## 2026-10-09 0.14.0
 

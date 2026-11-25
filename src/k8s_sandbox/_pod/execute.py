@@ -2,6 +2,7 @@ import base64
 import logging
 import re
 import shlex
+import time
 from contextlib import contextmanager
 from typing import Generator
 
@@ -74,10 +75,15 @@ class ExecuteOperation(PodOperation):
     ) -> ExecResult[str]:
         shell_script = self._build_shell_script(cmd, stdin, cwd, env, timeout)
         with self._interactive_shell(user) as ws_client:
+            # The pod's `timeout` starts once the shell has read the script, so timing
+            # from before the write can never come out shorter than the command ran.
+            started = time.monotonic()
             # Write the script to the shell's stdin rather than passing it as a command
             # argument (-c) to better support potentially long commands.
             self._write_stdin_chunked(ws_client, shell_script)
-            result = self._handle_shell_output(ws_client, user, timeout)
+            result = self._handle_shell_output(
+                ws_client, user, timeout, started=started
+            )
         return result
 
     @contextmanager
@@ -148,7 +154,12 @@ class ExecuteOperation(PodOperation):
         return f"timeout -k 5s {timeout}s "
 
     def _handle_shell_output(
-        self, ws_client: WSClient, user: str | None, timeout: int | None
+        self,
+        ws_client: WSClient,
+        user: str | None,
+        timeout: int | None,
+        *,
+        started: float,
     ) -> ExecResult[str]:
         def stream_output() -> tuple[ExecResult[str], bool]:
             stdout = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
@@ -200,8 +211,14 @@ class ExecuteOperation(PodOperation):
             )
 
         result, saw_completed_sentinel = stream_output()
-        # 124 is the exit code for the `timeout` command.
-        if timeout is not None and result.returncode == 124:
+        # 124 is what `timeout` exits with when it kills the command, but the command
+        # can also exit 124 itself (e.g. from its own `timeout`). Our `timeout` can
+        # only have killed it once the time limit has passed.
+        if (
+            timeout is not None
+            and result.returncode == 124
+            and time.monotonic() - started >= timeout
+        ):
             raise TimeoutError(f"Command timed out after {timeout}s. {result}")
         # The Inspect SandboxEnvironment interface expects us to raise a
         # PermissionError for exit code 126 and stderr containing "permission denied".
