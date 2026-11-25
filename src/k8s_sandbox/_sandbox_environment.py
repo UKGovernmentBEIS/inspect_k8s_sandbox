@@ -17,6 +17,7 @@ from inspect_ai.util import (
     SandboxConnection,
     SandboxEnvironment,
     SandboxEnvironmentConfigType,
+    SandboxUserUnsupportedError,
     is_compose_yaml,
     is_dockerfile,
     sandboxenv,
@@ -83,6 +84,11 @@ _PERMANENT_TYPES = (
     FileNotFoundError,
     IsADirectoryError,
 )
+
+
+def _check_file_user(user: str | None) -> None:
+    if user == "":
+        raise SandboxUserUnsupportedError("The file user must not be empty.")
 
 
 def _retry() -> AsyncRetrying:
@@ -310,22 +316,36 @@ class K8sSandboxEnvironment(SandboxEnvironment):
             log_trace(f"Completed: {op}.", **(log_kwargs | {"result": result}))
             return result
 
-    async def write_file(self, file: str, contents: str | bytes) -> None:
+    async def write_file(
+        self, file: str, contents: str | bytes, *, user: str | None = None
+    ) -> None:
+        _check_file_user(user)
         data = contents.encode("utf-8") if isinstance(contents, str) else contents
         # Do not log these at error level or re-raise as enriched K8sError.
-        expected_exceptions = (PermissionError, IsADirectoryError)
+        expected_exceptions = (
+            PermissionError,
+            IsADirectoryError,
+            SandboxUserUnsupportedError,
+        )
         with self._log_op("K8s write file to Pod", expected_exceptions, file=file):
             async for attempt in _retry():
                 with attempt:
-                    await self._pod.write_file(data, Path(file))
+                    await self._pod.write_file(data, Path(file), user)
 
     @overload
-    async def read_file(self, file: str, text: Literal[True] = True) -> str: ...
+    async def read_file(
+        self, file: str, text: Literal[True] = True, *, user: str | None = None
+    ) -> str: ...
 
     @overload
-    async def read_file(self, file: str, text: Literal[False]) -> bytes: ...
+    async def read_file(
+        self, file: str, text: Literal[False], *, user: str | None = None
+    ) -> bytes: ...
 
-    async def read_file(self, file: str, text: bool = True) -> str | bytes:
+    async def read_file(
+        self, file: str, text: bool = True, *, user: str | None = None
+    ) -> str | bytes:
+        _check_file_user(user)
         # Create and open a temporary file on the client system which the file will be
         # written to.
         with tempfile.NamedTemporaryFile("w+b") as temp_file:
@@ -336,13 +356,14 @@ class K8sSandboxEnvironment(SandboxEnvironment):
                 PermissionError,
                 IsADirectoryError,
                 OutputLimitExceededError,
+                SandboxUserUnsupportedError,
             )
             with self._log_op("K8s read file from Pod", expected_exceptions, file=file):
                 async for attempt in _retry():
                     with attempt:
                         temp_file.seek(0)
                         temp_file.truncate()
-                        await self._pod.read_file(Path(file), temp_file)
+                        await self._pod.read_file(Path(file), temp_file, user)
                 temp_file.seek(0)
                 return (
                     temp_file.read() if not text else temp_file.read().decode("utf-8")

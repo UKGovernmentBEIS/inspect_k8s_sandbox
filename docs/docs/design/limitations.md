@@ -157,7 +157,7 @@ Transient network or infrastructure errors during `exec()`, `read_file()`, and `
 
 Note that retries cannot guarantee idempotency — if a command partially executed before the error, it may run again on retry.
 
-## Must run as root to use the `user` parameter in `exec()` { #exec-user }
+## Must run as root to use the `user` parameter in `exec()`, `read_file()` and `write_file()` { #exec-user }
 
 In Kubernetes, a container runs as a single user. The user can be specified in the
 `values.yaml` file. For example, if using the [built-in Helm
@@ -192,6 +192,11 @@ properties of the environment rather than bad arguments: each logs a warning and
 a failed `ExecResult`, so a caller which probes with a user can fall back to the
 container's own user. Only naming a user that does not exist raises, since no fallback
 makes an absent account work.
+
+`read_file()` and `write_file()` take a `user` on the same terms, and the file is read or
+written with that user's permissions. When the switch cannot be made, for any of the
+reasons above, they raise `SandboxUserUnsupportedError`. Without a `user` they run as the
+container's own user, not `default_user`.
 
 ## Images are not automatically built, tagged or pushed
 

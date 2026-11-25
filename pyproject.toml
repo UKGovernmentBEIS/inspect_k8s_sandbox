@@ -4,9 +4,9 @@ version = "0.14.0"
 description = "A Kubernetes Sandbox Environment for Inspect"
 authors = [{name = "UK AI Security Institute"}]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
-  "inspect-ai>=0.3.236",
+  "inspect-ai>=0.3.286",
   "kubernetes>=35.0.0",
   "jsonschema>=4.23.0",
   "semver>=3.0.0",

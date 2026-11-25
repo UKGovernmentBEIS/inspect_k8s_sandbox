@@ -217,7 +217,7 @@ def _read_file_side_effect(error: Exception, content: bytes = b"file-content"):
     """Return a side_effect that fails once then writes content to dst."""
     calls = 0
 
-    async def impl(src: Path, dst):
+    async def impl(src: Path, dst, user=None):
         nonlocal calls
         calls += 1
         if calls == 1:

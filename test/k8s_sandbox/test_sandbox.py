@@ -10,7 +10,11 @@ from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
-from inspect_ai.util import OutputLimitExceededError, SandboxEnvironmentLimits
+from inspect_ai.util import (
+    OutputLimitExceededError,
+    SandboxEnvironmentLimits,
+    SandboxUserUnsupportedError,
+)
 from kubernetes.stream.ws_client import ApiException, WSClient  # type: ignore
 from pytest import LogCaptureFixture
 
@@ -871,6 +875,28 @@ async def test_read_file_permission_error(
 ) -> None:
     with pytest.raises(PermissionError):
         await sandbox_non_root.read_file("/etc/shadow")
+
+    assert not log_err.records
+
+
+async def test_file_ops_as_unknown_user_raise_user_unsupported(
+    sandbox: K8sSandboxEnvironment, log_err: LogCaptureFixture
+) -> None:
+    with pytest.raises(SandboxUserUnsupportedError, match="does not exist"):
+        await sandbox.read_file("/etc/hostname", user="nonexistent")
+    with pytest.raises(SandboxUserUnsupportedError, match="does not exist"):
+        await sandbox.write_file("/tmp/unknown-user.txt", "x", user="nonexistent")
+
+    assert not log_err.records
+
+
+async def test_file_ops_as_root_in_non_root_container_raise_user_unsupported(
+    sandbox_non_root: K8sSandboxEnvironment, log_err: LogCaptureFixture
+) -> None:
+    with pytest.raises(SandboxUserUnsupportedError, match="not running as root"):
+        await sandbox_non_root.read_file("/etc/hostname", user="root")
+    with pytest.raises(SandboxUserUnsupportedError, match="not running as root"):
+        await sandbox_non_root.write_file("/tmp/as-root.txt", "x", user="root")
 
     assert not log_err.records
 

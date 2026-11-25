@@ -178,7 +178,7 @@ class Pod:
         if restart is not None:
             raise restart
 
-    async def write_file(self, data: bytes, dst: Path) -> None:
+    async def write_file(self, data: bytes, dst: Path, user: str | None = None) -> None:
         """
         Write ``data`` from the client to a path on the pod (dst).
 
@@ -188,13 +188,17 @@ class Pod:
           data (bytes): The contents to write to the pod.
           dst (Path): The path to write the file to on the pod. Relative paths will be
             resolved relative to the pod's default working directory.
+          user (str | None): The user to write the file as, so that their
+            permissions apply. Defaults to the container's user.
         """
         if _file_op_restart_check_enabled():
             await self.check_for_pod_restart()
         writer = WriteFileOperation(self._info)
-        await self._run_async(lambda: writer.write_file(data, dst))
+        await self._run_async(lambda: writer.write_file(data, dst, user))
 
-    async def read_file(self, src: Path, dst: IO[bytes]) -> None:
+    async def read_file(
+        self, src: Path, dst: IO[bytes], user: str | None = None
+    ) -> None:
         """
         Copy a file from the pod (src) to a file-like object (dst) on the client.
 
@@ -205,11 +209,13 @@ class Pod:
           src (Path): The path to the file on the pod. Relative paths will be resolved
             relative to the pod's default working directory.
           dst (IO[bytes]): A file-like object to write the file to on the client system.
+          user (str | None): The user to read the file as, so that their
+            permissions apply. Defaults to the container's user.
         """
         if _file_op_restart_check_enabled():
             await self.check_for_pod_restart()
         reader = ReadFileOperation(self._info)
-        await self._run_async(lambda: reader.read_file(src, dst))
+        await self._run_async(lambda: reader.read_file(src, dst, user))
 
     async def _run_async(self, callable: Callable[[], T]) -> T:
         """Run a synchronous function asynchronously."""

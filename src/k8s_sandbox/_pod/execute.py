@@ -14,53 +14,17 @@ from k8s_sandbox._pod.buffer import LimitedBuffer
 from k8s_sandbox._pod.error import PodError
 from k8s_sandbox._pod.get_returncode import get_returncode
 from k8s_sandbox._pod.op import PodOperation
+from k8s_sandbox._pod.user import EXEC_USER_URL, run_as
 
 COMPLETED_SENTINEL = "completed-sentinel-value"
 COMPLETED_SENTINEL_PATTERN = re.compile(rf"<{COMPLETED_SENTINEL}-(\d+)>")
-EXEC_USER_URL = "https://k8s-sandbox.aisi.org.uk/design/limitations#exec-user"
 
 logger = logging.getLogger(__name__)
 
 
 def _shell_command(user: str | None) -> list[str]:
-    """The command to open the interactive shell an exec() runs inside.
-
-    When a user is requested, only reach for `runuser` if the container is not
-    already running as that user. `runuser` calls setgroups(2), which needs
-    CAP_SETGID even when switching root -> root, so an unconditional wrapper
-    makes every exec(user=...) fail in a container whose capabilities have been
-    dropped. Skipping it is close to a no-op, but not exactly one: runuser also
-    normalizes HOME, SHELL, USER, LOGNAME and PATH, which the skip path
-    inherits from the container instead.
-
-    The check runs in the container rather than here so that it costs no extra
-    round trip. `sh -c` takes its script from argv, so stdin reaches whichever
-    shell is exec'd unread, and the caller's protocol is unchanged.
-
-    `user` may be a name or a uid, and the two must be compared against
-    different things: testing a uid against `id -un` (or a name against `id -u`)
-    would match an account merely *named* "0" against uid 0 and run the command
-    as the wrong user. So only the applicable test is emitted.
-
-    `id -un` reports only the first passwd name for a uid, so a second name for
-    the same uid (root/toor) is not recognised and falls through to `runuser` --
-    i.e. the previous behaviour, which is the safe direction.
-    """
-    if user is None:
-        return ["/bin/sh"]
-    if not user:
-        # Matches nothing; leave runuser to reject it as it did before.
-        return ["runuser", "-u", user, "--", "/bin/sh"]
-    quoted = shlex.quote(user)
-    # A missing or failing `id` leaves the substitution empty, which cannot
-    # equal a non-empty user, so that also falls through to `runuser`.
-    current = "id -u" if user.isdigit() else "id -un"
-    return [
-        "/bin/sh",
-        "-c",
-        f'if [ "$({current} 2>/dev/null)" = {quoted} ]; then exec /bin/sh; fi; '
-        f"exec runuser -u {quoted} -- /bin/sh",
-    ]
+    """The command to open the interactive shell an exec() runs inside."""
+    return run_as(user, ["/bin/sh"])
 
 
 class ExecuteOperation(PodOperation):
