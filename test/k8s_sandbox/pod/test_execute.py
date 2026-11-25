@@ -1,4 +1,5 @@
 import shlex
+import time
 from contextlib import contextmanager
 from typing import Generator
 from unittest.mock import MagicMock, patch
@@ -105,7 +106,7 @@ class TestBrokenPipeAfterSentinel:
     """
 
     def test_broken_pipe_after_sentinel_with_timeout_raises_timeout_error(self) -> None:
-        """Sentinel rc=124 with timeout: raise TimeoutError."""
+        """Sentinel rc=124 after the time limit: raise TimeoutError."""
         ws = _make_ws_client(
             stdout_frames=[b"output<completed-sentinel-value-124>"],
             error_after_close=BrokenPipeError("socket closed"),
@@ -113,7 +114,9 @@ class TestBrokenPipeAfterSentinel:
 
         executor = ExecuteOperation(MagicMock())
         with pytest.raises(TimeoutError):
-            executor._handle_shell_output(ws, user=None, timeout=30)
+            executor._handle_shell_output(
+                ws, user=None, timeout=30, started=time.monotonic() - 30
+            )
 
     def test_broken_pipe_after_sentinel_without_timeout_returns_result(self) -> None:
         """Sentinel rc=0, no timeout: return ExecResult."""
@@ -123,7 +126,7 @@ class TestBrokenPipeAfterSentinel:
         )
 
         executor = ExecuteOperation(MagicMock())
-        result = executor._handle_shell_output(ws, user=None, timeout=None)
+        result = executor._handle_shell_output(ws, user=None, timeout=None, started=0.0)
         assert result.returncode == 0
         assert result.stdout == "hello"
         assert result.stderr == ""
@@ -136,10 +139,54 @@ class TestBrokenPipeAfterSentinel:
         )
 
         executor = ExecuteOperation(MagicMock())
-        result = executor._handle_shell_output(ws, user=None, timeout=None)
+        result = executor._handle_shell_output(ws, user=None, timeout=None, started=0.0)
         assert result.returncode == 0
         assert result.stdout == "hello"
         assert result.stderr == ""
+
+
+class TestExit124:
+    """A 124 is a timeout only once the time limit has passed on the client's clock."""
+
+    @pytest.fixture
+    def now(self, monkeypatch: pytest.MonkeyPatch) -> list[float]:
+        clock = [0.0]
+        monkeypatch.setattr("k8s_sandbox._pod.execute.time.monotonic", lambda: clock[0])
+        return clock
+
+    @pytest.mark.parametrize("elapsed", [30.0, 45.0])
+    def test_124_at_or_after_the_limit_raises_timeout_error(
+        self, now: list[float], elapsed: float
+    ) -> None:
+        ws = _make_ws_client(stdout_frames=[b"<completed-sentinel-value-124>"])
+        now[0] = 100.0 + elapsed
+
+        executor = ExecuteOperation(MagicMock())
+        with pytest.raises(TimeoutError, match="Command timed out after 30s"):
+            executor._handle_shell_output(ws, user=None, timeout=30, started=100.0)
+
+    @pytest.mark.parametrize("elapsed", [0.0, 29.99])
+    def test_124_before_the_limit_is_returned(
+        self, now: list[float], elapsed: float
+    ) -> None:
+        ws = _make_ws_client(stdout_frames=[b"out<completed-sentinel-value-124>"])
+        now[0] = 100.0 + elapsed
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user=None, timeout=30, started=100.0)
+
+        assert result.returncode == 124
+        assert not result.success
+        assert result.stdout == "out"
+
+    def test_124_without_a_timeout_is_returned(self, now: list[float]) -> None:
+        ws = _make_ws_client(stdout_frames=[b"<completed-sentinel-value-124>"])
+        now[0] = 1000.0
+
+        executor = ExecuteOperation(MagicMock())
+        result = executor._handle_shell_output(ws, user=None, timeout=None, started=0.0)
+
+        assert result.returncode == 124
 
 
 class TestBrokenPipeWithoutSentinel:
@@ -160,7 +207,7 @@ class TestBrokenPipeWithoutSentinel:
 
         executor = ExecuteOperation(MagicMock())
         with pytest.raises(PodError, match="WebSocket connection lost"):
-            executor._handle_shell_output(ws, user=None, timeout=None)
+            executor._handle_shell_output(ws, user=None, timeout=None, started=0.0)
 
 
 class TestNonUtf8Output:
@@ -172,7 +219,7 @@ class TestNonUtf8Output:
         )
 
         executor = ExecuteOperation(MagicMock())
-        result = executor._handle_shell_output(ws, user=None, timeout=None)
+        result = executor._handle_shell_output(ws, user=None, timeout=None, started=0.0)
 
         assert result.returncode == 0
         assert result.stdout == "before \ufffd after"
@@ -184,7 +231,7 @@ class TestNonUtf8Output:
         )
 
         executor = ExecuteOperation(MagicMock())
-        result = executor._handle_shell_output(ws, user=None, timeout=None)
+        result = executor._handle_shell_output(ws, user=None, timeout=None, started=0.0)
 
         assert result.returncode == 0
         assert result.stderr == "warn \ufffd done\n"
@@ -195,7 +242,7 @@ class TestNonUtf8Output:
         )
 
         executor = ExecuteOperation(MagicMock())
-        result = executor._handle_shell_output(ws, user=None, timeout=None)
+        result = executor._handle_shell_output(ws, user=None, timeout=None, started=0.0)
 
         assert result.returncode == 0
         assert result.stdout == "raw \ufffd bytesmore"
@@ -209,7 +256,9 @@ class TestRunuserErrors:
         )
 
         executor = ExecuteOperation(MagicMock())
-        result = executor._handle_shell_output(ws, user="nobody", timeout=None)
+        result = executor._handle_shell_output(
+            ws, user="nobody", timeout=None, started=0.0
+        )
 
         assert result.returncode == 1
         assert result.stderr == "runuser: user foo does not exist\n"
@@ -242,7 +291,7 @@ class TestRunuserErrors:
         with patch("k8s_sandbox._pod.execute.get_returncode", return_value=1):
             executor = ExecuteOperation(MagicMock())
             with pytest.raises(RuntimeError, match="does not appear to exist"):
-                executor._handle_shell_output(ws, user="foo", timeout=None)
+                executor._handle_shell_output(ws, user="foo", timeout=None, started=0.0)
 
     def test_non_runuser_error_without_sentinel_returns_result(self) -> None:
         ws = MagicMock(spec=WSClient)
@@ -250,7 +299,9 @@ class TestRunuserErrors:
 
         executor = ExecuteOperation(MagicMock())
         with patch("k8s_sandbox._pod.execute.get_returncode", return_value=1):
-            result = executor._handle_shell_output(ws, user="foo", timeout=None)
+            result = executor._handle_shell_output(
+                ws, user="foo", timeout=None, started=0.0
+            )
 
         assert result.returncode == 1
 
@@ -264,7 +315,7 @@ class TestConnectionResetWithoutSentinel:
 
         executor = ExecuteOperation(MagicMock())
         with pytest.raises(PodError, match="WebSocket connection lost"):
-            executor._handle_shell_output(ws, user=None, timeout=None)
+            executor._handle_shell_output(ws, user=None, timeout=None, started=0.0)
 
 
 class TestExecChunksStdin:

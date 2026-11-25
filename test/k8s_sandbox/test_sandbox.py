@@ -362,6 +362,15 @@ async def test_exec_timeout(
     assert not log_err.records
 
 
+async def test_exec_returns_command_exit_124_within_timeout(
+    sandbox: K8sSandboxEnvironment,
+) -> None:
+    result = await sandbox.exec(["sh", "-c", "timeout 1 sleep 10"], timeout=30)
+
+    assert result.returncode == 124
+    assert not result.success
+
+
 async def test_exec_raises_permission_error(
     sandbox: K8sSandboxEnvironment, log_err: LogCaptureFixture
 ) -> None:
