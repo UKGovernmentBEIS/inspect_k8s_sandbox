@@ -7,6 +7,9 @@ on:
   pull_request:
     branches:
       - main
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -17,5 +20,11 @@ jobs:
     uses: ./.github/workflows/type-check.yml
   test:
     uses: ./.github/workflows/test.yml
+  # Not on PRs: a dependency release would turn unrelated PRs red.
+  test-latest-dependencies:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/test.yml
+    with:
+      dependencies: latest
   pre-commit:
     uses: ./.github/workflows/pre-commit.yml

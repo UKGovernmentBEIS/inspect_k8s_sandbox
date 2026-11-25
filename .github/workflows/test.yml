@@ -2,6 +2,13 @@ name: Test using Pytest
 
 on:
   workflow_call:
+    inputs:
+      dependencies:
+        description: >-
+          "locked" tests against uv.lock. "latest" tests against the newest versions
+          pyproject.toml allows, which is what a fresh `pip install` resolves to.
+        type: string
+        default: locked
 
 jobs:
   pytest:
@@ -18,7 +25,7 @@ jobs:
             cluster: false
           - helm-version: "4.1.0"
             cluster: false
-    name: pytest (helm ${{ matrix.helm-version }}${{ matrix.cluster && ', k8s' || '' }})
+    name: pytest (helm ${{ matrix.helm-version }}${{ matrix.cluster && ', k8s' || '' }}${{ inputs.dependencies == 'latest' && ', latest deps' || '' }})
     steps:
       - uses: actions/checkout@v4
       - name: Configure Helm version in devcontainer.json
@@ -33,6 +40,11 @@ jobs:
       - run: npm install -g @devcontainers/cli@v0.83.2
       - run: devcontainer up --workspace-folder=.
       - run: devcontainer exec --workspace-folder=. helm version --short
+      - name: Upgrade dependencies to the newest versions pyproject.toml allows
+        if: ${{ inputs.dependencies == 'latest' }}
+        run: |
+          devcontainer exec --workspace-folder=. \
+            sh -c 'uv lock --upgrade && uv sync --extra dev'
       - run: |
           devcontainer exec --workspace-folder=. \
             uv run pytest -rA -x --color=yes --durations=10 \
