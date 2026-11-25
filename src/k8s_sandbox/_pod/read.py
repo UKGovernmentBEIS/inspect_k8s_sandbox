@@ -13,21 +13,24 @@ from k8s_sandbox._pod.op import (
     PodOperation,
     raise_for_known_read_write_errors,
 )
+from k8s_sandbox._pod.user import raise_for_unsupported_user, run_as
 
 
 class ReadFileOperation(PodOperation):
-    def read_file(self, src: Path, dst: IO[bytes]) -> None:
-        with self._start_read_command(src) as ws_client:
-            self._handle_stream_output(ws_client, dst)
+    def read_file(self, src: Path, dst: IO[bytes], user: str | None) -> None:
+        with self._start_read_command(src, user) as ws_client:
+            self._handle_stream_output(ws_client, dst, user)
 
     @contextmanager
-    def _start_read_command(self, src: Path) -> Generator[WSClient, None, None]:
+    def _start_read_command(
+        self, src: Path, user: str | None
+    ) -> Generator[WSClient, None, None]:
         # Limit number of bytes read (-c) to 1 byte over the limit (to detect if the
         # file is too large). str() because kubernetes>=37 validates each element as a
         # string and rejects the call before sending it.
         command = ["head", "-c", str(limits.MAX_READ_FILE_SIZE + 1), src.as_posix()]
         yield from self.create_websocket_client_for_exec(
-            command=command,
+            command=run_as(user, command),
             stderr=True,
             # Without stdin, kubelet closes the exec's input as soon as the stream
             # opens, which races the stdout read in Kata Containers' Go shim and hangs
@@ -38,7 +41,9 @@ class ReadFileOperation(PodOperation):
             binary=True,
         )
 
-    def _handle_stream_output(self, ws_client: WSClient, dst: IO[bytes]) -> None:
+    def _handle_stream_output(
+        self, ws_client: WSClient, dst: IO[bytes], user: str | None
+    ) -> None:
         # `head` should not produce large amounts of stderr, but limit it nonetheless.
         stderr = LimitedBuffer(limits.MAX_EXEC_OUTPUT_SIZE)
         start_position = dst.tell()
@@ -56,6 +61,8 @@ class ReadFileOperation(PodOperation):
         returncode = get_returncode(ws_client)
         if returncode != 0:
             stderr_str = str(stderr)
+            if user is not None:
+                raise_for_unsupported_user(stderr_str, user)
             raise_for_known_read_write_errors(stderr_str)
             raise PodError(
                 "Unrecognised error reading file from pod.",

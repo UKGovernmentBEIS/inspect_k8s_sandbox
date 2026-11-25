@@ -14,6 +14,11 @@
 - Fix `read_file()` failing with a `ValidationError` on `kubernetes` 37.
 - Add a `priorityClassName` value for the sandbox pods' PriorityClass. It is a cluster
   setting, so set it in the `INSPECT_SANDBOX_VALUES` file.
+- **BREAKING CHANGE**: Requires Python 3.11 and inspect-ai 0.3.286 or later.
+- `read_file()` and `write_file()` take a `user`, and read or write the file with that
+  user's permissions. They raise `SandboxUserUnsupportedError` if the user does not
+  exist or the container cannot switch to it. See
+  [Limitations](https://k8s-sandbox.aisi.org.uk/design/limitations/#exec-user).
 - Fix `exec()` with a `timeout` raising `TimeoutError` when the command exits 124
   before the time limit (e.g. because it ran its own `timeout`). It now returns the
   result with `returncode` 124.

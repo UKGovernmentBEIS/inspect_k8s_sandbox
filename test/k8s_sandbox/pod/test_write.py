@@ -20,16 +20,16 @@ def test_write_file_writes_data_via_chunked_helper(
 
     @contextmanager
     def fake_start_write_command(
-        dst: Path, file_size: int
+        dst: Path, file_size: int, user: str | None
     ) -> Generator[MagicMock, None, None]:
         captured["file_size"] = file_size
         yield ws
 
     monkeypatch.setattr(op, "_start_write_command", fake_start_write_command)
-    monkeypatch.setattr(op, "_handle_stream_output", lambda ws_client: None)
+    monkeypatch.setattr(op, "_handle_stream_output", lambda ws_client, user: None)
     data = b"abcdefghij"
 
-    op.write_file(data, Path("/tmp/dst"))
+    op.write_file(data, Path("/tmp/dst"), None)
 
     assert captured["file_size"] == len(data)
     assert b"".join(call.args[0] for call in ws.write_stdin.call_args_list) == data

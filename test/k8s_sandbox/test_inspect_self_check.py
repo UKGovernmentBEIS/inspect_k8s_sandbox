@@ -25,6 +25,8 @@ _NON_ROOT_XFAILS = {
     "test_exec_as_nonexistent_user": "k8s raises for a nonexistent user",
     # In k8s the container must run as root to exec as a different user.
     "test_exec_as_user": "container must run as root to exec as a different user",
+    "test_read_file_as_user": "container must run as root to switch user",
+    "test_write_file_as_user": "container must run as root to switch user",
 }
 # Non-strict: the drop is environment-dependent (fails on one minikube at
 # ~40-44 MiB, passes on another at 50 MiB), so an XPASS is not a signal.

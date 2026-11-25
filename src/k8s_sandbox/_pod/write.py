@@ -11,17 +11,18 @@ from k8s_sandbox._pod.op import (
     PodOperation,
     raise_for_known_read_write_errors,
 )
+from k8s_sandbox._pod.user import raise_for_unsupported_user, run_as
 
 
 class WriteFileOperation(PodOperation):
-    def write_file(self, data: bytes, dst: Path) -> None:
-        with self._start_write_command(dst, len(data)) as ws_client:
+    def write_file(self, data: bytes, dst: Path, user: str | None) -> None:
+        with self._start_write_command(dst, len(data), user) as ws_client:
             self._write_stdin_chunked(ws_client, data)
-            self._handle_stream_output(ws_client)
+            self._handle_stream_output(ws_client, user)
 
     @contextmanager
     def _start_write_command(
-        self, dst: Path, file_size: int
+        self, dst: Path, file_size: int, user: str | None
     ) -> Generator[WSClient, None, None]:
         mkdir_command = f"mkdir -p {shlex.quote(dst.parent.as_posix())}"
         # Use `head` with `-c <file size>` because we have no way of closing the stdin
@@ -41,7 +42,7 @@ class WriteFileOperation(PodOperation):
             f"{keep_stdout_open}; {mkdir_command} && {head_command} > {dst_quoted}",
         ]
         yield from self.create_websocket_client_for_exec(
-            command=command,
+            command=run_as(user, command),
             stderr=True,
             stdin=True,
             stdout=True,
@@ -49,13 +50,15 @@ class WriteFileOperation(PodOperation):
             binary=False,
         )
 
-    def _handle_stream_output(self, ws_client: WSClient) -> None:
+    def _handle_stream_output(self, ws_client: WSClient, user: str | None) -> None:
         # Wait until the websocket connection is closed. All stderr will be stored by us
         # in memory anyway so there is no value in streaming it.
         ws_client.run_forever()
         returncode = get_returncode(ws_client)
         if returncode != 0:
             stderr = ws_client.read_stderr()
+            if user is not None:
+                raise_for_unsupported_user(stderr, user)
             raise_for_known_read_write_errors(stderr)
             raise PodError(
                 "Unrecognised error writing file to pod.",
